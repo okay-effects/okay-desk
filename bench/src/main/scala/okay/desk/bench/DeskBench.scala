@@ -85,6 +85,10 @@ object DeskBench:
         case None => println(s"$repo: not in the cache, skipped")
         case Some(dir) =>
           val chat = Chat.load(dir); val model = Model.load(dir, mapped = true); val tok = chat.tokenizer
+          // an adapter trained by `Train`, if DESK_ADAPTER names its directory (the file lora-<model>.safetensors there)
+          val adapter = scala.sys.env.get("DESK_ADAPTER").map(d => s"$d/lora-${repo.split('/').last}.safetensors")
+            .filter(f => java.nio.file.Files.exists(java.nio.file.Path.of(f)))
+            .map(f => { println(s"adapter: $f"); mlx.llm.Lora.attach(model.asInstanceOf[mlx.llm.Adaptable], f) })
           def msg(role: String, content: String) = okay.effects.json.Json.obj("role" -> okay.effects.json.Json.Str(role),
             "content" -> okay.effects.json.Json.Str(content))
           val end = tok.id("<|im_end|>")
@@ -121,6 +125,7 @@ object DeskBench:
             f" | ru: ${at("ru")}/$n, +${retried("ru")}, ${wrong("ru")} wrong, ${none("ru")} none | ${(System.nanoTime() - t0) / 1e9}%.0f s"
           println(line); summary += line
           }
+          adapter.foreach(_.close())
           model.close()
     println("\nmodel | en: right at once, after the retry, wrong, no program | ru | time")
     summary.result().foreach(println)
