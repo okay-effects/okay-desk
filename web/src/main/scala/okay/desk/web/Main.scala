@@ -98,7 +98,7 @@ object Main:
           case Right(json) =>
             val ran = Query.parse(json).flatMap {
               case q: Query.Relational => Exact.run(ts, q).map(r => (q: Query, r))
-              case q: Query.Logical => Logic.run(ts, q).map(r => (q: Query, r))
+              case q: Query.Logical => Weights.either(ts, q).map((r, by) => (q: Query, r.copy(name = by)))
             }
             ran match
               case Left(problem) if !retried =>
@@ -109,6 +109,7 @@ object Main:
               case Right((q, result)) =>
                 log.update(_ :+ div(cls := "msg result",
                   pre(result.render(50)),
+                  if result.name == "weights" then p(cls := "by", "computed by the transformer compiled from the closure program (okay-inlay), in this page") else span(),
                   detailsTag(summaryTag(s"the program (${result.size} rows)"), pre(Query.print(q)))))
                 complete(Vector("user" -> Prompt.summarize(question, q, result)), 200).map { s =>
                   val words = s.replaceAll("(?s)<think>.*?</think>", "").trim

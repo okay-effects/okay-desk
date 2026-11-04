@@ -94,3 +94,15 @@ lever; the lever for a small model is training on generated question → program
 the mask on at generation so the trained choice lands in a well-formed program. That is the next step; until then
 the page's honest default is the 4B class on the JVM (okay-mlx) and Qwen3 1.7B in the browser with the program
 shown.
+
+## 6. The handler in weights (2026-11-04)
+
+The operator: "you proved it works — use it". `Weights` (core): a Datalog query of the CLOSURE SHAPE — `r(X, Y) :-
+t(X, Y). r(X, Z) :- t(X, Y), r(Y, Z).` with the goal `r(a, X)` or `r(X, b)` over a two-column table — is answered by
+the transformer compiled from okay-inlay's `Closure` program and run by `Forward` (plain Scala: on the JVM and in the
+page alike); the set the question position gathers is everything reachable from the constant (the edges reversed
+for "reaching it"). `WeightsSuite`: weights == okay-inlay's interpreter == okay-datalog on 30 random graphs, from
+and to — held at the first run. Any other rules, or a table beyond the block's capacity (60 rows, 40 names), go to
+okay-datalog: one program, two handlers, the cheaper where it fits (okay-inlay specs/inlay.md §8.6). The page says
+when the block answered. What the block does NOT do yet: arbitrary rules (okay-inlay BACKLOG 0, the Inlay handler
+of okay-datalog's programs) and large tables (the dense `Forward`; the GPU or sparse heads later).

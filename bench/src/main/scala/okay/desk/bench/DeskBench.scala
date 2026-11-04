@@ -57,7 +57,7 @@ object DeskBench:
 
   def run(q: Query): Either[String, Table] = q match
     case r: Query.Relational => Exact.run(tables, r)
-    case l: Query.Logical => Logic.run(tables, l)
+    case l: Query.Logical => Weights.either(tables, l).map(_._1)
   def rows(t: Table): Set[Vector[String]] = t.rows.map(_.map(_.text)).toSet
   /** the same rows (the columns' order free, extra columns allowed when the gold's are all there) */
   def same(got: Table, gold: Table): Boolean =

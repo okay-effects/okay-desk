@@ -16,6 +16,7 @@ lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
   .settings(name := "okay-desk",
     libraryDependencies ++= Seq(
       "io.github.okay-effects" %%% "okay-datalog" % "0.1.0",
+      "io.github.okay-effects" %%% "okay-inlay" % "0.1.0",
       "io.github.okay-effects" %%% "okay-effects-json-value" % "0.1.1",
       "org.scalameta" %%% "munit" % "1.2.3" % Test))
 
