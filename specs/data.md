@@ -143,3 +143,14 @@ bench's third arm.
 
 Four minutes of training tripled the English; and the mask now helps the Russian (3 → 5): once the choice is
 learned, the mask keeps it in form. The 1.7B next.
+
+Qwen3-1.7B, the same 600 pairs, one epoch (mean loss 0.0171):
+
+| arm | before, en / ru | after, en / ru |
+|---|---|---|
+| free | 4/12, 5/12 | 10/12, 8+1/12 |
+| masked | 3/12, 1+2/12 | 9/12, 9/12 |
+
+A 1.7B trained for a few minutes on generated pairs reaches the untrained 4B (10–11 of 12) — in a 1 GB model that
+runs in the browser. Under the mask the two languages are equal (9/12 each). The choice is learnable; the mask keeps
+its form. Next: the same choice read by probes and assembled by a block, the model untouched (§7).
