@@ -2,30 +2,55 @@ package okay.desk
 
 /**
  * THE MODEL'S PART: it understands the question and writes the program; it never computes a number. The prompt
- * gives the tables' schema and the program's form; the answer is parsed for the program (a JSON block), or taken
- * as words when there is none. A summary the model writes after the result is kept only if every number in it is
- * in the result — else the table speaks alone.
+ * gives the tables' schema, the program's form in words, and a few examples OVER THESE TABLES (a small model
+ * copies an example's names if they are not its own); the answer is parsed for the program (a JSON block), or
+ * taken as words when there is none. A summary the model writes after the result is kept only if every number in
+ * it is in the result — else the table speaks alone.
  */
 object Prompt:
+  /** examples written for the tables at hand: the first table's first text and first numeric columns */
+  def examples(tables: Map[String, Table]): String =
+    val ts = tables.values.toVector.sortBy(_.name)
+    val t = ts.head
+    def numeric(i: Int) = t.rows.nonEmpty && t.rows.forall(r => r(i) == Value.Empty || r(i).num.isDefined) && t.rows.exists(_(i).num.isDefined)
+    val textCol = t.columns.indices.find(i => !numeric(i)).map(t.columns).getOrElse(t.columns.head)
+    val numCol = t.columns.indices.find(numeric).map(t.columns)
+    val sample = t.rows.headOption.map(_(t.columns.indexOf(textCol)).text).getOrElse("x")
+    val rel = ts.find(_.columns.size == 2).getOrElse(t)
+    val a = rel.rows.headOption.map(_(0).text).getOrElse("a")
+    (Vector(
+      s"""Q: How many rows are in ${t.name}?
+         |A: {"from": "${t.name}", "aggregate": [{"fn": "count", "column": "*", "as": "n"}]}""".stripMargin,
+      s"""Q: Which rows of ${t.name} have $textCol = $sample?
+         |A: {"from": "${t.name}", "where": [{"column": "$textCol", "op": "=", "value": "$sample"}]}""".stripMargin) ++
+      numCol.toVector.map(n =>
+        s"""Q: Total $n by $textCol, largest first, top 5.
+           |A: {"from": "${t.name}", "group": ["$textCol"], "aggregate": [{"fn": "sum", "column": "$n", "as": "total"}], "order": ["-total"], "limit": 5}""".stripMargin) ++
+      Vector(
+        s"""Q: What is reachable from $a through ${rel.name}, directly or through others?
+           |A: {"datalog": "reach(X, Y) :- ${rel.name}(X, Y). reach(X, Z) :- ${rel.name}(X, Y), reach(Y, Z).", "goal": "reach(${Logic.constant(a)}, X)"}""".stripMargin))
+      .mkString("\n\n")
+
   def system(tables: Map[String, Table]): String =
     val schema = tables.values.toVector.sortBy(_.name).map(_.describe).mkString("\n")
-    s"""You answer questions about the user's data by writing ONE query as JSON; a program runs it and shows the result.
-       |Never compute numbers yourself. Never invent columns. Use the exact column names below.
+    s"""You answer questions about the user's data by writing ONE query as JSON in a ```json block; a program runs it and shows the result.
+       |Never compute numbers yourself. Use only the tables and the exact column names below. Omit keys you do not need.
        |
        |$schema
        |
-       |Relational query (use for filters, counts, sums, averages, groups, top-N, joins):
-       |{"from": "table", "where": [{"column": "c", "op": "=", "value": "x"}], "group": ["c"],
-       | "aggregate": [{"fn": "count", "column": "*", "as": "n"}], "select": ["c", "n"], "order": ["-n"], "limit": 10}
-       |ops: = != < <= > >= contains empty "not empty"; aggregate fn: count sum avg min max; order "-c" means descending;
-       |"join": {"table": "other", "on": [["this_column", "other_column"]]}; omit what you do not need.
-       |
-       |Datalog query (use for chains, reachability, rules): relations are the tables with their columns in order:
+       |A relational query has: "from" (a table), optional "join" {"table", "on": [["this column", "other column"]]},
+       |"where" (a list of {"column", "op", "value"}; op: = != < <= > >= contains empty "not empty"),
+       |"group" (columns), "aggregate" (a list of {"fn", "column", "as"}; fn: count sum avg min max; column "*" for count),
+       |"select" (columns to show), "order" (columns; "-c" descending), "limit" (a number).
+       |A datalog query has "datalog" (rules) and "goal" (an atom); the relations are the tables with their columns in order:
        |${Logic.describe(tables)}
-       |{"datalog": "reach(X, Y) :- edges(X, Y). reach(X, Z) :- edges(X, Y), reach(Y, Z).", "goal": "reach(a, X)"}
-       |variables start with a capital letter; a constant that is not a lowercase word goes in double quotes: reach(X, \"orders-db\")
+       |Variables start with a capital letter; a constant that is not a lowercase word goes in double quotes.
        |
-       |Reply with the JSON only, in a ```json block. If the question is not about the data, answer in one sentence.""".stripMargin
+       |Examples for these tables:
+       |
+       |${examples(tables)}
+       |
+       |If the question is not about the data, answer in one sentence instead.""".stripMargin
 
   /** the JSON block of an answer, or the words */
   def program(answer: String): Either[String, String] =

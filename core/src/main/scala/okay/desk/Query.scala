@@ -42,16 +42,22 @@ object Query:
     case Json.Bool(b) => Value.Str(b.toString)
     case _ => Value.Empty
 
-  def of(o: Json.Obj): Either[String, Query] =
+  def of(o0: Json.Obj): Either[String, Query] =
+    // a wrapper some models add ({"query": {...}}) unwrapped
+    val o = obj(o0, "query").getOrElse(o0)
     (str(o, "datalog"), str(o, "goal")) match
       case (Some(rules), Some(goal)) => Right(Query.Logical(rules, goal))
       case (Some(_), None) => Left("a datalog program needs a goal")
       case _ =>
         str(o, "from").toRight("\"from\": the table").map { from =>
-          val join = obj(o, "join").flatMap(j => str(j, "table").map(t => Join(t, arr(j, "on").collect {
+          // "join" an object, or a list of them (the first taken)
+          val joinObj = obj(o, "join").orElse(arr(o, "join").collectFirst { case j: Json.Obj => j })
+          val join = joinObj.flatMap(j => str(j, "table").map(t => Join(t, arr(j, "on").collect {
             case Json.Arr(Vector(Json.Str(a), Json.Str(b))) => (a, b) })))
           val where = arr(o, "where").collect { case c: Json.Obj =>
             (str(c, "column"), str(c, "op")) match
+              // a shorthand some models write: {"status": "unpaid"} means status = unpaid
+              case (None, None) if c.fields.size == 1 => Cond.Cmp(c.fields.head._1, "=", value(c.fields.head._2))
               case (Some(col), Some("contains")) => Cond.Has(col, str(c, "value").getOrElse(""))
               case (Some(col), Some("empty")) => Cond.Empty(col, true)
               case (Some(col), Some("not empty")) => Cond.Empty(col, false)

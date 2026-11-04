@@ -22,8 +22,8 @@ object Exact:
           if o.desc then sorted.reverse else sorted
         }
       }
-      val selected = if q.select.isEmpty then grouped.columns else q.select.filter(grouped.columns.contains)
-      val idx = selected.map(grouped.columns.indexOf)
+      val selected = if q.select.isEmpty then grouped.columns else q.select.filter(c => grouped.column(c).isDefined)
+      val idx = selected.map(c => grouped.column(c).get)
       val limited = q.limit.fold(ordered)(ordered.take)
       Table("result", selected, limited.map(r => idx.map(r)))
 
@@ -34,7 +34,7 @@ object Exact:
       case Cond.Empty(c, _) => c
     } ++ q.group ++ q.aggs.map(_.column).filter(_ != "*") ++ q.order.map(_.column).filterNot(c => q.aggs.exists(_.as == c)) ++
       q.select.filterNot(c => q.aggs.exists(_.as == c))
-    val missing = named.filterNot(t.columns.contains).distinct
+    val missing = named.filterNot(c => t.column(c).isDefined).distinct
     val badOps = q.where.collect { case Cond.Cmp(_, op, _) if !Set("=", "!=", "<", "<=", ">", ">=").contains(op) => op }
     val badFns = q.aggs.map(_.fn).filterNot(Set("count", "sum", "avg", "min", "max").contains)
     if missing.nonEmpty then Left(s"no column ${missing.mkString(", ")} in ${t.name}; its columns: ${t.columns.mkString(", ")}")
@@ -44,7 +44,7 @@ object Exact:
 
   private def holds(t: Table, r: Vector[Value], c: Cond): Boolean = c match
     case Cond.Cmp(col, op, v) =>
-      val x = r(t.columns.indexOf(col))
+      val x = r(t.column(col).get)
       val cmp = (x.num, v.num) match
         case (Some(a), Some(b)) => java.lang.Double.compare(a, b)
         case _ => x.text.compareToIgnoreCase(v.text)
@@ -55,8 +55,8 @@ object Exact:
         case "<=" => cmp <= 0
         case ">" => cmp > 0
         case _ => cmp >= 0
-    case Cond.Has(col, text) => r(t.columns.indexOf(col)).text.toLowerCase.contains(text.toLowerCase)
-    case Cond.Empty(col, is) => (r(t.columns.indexOf(col)) == Value.Empty) == is
+    case Cond.Has(col, text) => r(t.column(col).get).text.toLowerCase.contains(text.toLowerCase)
+    case Cond.Empty(col, is) => (r(t.column(col).get) == Value.Empty) == is
 
   /** an inner join; the other table's columns prefixed `table.` where they clash */
   private def join(base: Table, tables: Map[String, Table], j: Join): Either[String, Table] =
@@ -76,12 +76,12 @@ object Exact:
     }
 
   private def aggregate(t: Table, rows: Vector[Vector[Value]], group: Vector[String], aggs: Vector[Agg]): Table =
-    val gi = group.map(t.columns.indexOf)
+    val gi = group.map(c => t.column(c).get)
     val groups = rows.groupBy(r => gi.map(r)).toVector.sortBy(_._1)(using Ordering.Implicits.seqOrdering)
-    val cols = group ++ aggs.map(_.as)
+    val cols = group.map(_.split('.').last) ++ aggs.map(_.as)
     Table("result", cols, groups.map { (key, rs) =>
       key ++ aggs.map { a =>
-        val vals = if a.column == "*" then rs.map(_ => Value.Num(1)) else rs.map(_(t.columns.indexOf(a.column)))
+        val vals = if a.column == "*" then rs.map(_ => Value.Num(1)) else rs.map(_(t.column(a.column).get))
         val nums = vals.flatMap(_.num)
         a.fn match
           case "count" => Value.Num(if a.column == "*" then rs.size else vals.count(_ != Value.Empty))

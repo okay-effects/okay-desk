@@ -28,7 +28,10 @@ object Value:
 
 /** A TABLE: named columns, rows of values; from a file by its extension (CSV, TSV, JSON lines, a JSON array) */
 final case class Table(name: String, columns: Vector[String], rows: Vector[Vector[Value]]):
-  def column(c: String): Option[Int] = Some(columns.indexOf(c)).filter(_ >= 0)
+  /** a column by name; `table.column` accepted for this table or a joined one */
+  def column(c: String): Option[Int] =
+    Some(columns.indexOf(c)).filter(_ >= 0).orElse(Some(columns.indexOf(c.stripPrefix(name + "."))).filter(_ >= 0))
+      .orElse(Some(columns.indexOf(c.split('.').last)).filter(_ >= 0))
   def size: Int = rows.size
   /** the schema as the model reads it: each column with its kind and a sample */
   def describe: String =

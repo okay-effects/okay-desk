@@ -62,8 +62,12 @@ object DeskBench:
   /** the same rows (the columns' order free, extra columns allowed when the gold's are all there) */
   def same(got: Table, gold: Table): Boolean =
     if got.size != gold.size then false
+    else if got.columns.nonEmpty && got.columns.forall(c => gold.column(c).isDefined) && got.columns.size < gold.columns.size then
+      // a subset of the gold's columns chosen: the gold projected onto them
+      val gi = got.columns.map(c => gold.column(c).get)
+      rows(got) == gold.rows.map(r => gi.map(i => r(i).text)).toSet
     else
-      val idx = gold.columns.map(c => got.column(c).orElse(got.column(c.split('.').last)))
+      val idx = gold.columns.map(c => got.column(c))
       if idx.exists(_.isEmpty) then
         // the names may differ (an aggregate's alias): compare by position when the widths agree
         got.columns.size == gold.columns.size && rows(got) == rows(gold)

@@ -21,6 +21,11 @@ object Logic:
       val vars = rows.headOption.map(_.keys.toVector.sorted).getOrElse(Vector.empty)
       Table("result", vars, rows.map(b => vars.map(v => Value.of(b(v)))))
 
+  /** a constant as Datalog writes it: bare when a lowercase word, quoted otherwise */
+  def constant(s: String): String =
+    if s.nonEmpty && s.head.isLower && s.forall(c => c.isLetterOrDigit || c == '_') then s
+    else "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
   /** the relations as the model must write them: each table's name and its columns' positions */
   def describe(tables: Map[String, Table]): String =
     tables.values.toVector.sortBy(_.name).map(t => s"  ${t.name}(${t.columns.mkString(", ")})").mkString("\n")
