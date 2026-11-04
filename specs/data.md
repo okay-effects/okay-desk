@@ -106,3 +106,40 @@ and to — held at the first run. Any other rules, or a table beyond the block's
 okay-datalog: one program, two handlers, the cheaper where it fits (okay-inlay specs/inlay.md §8.6). The page says
 when the block answered. What the block does NOT do yet: arbitrary rules (okay-inlay BACKLOG 0, the Inlay handler
 of okay-datalog's programs) and large tables (the dense `Forward`; the GPU or sparse heads later).
+
+## 7. The skill as a block beside a minimal model (operator's direction, 2026-11-04)
+
+"Take the smallest LLM that understands speech and, with inlay, teach it to write correct Datalog." The model
+(Qwen3 0.6B) supplies the understanding and is not changed; the skill is a BLOCK beside it; only the boundary is
+trained — okay-inlay specs/bridge.md's regimes, in the strongest form.
+
+1. **Readers** (trained, kilobytes): linear probes on a middle layer read the program's SLOTS from the model's
+   state over the page's prompt — the shape (count, filter, group, top-N, closure…), the aggregate, the op; the
+   table and the column as a POINTER among the schema's positions in the prompt (a `Lookup` with learned query and
+   key maps — a head, not a classifier); the constant of a condition is a verbatim span of the question, copied by
+   the quote mechanism (okay-inlay `Quotes`), no judgement at all.
+2. **The assembler** (compiled): the slots → the program's text, with the grammar mask: an unknown column, a broken
+   JSON, a wrong key order impossible by construction.
+3. **Training**: the readers only, on the generated pairs (`Pairs`: the gold slots are known), minutes; measured
+   per slot on held-out pairs and end to end on the bench. Everything after a read is exact, so the program is as
+   right as the reads.
+
+Against LoRA (§5, §8): LoRA moves the knowledge into the weights — unverifiable, not removable; a block is a
+separate file, checked by a law, swappable, off at will, and its error has a name ("the column was read unsurely").
+The proof: one bench, three arms on the 0.6B — as it is, with LoRA, with the readers and the block. The risk: whether
+the shape and the column read as linearly from a 0.6B's layer 12 as a polarity and a direction did from the 4B's.
+
+Steps: slot probes on the pairs and their accuracy; the column pointer head; the assembler under the mask; the
+bench's third arm.
+
+## 8. LoRA on the pairs (2026-11-04)
+
+`Train`: 600 pairs (292 in Russian), rank 8, one epoch. Qwen3-0.6B: 226 s, mean loss 0.0125.
+
+| arm | before, en / ru | after, en / ru |
+|---|---|---|
+| free | 2/12, 2/12 | 6/12, 3/12 |
+| masked | 2/12, 2/12 | 6/12, 5/12 |
+
+Four minutes of training tripled the English; and the mask now helps the Russian (3 → 5): once the choice is
+learned, the mask keeps it in form. The 1.7B next.
