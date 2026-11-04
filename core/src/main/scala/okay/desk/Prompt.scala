@@ -23,6 +23,7 @@ object Prompt:
        |Datalog query (use for chains, reachability, rules): relations are the tables with their columns in order:
        |${Logic.describe(tables)}
        |{"datalog": "reach(X, Y) :- edges(X, Y). reach(X, Z) :- edges(X, Y), reach(Y, Z).", "goal": "reach(a, X)"}
+       |variables start with a capital letter; a constant that is not a lowercase word goes in double quotes: reach(X, \"orders-db\")
        |
        |Reply with the JSON only, in a ```json block. If the question is not about the data, answer in one sentence.""".stripMargin
 

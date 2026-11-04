@@ -51,7 +51,7 @@ object DeskBench:
     Q("What does web depend on, directly or through others?", "От чего зависит web, прямо или через других?",
       """{"datalog": "reach(X, Y) :- edges(X, Y). reach(X, Z) :- edges(X, Y), reach(Y, Z).", "goal": "reach(web, X)"}"""),
     Q("Which services reach orders-db?", "Какие сервисы доходят до orders-db?",
-      """{"datalog": "reach(X, Y) :- edges(X, Y). reach(X, Z) :- edges(X, Y), reach(Y, Z).", "goal": "reach(X, orders-db)"}"""),
+      """{"datalog": "reach(X, Y) :- edges(X, Y). reach(X, Z) :- edges(X, Y), reach(Y, Z).", "goal": "reach(X, \"orders-db\")"}"""),
     Q("The largest unpaid order.", "Самый большой неоплаченный заказ.",
       """{"from": "orders", "where": [{"column": "status", "op": "=", "value": "unpaid"}], "order": ["-amount"], "limit": 1}"""))
 
