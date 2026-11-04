@@ -154,3 +154,25 @@ Qwen3-1.7B, the same 600 pairs, one epoch (mean loss 0.0171):
 A 1.7B trained for a few minutes on generated pairs reaches the untrained 4B (10–11 of 12) — in a 1 GB model that
 runs in the browser. Under the mask the two languages are equal (9/12 each). The choice is learnable; the mask keeps
 its form. Next: the same choice read by probes and assembled by a block, the model untouched (§7).
+
+## 9. The slots read from the 0.6B (2026-11-05)
+
+`Probes`: the states after a layer, standardized and clipped (the residual's scale and its few huge dimensions
+turned the bilinear scores to NaN until then), read by a softmax probe (the shape, 17 classes) and bilinear
+pointers (the table and each column slot as a position among the schema's names in the prompt, a "none" key for
+an empty slot); 600 pairs to train, 200 held out. Read at the question's last token, the column pointers sat at
+the "none" rate (59–65% against 61%): the state there does not hold WHICH column. **Read where the model
+decides** — after a forced prefix of the program up to the slot (`{"from": "orders", "where": [{"column": "`), as
+the mask reads a choice where it is made:
+
+| layer | shape | table | where column | group column | aggregate column | order column |
+|---|---|---|---|---|---|---|
+| 12 | 29.0% | 100% | 64.5% | 79.0% | 77.5% | 83.0% |
+| 16 | 64.0% | 100% | 87.5% | 83.0% | 93.0% | 85.0% |
+| 20 | **93.5%** | 100% | **93.5%** | **94.5%** | **96.0%** | **95.5%** |
+| 24 | 86.5% | 100% | 94.0% | 98.0% | 91.0% | 95.0% |
+| the "none" rate | | | 61% | 79% | 78% | 85% |
+
+So the slots of a program read from an UNTOUCHED 0.6B at 93–98% by readers of kilobytes (a 1024×64 map or two per
+slot), once read at the right place. The understanding is there; it was the reader. Next: the assembler (the slots,
+the constant copied from the question, the program under the mask) and the bench's third arm.

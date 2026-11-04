@@ -90,22 +90,31 @@ object Probes:
       (keys.map(kk => dot(pq, proj(wk, kk))) :+ dot(pq, none)).toArray
     /** the index chosen, keys.size meaning none */
     def predict(q: Array[Float], keys: Vector[Array[Float]]): Int = scores(q, keys).zipWithIndex.maxBy(_._1)._2
-    def train(xs: Vector[(Array[Float], Vector[Array[Float]], Int)], steps: Int = 200, lr: Float = 0.05f): Unit =
+    /** batch gradient descent: the gradients summed over the examples and averaged, one step per pass — a per-example
+     * step at the same rate diverged to NaN (and NaN scores pick index 0: the first name, every time) */
+    def train(xs: Vector[(Array[Float], Vector[Array[Float]], Int)], steps: Int = 150, lr: Float = 0.05f): Unit =
+      val n = xs.size
       for _ <- 1 to steps do
+        val gq = Array.fill(k)(Array.fill(wq(0).length)(0f)); val gk = Array.fill(k)(Array.fill(wk(0).length)(0f))
+        val gn = Array.fill(k)(0f)
         for (q, keys, y) <- xs do
           val pq = proj(wq, q); val pks = keys.map(proj(wk, _)) :+ none
           val s = pks.map(dot(pq, _)).toArray; val m = s.max; val e = s.map(v => math.exp((v - m).toDouble).toFloat); val z = e.sum
-          val g = e.map(_ / z); g(y) -= 1f
+          val g = e.map(_ / z / n); g(y) -= 1f / n
           // d/dpq = Σ g_j pk_j; d/dpk_j = g_j pq; back through the linear maps
           val dpq = Array.fill(k)(0f)
           for (pk, j) <- pks.zipWithIndex; i <- 0 until k do dpq(i) += g(j) * pk(i)
           for i <- 0 until k do
             var t = 0
-            while t < wq(i).length do { wq(i)(t) -= lr * dpq(i) * q(t); t += 1 }
+            while t < q.length do { gq(i)(t) += dpq(i) * q(t); t += 1 }
           for (kk, j) <- keys.zipWithIndex; i <- 0 until k do
             val gi = g(j) * pq(i); var t = 0
-            while t < wk(i).length do { wk(i)(t) -= lr * gi * kk(t); t += 1 }
-          for i <- 0 until k do none(i) -= lr * g(keys.size) * pq(i)
+            while t < kk.length do { gk(i)(t) += gi * kk(t); t += 1 }
+          for i <- 0 until k do gn(i) += g(keys.size) * pq(i)
+        for i <- 0 until k do
+          var t = 0
+          while t < wq(i).length do { wq(i)(t) -= lr * gq(i)(t); wk(i)(t) -= lr * gk(i)(t); t += 1 }
+          none(i) -= lr * gn(i)
 
   private def dot(a: Array[Float], b: Array[Float]): Float =
     var s = 0f; var i = 0
@@ -118,7 +127,7 @@ object Probes:
     model.hook = new Qwen3.Hook:
       def after(i: Int, h: Arr)(using Scope): Arr =
         if layers.contains(i + 1) then
-          val d = h.dim(2); val all = astype(h, Dtype.Float32).toFloats
+          val d = h.dim(2); val all = astype(h, Dtype.Float32).toFloats.map(v => if v.isNaN || v.isInfinite then 0f else v)
           got(i + 1) = at.map(p => all.slice(p * d, (p + 1) * d))
         h
     val st = model.newState(); val s = new Scope
@@ -132,31 +141,57 @@ object Probes:
     val chat = Chat.load(dir); val model = Model.load(dir, mapped = true).asInstanceOf[Qwen3]
     val train = Pairs.many(42, 600); val test = Pairs.many(43, 200)
     println(s"$repo: ${train.size} train, ${test.size} test pairs; layers ${layers.mkString(",")}")
-    // every example: its slots, the last token's state and the schema names' states, per layer
-    final case class Ex(slots: Slots, names: Vector[String], q: Map[Int, Array[Float]], keys: Map[Int, Vector[Array[Float]]])
+    // every example: its slots, the schema names' states, and the query state per slot READ WHERE THE MODEL
+    // DECIDES: after a forced prefix of the program up to that slot ("…, \"where\": [{\"column\": \"") — the last
+    // token of the question alone does not hold which column is meant (the first run: the pointers at the "none" rate)
+    final case class Ex(slots: Slots, names: Vector[String], q: Map[(String, Int), Array[Float]], keys: Map[Int, Vector[Array[Float]]])
+    val prefixes: Vector[(String, String => String)] = Vector(
+      "shape" -> (t => "```json\n{\"from\": \"" + t + "\", \""),
+      "where" -> (t => "```json\n{\"from\": \"" + t + "\", \"where\": [{\"column\": \""),
+      "group" -> (t => "```json\n{\"from\": \"" + t + "\", \"group\": [\""),
+      "agg" -> (t => "```json\n{\"from\": \"" + t + "\", \"aggregate\": [{\"fn\": \"sum\", \"column\": \""),
+      "order" -> (t => "```json\n{\"from\": \"" + t + "\", \"order\": [\""))
     def examples(ps: Vector[Pairs.Pair]): Vector[Ex] = ps.flatMap { p =>
       slots(p.program).map { sl =>
         val pr = prompted(chat, p)
-        val at = (pr.ids.length - 1) +: pr.names.map(_._2)
-        val st = states(model, pr.ids, layers, at)
-        Ex(sl, pr.names.map(_._1), st.map((l, v) => l -> v.head), st.map((l, v) => l -> v.tail))
+        val base = states(model, pr.ids, layers, (pr.ids.length - 1) +: pr.names.map(_._2))
+        val q = scala.collection.mutable.Map.empty[(String, Int), Array[Float]]
+        for l <- layers do q(("last", l)) = base(l).head
+        for (name, prefix) <- prefixes do
+          val ids = pr.ids ++ chat.tokenizer.encode(prefix(sl.table))
+          val st = states(model, ids, layers, Vector(ids.length - 1))
+          for l <- layers do q((name, l)) = st(l).head
+        Ex(sl, pr.names.map(_._1), q.toMap, base.map((l, v) => l -> v.tail))
       }
     }
     val t0 = System.nanoTime()
     val trainEx = examples(train); val testEx = examples(test)
     println(f"states read: ${(System.nanoTime() - t0) / 1e9}%.0f s; shapes: ${trainEx.map(_.slots.shape).distinct.size}")
-    val d = trainEx.head.q(layers.head).length
+    val d = trainEx.head.q(("last", layers.head)).length
     for l <- layers do
+      // the states standardized per dimension (the residual's scale is tens to hundreds): the probes' steps stay sane
+      val all = trainEx.map(_.q(("last", l))) ++ trainEx.flatMap(_.keys(l))
+      val mean = Array.tabulate(d)(i => all.map(_(i)).sum / all.size)
+      val std = Array.tabulate(d)(i => math.max(math.sqrt(all.map(x => (x(i) - mean(i)) * (x(i) - mean(i))).sum / all.size), 1e-3).toFloat)
+      // clipped: a dimension of tiny variance would blow a state up (the residual has such dimensions)
+      // and scaled to a norm near 8 (as the synthetic data the pointer was checked on): at a norm of ~100 the bilinear
+      // scores overflow float32 and the pointer turns NaN
+      val scale = 8f / math.sqrt(d).toFloat
+      def z(x: Array[Float]) = Array.tabulate(d)(i => math.max(-4f, math.min(4f, (x(i) - mean(i)) / std(i))) * scale)
       val shape = Softmax(trainEx.map(_.slots.shape).distinct, d)
-      shape.train(trainEx.map(e => (e.q(l), e.slots.shape)))
-      val shapeAcc = testEx.count(e => shape.predict(e.q(l)) == e.slots.shape) * 100.0 / testEx.size
-      def pointerAcc(slot: Slots => Option[String]): Double =
+      shape.train(trainEx.map(e => (z(e.q(("shape", l))), e.slots.shape)), steps = 300, lr = 0.05f)
+      val shapeAcc = testEx.count(e => shape.predict(z(e.q(("shape", l)))) == e.slots.shape) * 100.0 / testEx.size
+      def pointerAcc(at: String, slot: Slots => Option[String]): (Double, Double) =
         val p = Pointer(d)
         def target(e: Ex) = slot(e.slots).map(e.names.indexOf).filter(_ >= 0).getOrElse(e.names.size)
-        p.train(trainEx.map(e => (e.q(l), e.keys(l), target(e))))
-        testEx.count(e => p.predict(e.q(l), e.keys(l)) == target(e)) * 100.0 / testEx.size
-      val table = pointerAcc(s => Some(s.table)); val where = pointerAcc(_.where)
-      val group = pointerAcc(_.group); val agg = pointerAcc(_.agg); val order = pointerAcc(_.order)
-      println(f"layer $l%2d: shape $shapeAcc%5.1f%%  table $table%5.1f%%  where-column $where%5.1f%%  group-column $group%5.1f%%  " +
-        f"agg-column $agg%5.1f%%  order-column $order%5.1f%%")
+        p.train(trainEx.map(e => (z(e.q((at, l))), e.keys(l).map(z), target(e))), steps = 150, lr = 0.05f)
+        val preds = testEx.map(e => p.predict(z(e.q((at, l))), e.keys(l).map(z)))
+        val acc = preds.zip(testEx).count((pr, e) => pr == target(e)) * 100.0 / testEx.size
+        if preds.distinct.size == 1 then println(s"  (a pointer predicting one index only: ${preds.head})")
+        val none = testEx.count(e => target(e) == e.names.size) * 100.0 / testEx.size
+        (acc, none)
+      val table = pointerAcc("last", s => Some(s.table)); val where = pointerAcc("where", _.where)
+      val group = pointerAcc("group", _.group); val agg = pointerAcc("agg", _.agg); val order = pointerAcc("order", _.order)
+      println(f"layer $l%2d: shape $shapeAcc%5.1f%%  table ${table._1}%5.1f%%  where ${where._1}%5.1f%% (none ${where._2}%.0f%%)  " +
+        f"group ${group._1}%5.1f%% (none ${group._2}%.0f%%)  agg ${agg._1}%5.1f%% (none ${agg._2}%.0f%%)  order ${order._1}%5.1f%% (none ${order._2}%.0f%%)")
     model.close()
