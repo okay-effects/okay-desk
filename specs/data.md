@@ -35,3 +35,34 @@ result dropped. All held at the first run.
 - Large files: everything is in memory and the engine is plain Scala; tens of thousands of rows are fine, millions
   are not (okay-store's SQL handler over a browser database later).
 - The first load needs the network once (the model from HuggingFace through WebLLM's cache); after that, offline.
+
+## 4. The bench, first numbers (2026-11-04)
+
+`bench/` (JVM, mlx-scala): 12 questions × English and Russian over orders (8 rows), customers (5), edges (6) with
+gold programs; the page's loop (the prompt, the program parsed, checked and run, one retry with the problem in
+words); right when the result equals the gold as a set of rows (a subset of the gold's columns accepted). Three
+runs: the first with one abstract example in the prompt — every small model copied its names ("from": "table",
+"group": ["c"]) and all were at 0; the second with examples written over the tables at hand; the third also with
+a lenient parser (a `{"query": …}` wrapper, a `{"status": "unpaid"}` shorthand, "join" as a list, `table.column`).
+
+| model (4-bit) | en: right at once, +retry | ru | time, 24 questions |
+|---|---|---|---|
+| Qwen3-0.6B | 2/12, +0 | 2/12, +0 | 9 s |
+| Qwen3.5-0.8B | 0/12 | 0/12 | 15 s |
+| Qwen3-1.7B | 4/12, +0 | 5/12, +0 | 18 s |
+| Qwen3.5-2B | 4/12, +0 | 4/12, +0 | 20 s |
+| Qwen3.5-4B | 10/12, +1 | 10/12, +1 | 37 s |
+
+- **4B does the job** (11 of 12 in both languages; the miss: "the largest unpaid order" answered as the maximum
+  amount, a correct answer in another shape). **Below 2B the models do not, as they are**: they write a program
+  every time (no "none"), but the wrong one — "not empty" with a value, a join forgotten, a group by the wrong
+  column, "where": []. Russian is no worse than English at any size.
+- The retry with the problem in words helped the 4B once and the small ones never: their programs run, they are
+  just wrong, and nothing tells them so. The lever for the small ones is not words but the mask (a grammar over
+  the program and the schema at decoding) and training on generated question → program pairs (okay-forge's
+  recipe) — bridge-2's question, here with a benchmark that measures it.
+- The prompt matters more than a billion parameters: the 4B went 4–5 → 7 → 10 of 12 by examples over the real
+  tables and a lenient parser, with no change of the model.
+
+Next: the mask on the program's grammar in the bench (mlx-scala's decode port) and in the page (WebLLM's logit
+processor); the 1.7B and 0.6B trained on generated pairs; then the page's default chosen by this table.
