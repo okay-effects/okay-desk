@@ -87,15 +87,21 @@ object DeskBench:
           val chat = Chat.load(dir); val model = Model.load(dir, mapped = true); val tok = chat.tokenizer
           def msg(role: String, content: String) = okay.effects.json.Json.obj("role" -> okay.effects.json.Json.Str(role),
             "content" -> okay.effects.json.Json.Str(content))
-          def complete(ms: Vector[(String, String)], max: Int): String =
+          val end = tok.id("<|im_end|>")
+          def complete(ms: Vector[(String, String)], max: Int, masked: Boolean): String =
             val prompt = chat.prompt(ms.map(msg), Nil, Map("enable_thinking" -> false))
-            val s = Session(model, prompt, max, chat.stops)
-            try tok.decode(Iterator.continually(s.next()).takeWhile(_.isDefined).flatten.toVector) finally s.close()
+            val port = if masked then Grammar(tok, tables, end) else null
+            val s = Session(model, prompt, max, chat.stops, port = port)
+            try
+              val toks = Iterator.continually(s.next()).takeWhile(_.isDefined).flatten.toVector
+              if masked then "```json\n" + port.out.toString + "\n```" else tok.decode(toks)
+            finally s.close()
+          for masked <- Seq(false, true) do {
           var at = Map("en" -> 0, "ru" -> 0); var retried = Map("en" -> 0, "ru" -> 0)
           var wrong = Map("en" -> 0, "ru" -> 0); var none = Map("en" -> 0, "ru" -> 0)
           val t0 = System.nanoTime()
           for (q, i) <- questions.zipWithIndex; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) do
-            val answer = complete(Vector("system" -> system, "user" -> text), 500)
+            val answer = complete(Vector("system" -> system, "user" -> text), 500, masked)
             def attempt(a: String): Either[String, Table] =
               Prompt.program(a).left.map(_ => "no program").flatMap(Query.parse).flatMap(run)
             attempt(answer) match
@@ -105,15 +111,16 @@ object DeskBench:
                 if first.left.exists(_ == "no program") then none = none.updated(lang, none(lang) + 1)
                 else
                   val again = complete(Vector("system" -> system, "user" -> text, "assistant" -> answer,
-                    "user" -> s"That program failed: $problem. Reply with the corrected JSON only."), 500)
+                    "user" -> s"That program failed: $problem. Reply with the corrected JSON only."), 500, masked)
                   attempt(again) match
                     case Right(t) if same(t, golds(i)) => retried = retried.updated(lang, retried(lang) + 1)
                     case _ => wrong = wrong.updated(lang, wrong(lang) + 1)
                       if scala.sys.env.contains("DESK_VERBOSE") then println(s"  [$lang ${i + 1}] ${answer.take(300).replace("\n", " ")}")
           val n = questions.size
-          val line = f"$repo%-42s | en: ${at("en")}/$n at once, +${retried("en")} after the retry, ${wrong("en")} wrong, ${none("en")} none" +
+          val line = f"$repo%-42s ${if masked then "masked" else "free  "} | en: ${at("en")}/$n at once, +${retried("en")} after the retry, ${wrong("en")} wrong, ${none("en")} none" +
             f" | ru: ${at("ru")}/$n, +${retried("ru")}, ${wrong("ru")} wrong, ${none("ru")} none | ${(System.nanoTime() - t0) / 1e9}%.0f s"
           println(line); summary += line
+          }
           model.close()
     println("\nmodel | en: right at once, after the retry, wrong, no program | ru | time")
     summary.result().foreach(println)

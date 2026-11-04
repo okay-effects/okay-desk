@@ -11,10 +11,16 @@ object Logic:
   def facts(tables: Map[String, Table]): Vector[Fact] =
     tables.values.toVector.flatMap(t => t.rows.map(r => Fact(t.name, r.map(_.text))))
 
+  /** a bare word with a hyphen or a capital inside (orders-db, Kyiv) quoted, as the parser wants — outside quotes */
+  def quoted(text: String): String =
+    "(\"[^\"]*\")|([A-Za-z_][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+)".r.replaceAllIn(text, m =>
+      if m.group(1) != null then java.util.regex.Matcher.quoteReplacement(m.group(1))
+      else "\"" + m.group(2) + "\"")
+
   def run(tables: Map[String, Table], q: Query.Logical): Either[String, Table] =
     for
-      program <- Parse.program(q.rules).left.map(e => s"rules: $e")
-      goal <- Parse.atom(q.goal).left.map(e => s"goal: $e")
+      program <- Parse.program(quoted(q.rules)).left.map(e => s"rules: $e")
+      goal <- Parse.atom(quoted(q.goal)).left.map(e => s"goal: $e")
       result <- Eval.run(program, facts(tables)).left.map(e => s"evaluation: $e")
     yield
       val rows = result.query(goal)

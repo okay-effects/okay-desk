@@ -66,3 +66,31 @@ a lenient parser (a `{"query": …}` wrapper, a `{"status": "unpaid"}` shorthand
 
 Next: the mask on the program's grammar in the bench (mlx-scala's decode port) and in the page (WebLLM's logit
 processor); the 1.7B and 0.6B trained on generated pairs; then the page's default chosen by this table.
+
+## 5. The mask, measured (2026-11-04)
+
+`bench/Grammar.scala`: the program's grammar as mlx-scala's decode port — the JSON a sequence of segments: PICKS
+(a table, a column, an op, an aggregate, the next section or the end: the names from the lists, never from the
+model) and FREE text until a quote (a value, an alias, Datalog rules), a bare number where a value is numeric. A
+token may cross a segment boundary (`",`, `"}`): the allowed set is computed by reading each token's text through
+the grammar. Two lessons on the way, both found with a probe that feeds the port known text without a model:
+scoring whole continuations by their log-probability sum favours the shortest (fixed in mlx-scala: the mean), and
+FORCING a unique continuation (`"` after a name) keeps the model from its natural merged token (`",`), after which
+a lone `,` against `}` is no choice of its own — so nothing is forced: the mask alone, token by token.
+
+| model (4-bit) | free, en / ru | masked, en / ru |
+|---|---|---|
+| Qwen3-0.6B | 2/12, 2/12 | 2/12, 2/12 |
+| Qwen3.5-0.8B | 0/12, 0/12 | 2/12, 1/12 |
+| Qwen3-1.7B | 4/12, 5/12 | 3/12, 1+2/12 |
+| Qwen3.5-2B | 4/12, 4/12 | 5/12, 4/12 |
+| Qwen3.5-4B | 11/12, 11/12 | 10+1/12, 8/12 |
+
+**The mask does not lift the small models here.** It guarantees the FORM — no unknown column, no broken JSON,
+never "no program" — but their errors were never of form: they choose the wrong column, op or grouping, and a
+mask over names cannot choose for them. On the 4B it costs a little (10–11 → 8–10): the grammar's order of keys and
+its bare-number rule differ from what the model would write. So for okay-desk the mask is the guard, not the
+lever; the lever for a small model is training on generated question → program pairs (okay-forge's recipe), with
+the mask on at generation so the trained choice lands in a well-formed program. That is the next step; until then
+the page's honest default is the 4B class on the JVM (okay-mlx) and Qwen3 1.7B in the browser with the program
+shown.
