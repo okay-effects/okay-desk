@@ -1,7 +1,7 @@
-package okay.data.web
+package okay.desk.web
 
 import com.raquo.laminar.api.L.*
-import okay.data.*
+import okay.desk.*
 import org.scalajs.dom
 import scala.concurrent.Future
 import scala.scalajs.js

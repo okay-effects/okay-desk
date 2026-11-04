@@ -1,6 +1,6 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
-/** okay-data — chat with your data in the browser, offline: a small model in the page writes the program, exact
+/** okay-desk — chat with your data in the browser, offline: a small model in the page writes the program, exact
  * handlers run it (specs/data.md). The model never computes a number. */
 ThisBuild / organization := "io.github.okay-effects"
 ThisBuild / version := "0.1.0"
@@ -13,7 +13,7 @@ ThisBuild / resolvers ++= Seq(
 /** the tables, the query programs (data), the exact handlers (relational and Datalog), the model's prompt and
  * its answer's parsing — plain Scala: the JVM for the laws, the browser for the page */
 lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).in(file("core"))
-  .settings(name := "okay-data",
+  .settings(name := "okay-desk",
     libraryDependencies ++= Seq(
       "io.github.okay-effects" %%% "okay-datalog" % "0.1.0",
       "io.github.okay-effects" %%% "okay-effects-json-value" % "0.1.1",
@@ -21,7 +21,7 @@ lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
 
 /** the page: files opened in the browser, the model (WebLLM, WebGPU) in the page, the chat */
 lazy val web = (project in file("web")).enablePlugins(ScalaJSPlugin).dependsOn(core.js)
-  .settings(name := "okay-data-web", publish / skip := true, scalaJSUseMainModuleInitializer := true,
+  .settings(name := "okay-desk-web", publish / skip := true, scalaJSUseMainModuleInitializer := true,
     scalaJSLinkerConfig ~= (_.withModuleKind(org.scalajs.linker.interface.ModuleKind.NoModule)),
     libraryDependencies ++= Seq("com.raquo" %%% "laminar" % "17.2.1"))
 

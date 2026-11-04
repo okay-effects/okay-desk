@@ -1,4 +1,4 @@
-# okay-data — chat with your data, in the browser, offline
+# okay-desk — a desk for your data: chat with it in the browser, offline
 
 Open CSV, TSV or JSON files (or a folder of them) from your machine. A small model in the page (Qwen3 0.6B–1.7B
 through WebLLM on WebGPU, downloaded once, cached) understands the question and writes a QUERY — relational
@@ -8,7 +8,7 @@ number in it is in the result. The model never computes a number. Nothing leaves
 
 ```
 sbt coreJVM/test                       # the exact engine's laws
-sbt web/fullLinkJS && cp web/target/scala-3.3.8/okay-data-web-opt/main.js web/page/
+sbt web/fullLinkJS && cp web/target/scala-3.3.8/okay-desk-web-opt/main.js web/page/
 cd web/page && npx -y serve .          # http://localhost:3000 — Chrome (WebGPU, File System Access)
 ```
 

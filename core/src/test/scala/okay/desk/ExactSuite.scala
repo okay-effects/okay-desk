@@ -1,4 +1,4 @@
-package okay.data
+package okay.desk
 
 /** the exact handlers: a sample of orders and customers; the programs the model would write; what they must give */
 class ExactSuite extends munit.FunSuite:

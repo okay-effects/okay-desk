@@ -1,4 +1,4 @@
-package okay.data
+package okay.desk
 
 import okay.effects.json.Json
 

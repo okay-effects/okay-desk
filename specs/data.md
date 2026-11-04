@@ -1,4 +1,4 @@
-# okay-data — chat with your data in the browser (spec, 2026-11-04)
+# okay-desk — chat with your data in the browser (spec, 2026-11-04)
 
 Status: a proof of concept, built 2026-11-04 (operator's direction: "a chat in the browser with an offline model
 strengthened with Datalog and whatever analysis needs; the data opened locally through file and folder pickers").

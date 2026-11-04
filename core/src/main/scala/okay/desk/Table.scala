@@ -1,4 +1,4 @@
-package okay.data
+package okay.desk
 
 /** A VALUE in a cell: text, a number, or empty. Numbers compare as numbers, text as text; empty sorts first */
 enum Value:

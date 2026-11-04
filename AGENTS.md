@@ -1,4 +1,4 @@
-# AGENTS.md — okay-data
+# AGENTS.md — okay-desk
 
 Chat with your data in the browser, offline (README, specs/data.md). Scala 3, lines at most 120 characters, English.
 

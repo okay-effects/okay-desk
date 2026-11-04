@@ -1,4 +1,4 @@
-package okay.data
+package okay.desk
 
 import okay.datalog.{Eval, Fact, Parse}
 

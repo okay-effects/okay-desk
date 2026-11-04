@@ -1,4 +1,4 @@
-package okay.data
+package okay.desk
 
 /**
  * THE MODEL'S PART: it understands the question and writes the program; it never computes a number. The prompt

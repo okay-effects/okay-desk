@@ -1,4 +1,4 @@
-package okay.data
+package okay.desk
 
 /**
  * THE EXACT HANDLER of a relational query: checked against the tables first (every column named must exist —
