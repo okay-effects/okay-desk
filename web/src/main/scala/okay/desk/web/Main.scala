@@ -29,6 +29,10 @@ object Main:
         dom.window.location.href = Examples.link(urls)))
     else
       Engine.status = s => Option(dom.document.getElementById("engine-status")).foreach(_.textContent = s)
+      // a failure nobody caught is written where the person can read it (a phone shows no console)
+      dom.window.addEventListener("error", (e: dom.ErrorEvent) => Engine.status(s"error: ${e.message}"))
+      dom.window.addEventListener("unhandledrejection", (e: dom.Event) =>
+        Engine.status("error: " + e.asInstanceOf[js.Dynamic].reason.toString))
       val phone = dom.window.innerWidth < 700 || dom.window.navigator.asInstanceOf[js.Dynamic].maxTouchPoints.asInstanceOf[Int] > 1
       val _ = Async.start(Dom.run(root, Look.skin, follow = true)(InThePage.fetching(Engine.model(
         App.main[Row](search.getAll("open").toList, phone)))))

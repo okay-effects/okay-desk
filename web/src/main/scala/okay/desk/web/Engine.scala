@@ -56,19 +56,21 @@ object Engine:
     (for
       config <- fetch(s"$dir/config.json").map(text).map(Qwen3Config.parse)
       tok <- fetch(s"$dir/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
-      bytes <- weights(dir)
       skillBytes <- fetch(s"$dir/readers.skill")
       gpu <- OnWebGpu.create()
       device = gpu.left.flatMap(why => OnWebGl2.create().left.map(more => s"$why; $more"))
       c = device.fold(_ => OnCpu(), identity)
-      _ = status(s"the weights to ${c.api}…")
-      model = Qwen3Compute(c, Safetensors(new Int8Array(bytes).toArray), config)
+      // the weights last, read straight from the fetched buffer (no copy) onto the device, and not kept: a phone's
+      // tab has no room for a second copy of 244 MB
+      (model, mb) <- weights(dir).map { bytes =>
+        status(s"the weights to ${c.api}…")
+        (Qwen3Compute(c, new Safetensors(TypedArrayBuffer.wrap(bytes)), config), bytes.byteLength / 1048576) }
     yield
       on = OnQwen(model, tok, layer)
       status("")
       skill = Skill(); skill.load(new Int8Array(skillBytes).toArray)
       engine = null
-      Right(s"the cut model (${config.layers} layers, ${bytes.byteLength / 1048576} MB) and the readers on ${c.api}" +
+      Right(s"the cut model (${config.layers} layers, $mb MB) and the readers on ${c.api}" +
         device.fold(why => s" ($why)", _ => "")))
       .recover { case t => Left(s"cannot load the readers: ${t.getMessage}") }
 
@@ -110,5 +112,6 @@ object Engine:
       val f: Future[X] = op match
         case Model.Load(name) => if name == "readers" then loadReaders("model", 19) else loadWebLlm(name)
         case Model.Program(tables, question, retry) => program(tables, question, retry)
-        case Model.Summary(question, q, result) => summary(question, q, result)
+          .recover { case t => Left(s"the model failed: $t") }
+        case Model.Summary(question, q, result) => summary(question, q, result).recover { case _ => None }
       Async.fromFuture[X, Rest](f).flatMap(k)))
