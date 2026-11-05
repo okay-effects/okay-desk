@@ -155,10 +155,16 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         tables.values.filter(_.name != table).flatMap(o => joinTo(o).filter(_ => o.columns.exists(c =>
           c.length >= 3 && lower.matches(s"(?U).*\\b${c.toLowerCase}\\b.*"))).map(c => (o, c))).headOption)
       val cols = t.columns.map(c => (table, c)) ++ join.map(j => j._1.columns.map(c => (j._1.name, c))).getOrElse(Vector.empty)
-      // a column slot the shape says is there: the two readers over this table's (and the joined one's) columns
+      // EXACT FIRST: a column named in the question (its name, a word of 3+ letters) is the column — the readers decide
+      // only among what the question does not name (a translation: "по городам" for city)
+      val named = cols.filter((_, c) => c.length >= 3 && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase)}\\b.*"))
+      val used = scala.collection.mutable.Set.empty[String]
       def column(slot: String): Option[String] =
         val prefix = prefixes.find(_._1 == slot).get._2(table)
-        Some(both(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, cols))
+        val exact = named.map(_._2).filterNot(used).filter(c => slot != "agg" && slot != "order" || t.column(c).exists(i => t.rows.exists(_(i).num.isDefined)))
+        val chosen = exact.headOption.getOrElse(both(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, cols))
+        used += chosen
+        Some(chosen)
       /** the value: from the read start among the question's tokens, the longest value of the column (or a number or
        * a date) that begins there; else by exact match anywhere in the question */
       def constant(col: String, o: String): Option[String] =
@@ -190,7 +196,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         val parts = Vector.newBuilder[String]
         parts += s""""from": ${q(table)}"""
         join.foreach((o, c) => parts += s""""join": {"table": ${q(o.name)}, "on": [[${q(c)}, ${q(o.columns.head)}]]}""")
-        if whereOp != "-" then fact.map(_._2).orElse(column("where")).foreach { c =>
+        if whereOp != "-" then fact.map(_._2).map { c => used += c; c }.orElse(column("where")).foreach { c =>
           val o = if whereOp == "empty" then "empty" else if fact.exists(_._2 == c) && !lower.matches("(?U).*\\b(not|не|кроме|except)\\b.*") then "="
             else
               val ps = logSoftmax(op.scores(z(query(pr, opPrefix(table, c))))); val as = ask(pr, opPrefix(table, c), ops)

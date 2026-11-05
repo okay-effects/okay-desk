@@ -198,8 +198,10 @@ object Probes:
         val p = Pointer(d)
         def target(e: Ex) = slot(e.slots).map(c => e.pr.indexOf(e.slots.table, c)).filter(_ >= 0).getOrElse(e.names.size)
         p.train(trainEx.map(e => (z(e.q((at, l))), e.keys(l).map(z), target(e))), steps = 150, lr = 0.05f)
-        val preds = testEx.map(e => p.predict(z(e.q((at, l))), e.keys(l).map(z)))
-        val acc = preds.zip(testEx).count((pr, e) => pr == target(e)) * 100.0 / testEx.size
+        // counted where the gold HAS the slot: the empty slots (60–85%) had inflated the first numbers
+        val has = testEx.filter(e => slot(e.slots).isDefined)
+        val preds = has.map(e => p.predict(z(e.q((at, l))), e.keys(l).map(z)))
+        val acc = preds.zip(has).count((pr, e) => pr == target(e)) * 100.0 / math.max(1, has.size)
         if preds.distinct.size == 1 then println(s"  (a pointer predicting one index only: ${preds.head})")
         val none = testEx.count(e => target(e) == e.names.size) * 100.0 / testEx.size
         (acc, none)
