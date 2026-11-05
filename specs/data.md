@@ -377,3 +377,17 @@ floor by size: the embedding (152k × 1024) is a quarter of the model and does n
 (a joined table's column, `country` or `since`, chosen on a translated word). The readers' candidates by kind now
 (numeric for an aggregate or an order, text for a group), the table's own columns first, a joined one only by a
 clear margin of both readers; measured again on both cuts.
+
+**The cut chosen (2026-11-05 evening): 19 of 28 layers, 244 MB.** With the readers' candidates by kind, the
+table's own columns first and a joined table's only for a group by a wide margin:
+
+| Qwen3-0.6B cut, readers + assembler, weights untouched | size | en | ru |
+|---|---|---|---|
+| full, 28 layers (layer 20) | 320 MB | 12/12 | 11/12 |
+| **cut at 19 (layer 19)** | **244 MB** | **12/12** | **9/12** |
+| cut at 21 (layer 21) | 261 MB | 12/12 | 8/12 |
+
+A quarter smaller at no loss in English; the Russian loses two questions, both translations of a column or a value
+("по каждому клиенту" → customer, "Неоплаченные" → unpaid), where the readers' judgement at this size is the limit.
+Below 18 layers the understanding is not there (§14's curve). The floor by size is the embedding; the next cut is
+the vocabulary (152k tokens → the languages in use) or 2-bit MLPs, measured the same way.
