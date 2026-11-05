@@ -230,3 +230,23 @@ Qwen3-1.7B, the slots per layer (`Probes`, 600 / 200 pairs):
 
 Layer 20 was between 18 and 22 but read worse on the bench; 22 is the 1.7B's layer for the columns, 18 for the
 shape. The readers on the 1.7B are rerun at 22.
+
+## 11. Two readers (2026-11-05)
+
+The operator remembered bridge-4's 100%: a trained probe PLUS ask, summed. Here too: for the columns and the op,
+the pointer's log-probabilities over the candidates plus the model's own next-token log-probabilities at the same
+prefix (`"column": "` → the columns' first tokens; `"op": "` → the ops), no training for the second.
+
+| readers + assembler, model untouched | en | ru |
+|---|---|---|
+| Qwen3-0.6B, pointers only | 7/12 | 5/12 |
+| **Qwen3-0.6B, pointers + ask** | **8/12** | **6/12** |
+| Qwen3-1.7B, pointers only (layer 22) | 5/12 | 4/12 |
+| **Qwen3-1.7B, pointers + ask (layer 22)** | **9/12** | **7/12** |
+| for comparison: 1.7B with LoRA | 10/12 | 9/12 |
+
+The 1.7B's where-column pointer alone had collapsed to `status`; with ask beside it the column reads right. The
+readers on the untouched 1.7B are now a question away from its LoRA. What is left, by name: the Russian
+constant that translates the table's value (`не оплачено` → `unpaid`: ask over the column's VALUES will say it),
+"Три" not read as 3 (a `\b` that does not know Cyrillic), the op `!=` where `=` was meant on the 1.7B, a join read
+on a question without one.
