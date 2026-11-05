@@ -288,3 +288,19 @@ column accuracy of a pointer alone is ~58% (group 55%, where 59%, order 58%), wi
 column 93% → 100% with ask. Scoping names to their tables (a real bug: shared column names) did not move these
 numbers, so the pointers are now trained over the table's own columns only, ask is measured alone, and the pairs
 are 1,500. The readers are kept in `~/.cache/okay-desk/readers-<model>-<layer>.bin` (3 MB: a skill is a file).
+
+**The shape as separate decisions, exact first (2026-11-05 16:50):** the aggregate's function read at its own
+point (`"fn": "`, a probe plus ask) with the question's words first ("how many" → count, "average" → avg, "top 3"
+→ none); group / order / limit from the words ("per", "по каждому", "largest", "топ") with the probe's marginals as
+the fallback; a number with a comparison word a condition; a column named in the question taken exactly; the
+columns assigned in a disambiguating order (numeric to the aggregate and the order first, text to the group, the
+fact's to the condition).
+
+| Qwen3-0.6B, model untouched | en | ru |
+|---|---|---|
+| readers + assembler | **10/12** | **9/12** |
+| for comparison: the 1.7B with LoRA | 10/12 | 9/12 |
+
+The untouched 0.6B now matches the trained 1.7B. Three misses left, each named: a number condition put on `id`
+instead of `amount` (the numeric column whose range holds the number is the exact rule), two facts in one question
+("unpaid" and "UA": two conditions and a join), a translated column ("по странам" → country, in the joined table).
