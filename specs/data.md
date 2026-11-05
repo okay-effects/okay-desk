@@ -372,3 +372,8 @@ on it at layer 19; the bench: **11/12 en, 7/12 ru** (the full model 12/11). What
 short questions ("самый большой заказ"): the order and group readers pick `id`. A key column is now excluded from
 sorting, aggregating and grouping unless the question names it (an exact rule); the cut at 21 measured next. The
 floor by size: the embedding (152k × 1024) is a quarter of the model and does not shrink with the layers.
+
+**The cut at 21** (261 MB): 12/12 en, 7/12 ru — English whole; the Russian misses are joins the readers reach for
+(a joined table's column, `country` or `since`, chosen on a translated word). The readers' candidates by kind now
+(numeric for an aggregate or an order, text for a group), the table's own columns first, a joined one only by a
+clear margin of both readers; measured again on both cuts.

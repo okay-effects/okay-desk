@@ -51,13 +51,18 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
   // `candidates`: (table, column) pairs — the index found within the table
   private def both(pr: Prompted, prefix: String, pointer: Pointer, q: Array[Float], ks: Vector[Array[Float]],
       candidates: Vector[(String, String)]): String =
+    val scored = bothScores(pr, prefix, pointer, q, ks, candidates)
+    candidates(scored.zipWithIndex.maxBy(_._1)._2)._2
+  /** the two readers' summed log-probabilities per candidate */
+  private def bothScores(pr: Prompted, prefix: String, pointer: Pointer, q: Array[Float], ks: Vector[Array[Float]],
+      candidates: Vector[(String, String)]): Array[Float] =
     val names = candidates.map(_._2)
     val cks = candidates.map((t, c) => ks(pr.indexOf(t, c)))
     val ps = logSoftmax(pointer.scores(q, cks).take(cks.size))
     val as = ask(pr, prefix, names)
     // the two readers disagreeing is remembered: the self-play judge takes only answers they agreed on
     if ps.zipWithIndex.maxBy(_._1)._2 != as.zipWithIndex.maxBy(_._1)._2 then agreedAll = false
-    names(ps.zip(as).map((a, b) => a + b).zipWithIndex.maxBy(_._1)._2)
+    ps.zip(as).map((a, b) => a + b)
   private var agreedAll = true
   /** the program, and whether every slot the two readers both read was read alike */
   def programWith(tables: Map[String, Table], question: String): Option[(String, Boolean)] =
@@ -197,8 +202,20 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         val exact = named.map(_._2).filterNot(used).filter(c => if slot == "agg" || slot == "order" then numeric(c) else if slot == "group" then !numeric(c) else true)
         // a key column ("id") sorts, aggregates or groups nothing unless the question names it: the readers choose among the rest
         val keyLike = Set("id", "key", "uid")
-        val pool = if named.exists((_, c) => keyLike(c)) then cols else cols.filterNot((_, c) => keyLike(c) && slot != "where")
-        val chosen = exact.headOption.getOrElse(both(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, if pool.nonEmpty then pool else cols))
+        val pool0 = if named.exists((_, c) => keyLike(c)) then cols else cols.filterNot((_, c) => keyLike(c) && slot != "where")
+        // an aggregate or an order is over a numeric column, a group over a text one: the readers choose among those only
+        val pool = if slot == "agg" || slot == "order" then pool0.filter((_, c) => numeric(c)) else if slot == "group" then pool0.filterNot((_, c) => numeric(c)) else pool0
+        // the table's own columns first; a joined table's column only when the readers prefer it by a clear margin
+        val chosen = exact.headOption.getOrElse {
+          val cands = if pool.nonEmpty then pool else cols
+          val scores = bothScores(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, cands)
+          val own = cands.zipWithIndex.filter((tc, _) => tc._1 == table); val other = cands.zipWithIndex.filter((tc, _) => tc._1 != table)
+          val ownBest = own.map((tc, i) => (scores(i), tc._2)).maxByOption(_._1); val otherBest = other.map((tc, i) => (scores(i), tc._2)).maxByOption(_._1)
+          (ownBest, otherBest) match
+            case (Some((so, co)), Some((st, ct))) => if st > so + 1.5f then ct else co
+            case (Some((_, co)), None) => co
+            case (None, Some((_, ct))) => ct
+            case _ => cands.head._2 }
         used += chosen
         if !t.columns.contains(chosen) then joinNow = joinNow.orElse(joinable.find(_._1.columns.contains(chosen)))
         Some(chosen)
