@@ -137,8 +137,10 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
           .orElse("^\\s*(\\d{4}-\\d\\d-\\d\\d|\\d+(?:\\.\\d+)?)".r.findFirstMatchIn(rest).map(_.group(1)))
           .orElse(vs.find(v => lower.contains(v.toLowerCase)))
           .orElse("\\d{4}-\\d\\d-\\d\\d|\\d+(?:\\.\\d+)?".r.findAllIn(question).toVector.lastOption)
+          // nothing copied (a translated value, "не оплачено"): the model asked over the column's values
+          .orElse(Option.when(vs.nonEmpty && vs.size <= 30)(vs(ask(pr, valuePrefix(table, col, o) + "\"", vs).zipWithIndex.maxBy(_._1)._2)))
       def number: Option[Int] = "\\d+".r.findFirstIn(question).map(_.toInt)
-        .orElse(numberWords.collectFirst { case (w, n) if lower.matches(s".*\\b$w\\b.*") => n })
+        .orElse(numberWords.collectFirst { case (w, n) if lower.matches(s"(?U).*\\b$w\\b.*") => n })
       if sh.head == "closure-from" || sh.head == "closure-to" then
         val e = tables.values.find(_.columns.size == 2).getOrElse(t)
         val nodes = e.rows.flatten.map(_.text).distinct.sortBy(-_.length)
