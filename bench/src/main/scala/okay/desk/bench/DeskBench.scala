@@ -125,6 +125,22 @@ object DeskBench:
             f" | ru: ${at("ru")}/$n, +${retried("ru")}, ${wrong("ru")} wrong, ${none("ru")} none | ${(System.nanoTime() - t0) / 1e9}%.0f s"
           println(line); summary += line
           }
+          // the third arm (specs/data.md §7): the readers and the assembler, the model untouched — DESK_READERS=1
+          if scala.sys.env.contains("DESK_READERS") then model match
+            case q3: mlx.llm.Qwen3 =>
+              val t1 = System.nanoTime()
+              val readers = Readers(chat, q3, scala.sys.env.getOrElse("DESK_LAYER", "20").toInt)
+              readers.train(Pairs.many(42, 600))
+              println(f"readers trained (${(System.nanoTime() - t1) / 1e9}%.0f s)")
+              var right = Map("en" -> 0, "ru" -> 0); var fails = Vector.empty[String]
+              for (q, i) <- questions.zipWithIndex; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) do
+                val got = readers.program(tables, text).flatMap(Query.parse).flatMap(run)
+                if got.exists(same(_, golds(i))) then right = right.updated(lang, right(lang) + 1)
+                else fails = fails :+ s"[$lang ${i + 1}] ${readers.program(tables, text).fold(e => e, identity)}"
+              val line = f"$repo%-42s readers | en: ${right("en")}/${questions.size} | ru: ${right("ru")}/${questions.size}"
+              println(line); summary += line
+              if scala.sys.env.contains("DESK_VERBOSE") then fails.foreach(f => println(s"  $f"))
+            case _ => println(s"$repo: readers need a Qwen3 (the hook)")
           adapter.foreach(_.close())
           model.close()
     println("\nmodel | en: right at once, after the retry, wrong, no program | ru | time")

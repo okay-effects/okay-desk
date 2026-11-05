@@ -121,6 +121,14 @@ object Probes:
     while i < a.length do { s += a(i) * b(i); i += 1 }
     s
 
+  /** the forced prefixes of the program up to each slot: where the model decides it */
+  val prefixes: Vector[(String, String => String)] = Vector(
+    "shape" -> (t => "```json\n{\"from\": \"" + t + "\", \""),
+    "where" -> (t => "```json\n{\"from\": \"" + t + "\", \"where\": [{\"column\": \""),
+    "group" -> (t => "```json\n{\"from\": \"" + t + "\", \"group\": [\""),
+    "agg" -> (t => "```json\n{\"from\": \"" + t + "\", \"aggregate\": [{\"fn\": \"sum\", \"column\": \""),
+    "order" -> (t => "```json\n{\"from\": \"" + t + "\", \"order\": [\""))
+
   /** the states after each of `layers` at the given positions: layer → position → vector */
   def states(model: Qwen3, ids: Array[Int], layers: Seq[Int], at: Vector[Int]): Map[Int, Vector[Array[Float]]] =
     val got = scala.collection.mutable.Map.empty[Int, Vector[Array[Float]]]
@@ -145,12 +153,6 @@ object Probes:
     // DECIDES: after a forced prefix of the program up to that slot ("…, \"where\": [{\"column\": \"") — the last
     // token of the question alone does not hold which column is meant (the first run: the pointers at the "none" rate)
     final case class Ex(slots: Slots, names: Vector[String], q: Map[(String, Int), Array[Float]], keys: Map[Int, Vector[Array[Float]]])
-    val prefixes: Vector[(String, String => String)] = Vector(
-      "shape" -> (t => "```json\n{\"from\": \"" + t + "\", \""),
-      "where" -> (t => "```json\n{\"from\": \"" + t + "\", \"where\": [{\"column\": \""),
-      "group" -> (t => "```json\n{\"from\": \"" + t + "\", \"group\": [\""),
-      "agg" -> (t => "```json\n{\"from\": \"" + t + "\", \"aggregate\": [{\"fn\": \"sum\", \"column\": \""),
-      "order" -> (t => "```json\n{\"from\": \"" + t + "\", \"order\": [\""))
     def examples(ps: Vector[Pairs.Pair]): Vector[Ex] = ps.flatMap { p =>
       slots(p.program).map { sl =>
         val pr = prompted(chat, p)
