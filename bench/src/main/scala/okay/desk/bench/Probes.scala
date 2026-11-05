@@ -36,7 +36,7 @@ object Probes:
   }
 
   /** the prompt's tokens, and the token position of each schema name (a table, a column) in it */
-  final case class Prompted(ids: Array[Int], names: Vector[(String, Int)])
+  final case class Prompted(ids: Array[Int], names: Vector[(String, Int)], question: Vector[Int], qText: String, qChars: Vector[Int])
 
   def prompted(chat: Chat, p: Pairs.Pair): Prompted =
     val tok = chat.tokenizer
@@ -56,7 +56,11 @@ object Probes:
         c -> at(base + i + 3 + c.length - 1)
       }
     }
-    Prompted(ids, names)
+    // the question's tokens: their positions and the char offset (in the question) each begins at
+    val qBase = full.indexOf(p.question)
+    val qToks = ids.indices.filter(i => ends(i) > qBase && (if i == 0 then 0 else ends(i - 1)) < qBase + p.question.length).toVector
+    val qChars = qToks.map(i => math.max(0, (if i == 0 then 0 else ends(i - 1)) - qBase))
+    Prompted(ids, names, qToks, p.question, qChars)
 
   // ---- the probes
   /** softmax regression: classes over features, by gradient descent (a few hundred examples: plain Scala) */
