@@ -410,3 +410,12 @@ in one pass. What it takes, in order, each step checked on the JVM before the br
 3. **The tokenizer in Scala.js**: mlx-scala's byte-level BPE is plain Scala (llm/Tokenizer.scala) — cross-built.
 4. **The page**: the model and the readers fetched once and cached; the question → the program → the exact
    engine, the program shown, with the mode's name ("read, not generated").
+
+Status 2026-11-05: steps 1–3 DONE. Step 1 the skill in `core` (readers-Qwen3-0.6B-4bit-cut19-19.skill, 3 MB; the
+bench unchanged: 12/12 en, 9/12 ru). Step 2 in okay-llm (`qwen` and `browser` modules, okay-llm-qwen-browser 0.1.0
+locally): `Compute` with OnCpu / OnWebGpu / OnWebGl2, `Qwen3Compute` over it; the laws — ComputeSuite (OnCpu ==
+Qwen3Forward, exact), ForwardSuite here (Qwen3Forward == mlx-scala on cut19), okay-llm scripts/selftest.sh in
+Chromium on the 16-token prompt: WebGPU diff 6e-5, WebGL2 8e-3 (states up to 7942), the same next token; CPU 11 s,
+WebGPU 0.1 s, WebGL2 0.4 s. Step 3 the tokenizer encodes in the page (Nfc by the string's `normalize` on JS).
+Next: step 4 — a `Reading` over `Qwen3Compute` (asynchronous: `states` and `logits` as Futures, so `Readers` needs
+an async face or the program assembled after one forward per prefix), the skill file fetched, the page's mode.
