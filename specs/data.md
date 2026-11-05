@@ -217,3 +217,16 @@ that fail on different phrasings.
 The same readers on Qwen3-1.7B at layer 20: 6/12 en, 4/12 ru — below its LoRA (10/12, 9/12) and below the
 0.6B's readers; the where-column pointer reads `status` for nearly everything there. The layer was the 0.6B's
 choice; the 1.7B's is measured next (`Probes` per layer), as bridge-1 found the layer matters most.
+
+Qwen3-1.7B, the slots per layer (`Probes`, 600 / 200 pairs):
+
+| layer | shape | table | where column | group column | aggregate column | order column |
+|---|---|---|---|---|---|---|
+| 10 | 33.5% | 83.0% | 46.0% | 72.5% | 61.0% | 72.0% |
+| 14 | 36.5% | 87.5% | 76.0% | 73.5% | 77.5% | 85.5% |
+| 18 | **99.0%** | 100% | 87.5% | 88.5% | 94.5% | 93.0% |
+| 22 | 95.5% | 100% | **92.5%** | **95.5%** | 94.5% | 92.0% |
+| 26 | 95.0% | 100% | 91.0% | 93.0% | 95.0% | 89.0% |
+
+Layer 20 was between 18 and 22 but read worse on the bench; 22 is the 1.7B's layer for the columns, 18 for the
+shape. The readers on the 1.7B are rerun at 22.
