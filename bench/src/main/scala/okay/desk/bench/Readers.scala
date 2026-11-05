@@ -202,7 +202,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       /** the value: from the read start among the question's tokens, the longest value of the column (or a number or
        * a date) that begins there; else by exact match anywhere in the question */
       def constant(col: String, o: String): Option[String] =
-        val owner = if t.columns.contains(col) then t else join.map(_._1).getOrElse(t)
+        val owner = if t.columns.contains(col) then t else joinNow.map(_._1).orElse(tables.values.find(_.columns.contains(col))).getOrElse(t)
         val vs = owner.rows.map(_(owner.columns.indexOf(col)).text).distinct.filter(_.nonEmpty).sortBy(-_.length)
         val qs = questionStates(pr).map(z)
         val start = pointers("value").predict(z(query(pr, valuePrefix(table, col, o))), qs)
