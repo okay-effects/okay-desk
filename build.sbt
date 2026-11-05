@@ -17,6 +17,7 @@ lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
     libraryDependencies ++= Seq(
       "io.github.okay-effects" %%% "okay-datalog" % "0.1.0",
       "io.github.okay-effects" %%% "okay-inlay" % "0.1.0",
+      "io.github.okay-effects" %%% "okay-llm-qwen" % "0.1.0",
       "io.github.okay-effects" %%% "okay-effects-json-value" % "0.1.1",
       "org.scalameta" %%% "munit" % "1.2.3" % Test))
 
@@ -36,6 +37,6 @@ lazy val bench = (project in file("bench")).dependsOn(core.jvm)
   .settings(name := "okay-desk-bench", publish / skip := true,
     resolvers += "mlx-scala" at "https://sergey-scherbina.github.io/mlx-scala/maven",
     libraryDependencies ++= Seq("io.github.sergey-scherbina" %% "mlx-scala" % "0.1.0",
-      "io.github.sergey-scherbina" %% "mlx-scala-llm" % "0.1.0"),
-    fork := true, run / fork := true,
+      "io.github.sergey-scherbina" %% "mlx-scala-llm" % "0.1.0", "org.scalameta" %% "munit" % "1.2.3" % Test),
+    fork := true, run / fork := true, Test / fork := true,
     javaOptions ++= Seq("--enable-native-access=ALL-UNNAMED", s"-Dokm.lib=$mlxNativeLib/libokm.dylib", "-Xss16m"))
