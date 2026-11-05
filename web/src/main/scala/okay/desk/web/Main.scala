@@ -55,6 +55,25 @@ object Main:
         if !r.ok then Future.failed(IllegalStateException(s"$name: HTTP ${r.status}")) else r.arrayBuffer().toFuture
       }
     private def text(ab: ArrayBuffer): String = js.Dynamic.newInstance(js.Dynamic.global.TextDecoder)().decode(ab).asInstanceOf[String]
+    /** the weights: one file, or — where a host caps a file's size (GitHub Pages: 100 MB) — the parts a
+     * manifest.json lists, fetched and joined */
+    private def weights(dir: String): Future[ArrayBuffer] =
+      dom.fetch(s"$dir/manifest.json").toFuture.flatMap { r =>
+        if !r.ok then fetch(s"$dir/model.safetensors")
+        else r.text().toFuture.flatMap { t =>
+          val parts = okay.effects.json.Json.fromText(t) match
+            case okay.effects.json.Json.Obj(fs) => fs.collectFirst { case ("parts", okay.effects.json.Json.Arr(xs)) =>
+              xs.collect { case okay.effects.json.Json.Str(s) => s } }.getOrElse(Vector.empty)
+            case _ => Vector.empty
+          parts.zipWithIndex.foldLeft(Future.successful(Vector.empty[ArrayBuffer])) { (acc, p) => acc.flatMap { got =>
+            status.set(s"the weights: part ${p._2 + 1} of ${parts.size}…"); fetch(s"$dir/${p._1}").map(got :+ _) } }
+            .map { bufs =>
+              val all = new Int8Array(bufs.map(_.byteLength).sum); var at = 0
+              for b <- bufs do { all.set(new Int8Array(b), at); at += b.byteLength }
+              all.buffer
+            }
+        }
+      }
     /** the model's files from `dir` (config.json, tokenizer.json, model.safetensors, readers.skill), the device
      * chosen: WebGPU, else WebGL2, else the CPU */
     def load(dir: String, layer: Int): Future[Unit] =
@@ -62,7 +81,7 @@ object Main:
       (for
         config <- fetch(s"$dir/config.json").map(text).map(Qwen3Config.parse)
         tok <- fetch(s"$dir/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
-        bytes <- fetch(s"$dir/model.safetensors")
+        bytes <- weights(dir)
         skillBytes <- fetch(s"$dir/readers.skill")
         gpu <- OnWebGpu.create()
         device = gpu.left.flatMap(why => OnWebGl2.create().left.map(more => s"$why; $more"))
