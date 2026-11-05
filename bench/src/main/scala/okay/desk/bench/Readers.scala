@@ -195,7 +195,10 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         // a numeric column for agg and order, a text one for group; a named column not yet used
         def numeric(c: String) = cols.find(_._2 == c).exists((tb, _) => tables(tb).column(c).exists(i => tables(tb).rows.exists(_(i).num.isDefined)))
         val exact = named.map(_._2).filterNot(used).filter(c => if slot == "agg" || slot == "order" then numeric(c) else if slot == "group" then !numeric(c) else true)
-        val chosen = exact.headOption.getOrElse(both(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, cols))
+        // a key column ("id") sorts, aggregates or groups nothing unless the question names it: the readers choose among the rest
+        val keyLike = Set("id", "key", "uid")
+        val pool = if named.exists((_, c) => keyLike(c)) then cols else cols.filterNot((_, c) => keyLike(c) && slot != "where")
+        val chosen = exact.headOption.getOrElse(both(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, if pool.nonEmpty then pool else cols))
         used += chosen
         if !t.columns.contains(chosen) then joinNow = joinNow.orElse(joinable.find(_._1.columns.contains(chosen)))
         Some(chosen)

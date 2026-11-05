@@ -350,3 +350,25 @@ answer and can be judged, but cannot yet ask well enough to teach itself from sc
 better asker — a larger local model writing the questions (the 4B), the 0.6B answering, the exact judge deciding,
 the readers learning — or thousands of rounds. Stage 2 stands as designed, with the asker swapped; stage 1's
 result (12/12) does not depend on it.
+
+## 14. The cut (2026-11-05)
+
+A layer never looks up, so the state after layer L is the same in a model cut at L: the per-layer measure IS the cut
+model's readability. The 0.6B's curve (`Probes`, the corrected measure, 200 held-out pairs):
+
+| layer | shape | where column | group column | aggregate column | order column |
+|---|---|---|---|---|---|
+| 16 | 53.0% | 67.6% | 55.4% | 71.4% | 27.8% |
+| 17 | 57.5% | 63.5% | 46.4% | 71.4% | 27.8% |
+| **18** | **85.0%** | **85.1%** | **78.6%** | 80.4% | 58.3% |
+| 19 | 88.5% | 85.1% | 75.0% | 80.4% | 63.9% |
+| 20 | 83.5% | 85.1% | 71.4% | 83.9% | 55.6% |
+| 22 | 83.0% | 81.1% | 75.0% | 85.7% | 61.1% |
+
+A threshold between 17 and 18: the understanding the analysis needs forms by layer 18 and holds to 22; everything
+above is free to drop. `Cut`: the first L layers kept as a local repository (`local/<model>-cut<L>` in the cache),
+the head tied to the embedding so nothing else to drop. **19 of 28 layers: 244 MB from 320 MB**; readers trained
+on it at layer 19; the bench: **11/12 en, 7/12 ru** (the full model 12/11). What the cut lost is in Russian
+short questions ("самый большой заказ"): the order and group readers pick `id`. A key column is now excluded from
+sorting, aggregating and grouping unless the question names it (an exact rule); the cut at 21 measured next. The
+floor by size: the embedding (152k × 1024) is a quarter of the model and does not shrink with the layers.
