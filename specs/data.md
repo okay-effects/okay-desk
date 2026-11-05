@@ -198,3 +198,18 @@ column read as `status` for `customer` (the 6%), `<` for `>` (the shape probe ho
 ("не оплачено") that is a translation of the table's value, which no exact copy can give — a judgement left to a
 reader. Next: an op reader at `"op": "`, number words, a value pointer over the question's tokens (the quote
 mechanism), the join shape; then the same on the 1.7B.
+
+**With an op reader, a value-start pointer, number words and the join (2026-11-05):**
+
+| Qwen3-0.6B | en | ru |
+|---|---|---|
+| as it is (free) | 2/12 | 2/12 |
+| LoRA on the pairs (free / masked) | 6/12 / 6/12 | 3/12 / 5/12 |
+| **readers + assembler, model untouched** | **7/12** | **5/12** |
+
+The readers now pass LoRA on the same model — with the weights untouched, nothing generated, and the skill in a
+file of kilobytes. The value is copied from the question by a read start (dates come out right: `2026-11-02`);
+what still misses is a column read (`status` for `customer` in a group, for `day` in a date's condition), the join
+shape in English, "the largest unpaid order" read as a plain top-1, and the Russian translated constant. These
+are reads, each improvable by data (more phrasings) or a second reader (ask), as bridge-4's lesson: two readers
+that fail on different phrasings.
