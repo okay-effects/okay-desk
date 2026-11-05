@@ -31,6 +31,27 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
   private def questionStates(pr: Prompted): Vector[Array[Float]] =
     states(model, pr.ids, Seq(layer), pr.question)(layer)
 
+  /** ASK — the second reader (bridge-4's lesson: two readers fail on different phrasings; their sum read 100%): the
+   * model's own next-token log-probabilities at the prefix's end, over the candidates' first tokens */
+  private def ask(pr: Prompted, prefix: String, candidates: Vector[String]): Array[Float] =
+    val ids = pr.ids ++ tok.encode(prefix)
+    val st = model.newState(); val s = new mlx.Scope
+    try
+      val l = mlx.Mlx.astype(model.logits(mlx.Mlx.ints(ids, 1, ids.length)(using s), st)(using s), mlx.Dtype.Float32)(using s).toFloats
+      val m = l.max; val z = math.log(l.map(v => math.exp((v - m).toDouble)).sum)
+      candidates.map(c => (l(tok.encode(c).head) - m - z).toFloat).toArray
+    finally { s.close(); st.close() }
+  private def logSoftmax(xs: Array[Float]): Array[Float] =
+    val m = xs.max; val z = math.log(xs.map(v => math.exp((v - m).toDouble)).sum)
+    xs.map(v => (v - m - z).toFloat)
+  /** both readers summed: the pointer's log-probabilities over the candidates and the model's */
+  private def both(pr: Prompted, prefix: String, pointer: Pointer, q: Array[Float], ks: Vector[Array[Float]],
+      names: Vector[String], candidates: Vector[String]): String =
+    val idx = candidates.map(names.indexOf)
+    val ps = logSoftmax(idx.map(pointer.scores(q, ks)).toArray)
+    val as = ask(pr, prefix, candidates)
+    candidates(ps.zip(as).map((a, b) => a + b).zipWithIndex.maxBy(_._1)._2)
+
   /** the gold value's first token among the question's, if the value is written verbatim in the question */
   private def valueStart(pr: Prompted, value: String): Option[Int] =
     val at = pr.qText.toLowerCase.indexOf(value.toLowerCase)
@@ -99,9 +120,10 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         t.columns.filter(c => t.rows.forall(r => o.rows.exists(_(0).text == r(t.columns.indexOf(c)).text))).map(c => (o, c))
       }.headOption).flatten
       val cols = t.columns ++ join.map(_._1.columns).getOrElse(Vector.empty)
+      // a column slot the shape says is there: the two readers over this table's (and the joined one's) columns
       def column(slot: String): Option[String] =
-        val i = pointers(slot).predict(z(query(pr, prefixes.find(_._1 == slot).get._2(table))), ks)
-        Option.when(i < names.size && cols.contains(names(i)))(names(i))
+        val prefix = prefixes.find(_._1 == slot).get._2(table)
+        Some(both(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, names, cols.filter(names.contains)))
       /** the value: from the read start among the question's tokens, the longest value of the column (or a number or
        * a date) that begins there; else by exact match anywhere in the question */
       def constant(col: String, o: String): Option[String] =
@@ -130,7 +152,9 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         parts += s""""from": ${q(table)}"""
         join.foreach((o, c) => parts += s""""join": {"table": ${q(o.name)}, "on": [[${q(c)}, ${q(o.columns.head)}]]}""")
         if whereOp != "-" then column("where").foreach { c =>
-          val o = if whereOp == "empty" then "empty" else op.predict(z(query(pr, opPrefix(table, c))))
+          val o = if whereOp == "empty" then "empty" else
+            val ps = logSoftmax(op.scores(z(query(pr, opPrefix(table, c))))); val as = ask(pr, opPrefix(table, c), ops)
+            ops(ps.zip(as).map((a, b) => a + b).zipWithIndex.maxBy(_._1)._2)
           val v = constant(c, o).getOrElse("")
           parts += s""""where": [{"column": ${q(c)}, "op": ${q(o)}, "value": ${if v.matches("-?\\d+(\\.\\d+)?") && o != "=" then v else q(v)}}]""" }
         if group == "group" then column("group").foreach(c => parts += s""""group": [${q(c)}]""")
