@@ -17,10 +17,15 @@ object SelfPlay:
   def questions(chat: Chat, model: Model, tables: Map[String, Table], ru: Boolean, n: Int): Vector[String] =
     val tok = chat.tokenizer
     val schema = tables.values.toVector.sortBy(_.name).map(_.describe).mkString("\n")
-    val ask = if ru then s"Вот таблицы:\n$schema\n\nНапиши $n разных коротких вопросов, которые пользователь мог бы задать об этих данных " +
-      "(сколько, какие, сумма по, средний, самые большие, достижимость). По одному в строке, без нумерации, без пояснений."
-      else s"Here are tables:\n$schema\n\nWrite $n different short questions a user could ask about this data " +
-      "(how many, which, total by, average, the largest, what is reachable). One per line, no numbering, no explanation."
+    // asked for their variety: one of each kind, named, so the accepted set covers the shapes
+    val kinds = if ru then Vector("сколько строк подходят под условие (назови столбец и значение из данных)", "список строк с условием на столбец",
+      "сумма или среднее по группам (назови столбец группировки)", "несколько самых больших по числовому столбцу (назови число)", "что достижимо из узла по рёбрам или что ведёт к узлу")
+      else Vector("how many rows meet a condition (name a column and a value from the data)", "which rows meet a condition on a column",
+      "a total or an average per group (name the group column)", "the top few by a numeric column (say how many)", "what is reachable from a node through the edges, or what leads to a node")
+    val ask = if ru then s"Вот таблицы:\n$schema\n\nНапиши $n коротких вопросов об этих данных, по одному каждого вида: ${kinds.mkString("; ")}. " +
+      "Используй имена столбцов и значения из таблиц как есть. По одному в строке, без нумерации, без пояснений."
+      else s"Here are tables:\n$schema\n\nWrite $n short questions about this data, one of each kind: ${kinds.mkString("; ")}. " +
+      "Use the columns' names and the values from the tables as they are. One per line, no numbering, no explanation."
     val prompt = chat.ask(ask, Map("enable_thinking" -> false))
     val s = Session(model, prompt, 400, chat.stops)
     val out = try tok.decode(Iterator.continually(s.next()).takeWhile(_.isDefined).flatten.toVector) finally s.close()
@@ -74,7 +79,13 @@ object SelfPlay:
         answering.programWith(schema, q) match
           case Some((program, consistent)) =>
             programs += 1
-            if consistent then
+            // THE EXACT JUDGE: every table, column or value the question names (a word of 3+ letters) is in the program
+            val named = schema.values.flatMap(t => (t.name +: t.columns).map(n => (n, s"\"$n\"")) ++
+              t.rows.flatten.map(_.text).distinct.filter(v => v.length >= 3 && !v.forall(_.isDigit)).map(v => (v, s"\"$v\""))).toVector.distinct
+            val lowerQ = q.toLowerCase
+            val mentioned = named.filter((n, _) => lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*"))
+            val exact = mentioned.nonEmpty && mentioned.forall((_, lit) => program.contains(lit))
+            if consistent && exact then
               agreed += 1
               val back = restate(program)
               val same = back.exists(b => answering.programWith(schema, b).exists(_._1 == program))
