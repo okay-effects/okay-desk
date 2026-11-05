@@ -79,7 +79,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       if sh.head == "closure-from" || sh.head == "closure-to" then
         val e = tables.values.find(_.columns.size == 2).getOrElse(t)
         val nodes = e.rows.flatten.map(_.text).distinct.sortBy(-_.length)
-        nodes.find(n => question.toLowerCase.contains(n.toLowerCase)).toRight("no node named in the question").map { c =>
+        nodes.find(n => question.toLowerCase.contains(n.toLowerCase)).toRight(s"no node named in the question (table $table, shape ${sh.mkString(" ")})").map { c =>
           val goal = if sh.head == "closure-from" then s"reach(${Logic.constant(c)}, X)" else s"reach(X, ${Logic.constant(c)})"
           s"""{"datalog": "reach(X, Y) :- ${e.name}(X, Y). reach(X, Z) :- ${e.name}(X, Y), reach(Y, Z).", "goal": ${q(goal.replace("\"", "\\\""))}}"""
         }

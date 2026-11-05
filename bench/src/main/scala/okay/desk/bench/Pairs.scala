@@ -114,7 +114,12 @@ object Pairs:
             Vector(s"От чего зависит $a, прямо или через другие?", s"Что достижимо из $a?"))
         val goal = if toward then s"reach(X, ${Logic.constant(z)})" else s"reach(${Logic.constant(a)}, X)"
         Pair(base + ("edges" -> e), qd, s"""{"datalog": "reach(X, Y) :- edges(X, Y). reach(X, Z) :- edges(X, Y), reach(Y, Z).", "goal": ${q(goal.replace("\"", "\\\""))}}""")
-      case _ => Pair(base, question, program)
+      case _ =>
+        // other tables present but unused (edges, a lookup), so that a table's PRESENCE is no signal of the program —
+        // the first readers learned "edges present ⇒ a closure" from pairs where edges appeared only then
+        val extra = (if rnd.nextInt(3) == 0 then Map("edges" -> edges(rnd)) else Map.empty) ++
+          (if rnd.nextInt(3) == 0 then { val o = lookup(rnd, pick(rnd, Vector("people", "accounts", "staff")), t.rows.map(_(0).text)); Map(o.name -> o) } else Map.empty)
+        Pair(base ++ extra, question, program)
 
   /** pairs whose gold programs run (a check on the generator itself) */
   def many(seed: Long, n: Int): Vector[Pair] =

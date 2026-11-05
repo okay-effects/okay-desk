@@ -176,3 +176,25 @@ the mask reads a choice where it is made:
 So the slots of a program read from an UNTOUCHED 0.6B at 93–98% by readers of kilobytes (a 1024×64 map or two per
 slot), once read at the right place. The understanding is there; it was the reader. Next: the assembler (the slots,
 the constant copied from the question, the program under the mask) and the bench's third arm.
+
+## 10. The third arm: readers and an assembler, the model untouched (2026-11-05)
+
+`Readers` (bench): the table pointer at the question's last token; the shape probe and the column pointers after
+their prefixes (layer 20); the constant of a condition copied from the question by exact match with the column's
+values, or a number; the program assembled — no token generated. Trained on the pairs in ~7 minutes (the states),
+kilobytes of readers. A data bias found and fixed on the way: `edges` had appeared in the pairs only with closures,
+so the first readers learned "edges present ⇒ a closure" and pointed at it for every bench question (the bench
+always has edges); now unused tables appear in ordinary pairs too.
+
+| Qwen3-0.6B | en | ru |
+|---|---|---|
+| as it is (free) | 2/12 | 2/12 |
+| LoRA on the pairs (free / masked) | 6/12 / 6/12 | 3/12 / 5/12 |
+| **readers + assembler, model untouched** | **5/12** | **4/12** |
+
+Close to LoRA, with the model's weights unchanged and nothing generated. The misses are READS, each named: a group
+column read as `status` for `customer` (the 6%), `<` for `>` (the shape probe holds the op), "three" not read as
+3, a join shape not read, a date's column read wrongly so the constant fell back to "02", and a Russian constant
+("не оплачено") that is a translation of the table's value, which no exact copy can give — a judgement left to a
+reader. Next: an op reader at `"op": "`, number words, a value pointer over the question's tokens (the quote
+mechanism), the join shape; then the same on the 1.7B.
