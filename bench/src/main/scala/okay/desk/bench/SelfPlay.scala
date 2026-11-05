@@ -97,7 +97,7 @@ object SelfPlay:
       if r % 10 == 0 then println(f"round $r: asked $asked, programs $programs, readers agreed $agreed, round trips $roundTrips (${(System.nanoTime() - t0) / 1e9}%.0f s)")
     val self = accepted.result()
     println(s"self-verified pairs: ${self.size} of $asked questions; e.g.\n  " + self.take(5).map(p => s"${p.question}\n    → ${p.program}").mkString("\n  "))
-    val fresh = Readers(MlxReading(chat, model, layer))
+    val fresh = Readers.On(Readers(), MlxReading(chat, model, layer))
     if self.size >= 50 then
       fresh.train(self)
       println("readers trained on the self-verified pairs alone, measured on the held-out gold:")

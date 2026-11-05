@@ -40,6 +40,47 @@ object Main:
     engine.chat.completions.create(req).asInstanceOf[js.Promise[js.Dynamic]].toFuture
       .map(r => r.choices.asInstanceOf[js.Array[js.Dynamic]].head.message.content.asInstanceOf[String])
 
+  // ---- THE READERS (specs/data.md §15, step 4): the cut model on the page's device, the skill file, no generation
+  object Readers:
+    import okay.desk.skill.{OnQwen, Read, Readers as Skill}
+    import okay.scala3.+
+    type Row[X] = (okay.scala3.std.Async + Read)[X]
+    import okay.llm.compute.{OnCpu, OnWebGl2, OnWebGpu}
+    import okay.llm.qwen.{Qwen3Compute, Qwen3Config, Safetensors, Tokenizer}
+    import scala.scalajs.js.typedarray.*
+    var on: OnQwen = null
+    var skill: Skill = null
+    private def fetch(name: String): Future[ArrayBuffer] =
+      dom.fetch(name).toFuture.flatMap { r =>
+        if !r.ok then Future.failed(IllegalStateException(s"$name: HTTP ${r.status}")) else r.arrayBuffer().toFuture
+      }
+    private def text(ab: ArrayBuffer): String = js.Dynamic.newInstance(js.Dynamic.global.TextDecoder)().decode(ab).asInstanceOf[String]
+    /** the model's files from `dir` (config.json, tokenizer.json, model.safetensors, readers.skill), the device
+     * chosen: WebGPU, else WebGL2, else the CPU */
+    def load(dir: String, layer: Int): Future[Unit] =
+      busy.set(true); status.set("loading the cut model…")
+      (for
+        config <- fetch(s"$dir/config.json").map(text).map(Qwen3Config.parse)
+        tok <- fetch(s"$dir/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
+        bytes <- fetch(s"$dir/model.safetensors")
+        skillBytes <- fetch(s"$dir/readers.skill")
+        gpu <- OnWebGpu.create()
+        device = gpu.left.flatMap(why => OnWebGl2.create().left.map(more => s"$why; $more"))
+        c = device.fold(_ => OnCpu(), identity)
+        _ = status.set(s"the weights to ${c.api}…")
+        model = Qwen3Compute(c, Safetensors(new Int8Array(bytes).toArray), config)
+      yield
+        on = OnQwen(model, tok, layer)
+        skill = Skill(); skill.load(new Int8Array(skillBytes).toArray)
+        engine = null
+        status.set(s"the cut model (${config.layers} layers, ${bytes.byteLength / 1048576} MB) and the readers on ${c.api}" +
+          device.fold(why => s" ($why)", _ => "")))
+        .recover { case t => status.set(s"cannot load the readers: ${t.getMessage}") }
+        .map(_ => busy.set(false))
+    /** the program read from the question: no token generated */
+    def program(ts: Map[String, Table], question: String): Future[Either[String, String]] =
+      Read.future(skill.program[Readers.Row](ts, question), on.handler)
+
   // ---- the files
   def addFile(name: String, text: String): Unit =
     Table.parse(name, text) match
@@ -86,8 +127,9 @@ object Main:
   def say(role: String, text: String): Unit = log.update(_ :+ div(cls := s"msg $role", pre(text)))
 
   def ask(question: String): Future[Unit] =
-    if engine == null then { say("system", "load the model first"); Future.unit }
+    if engine == null && Readers.skill == null then { say("system", "load the model first"); Future.unit }
     else if tables.now().isEmpty then { say("system", "open a file first"); Future.unit }
+    else if engine == null then askReaders(question)
     else
       busy.set(true); say("user", question)
       val ts = tables.now()
@@ -120,6 +162,28 @@ object Main:
         .recover { case t => say("system", s"error: ${t.getMessage}") }
         .map(_ => busy.set(false))
 
+  /** a question answered by the readers: the program read, the exact engine, the result — and the mode named */
+  def askReaders(question: String): Future[Unit] =
+    busy.set(true); say("user", question)
+    val ts = tables.now()
+    val t0 = js.Dynamic.global.performance.now().asInstanceOf[Double]
+    Readers.program(ts, question).map {
+      case Left(why) => say("system", s"the readers could not read a program: $why")
+      case Right(json) =>
+        val ms = (js.Dynamic.global.performance.now().asInstanceOf[Double] - t0).toInt
+        Query.parse(json).flatMap {
+          case q: Query.Relational => Exact.run(ts, q).map(r => (q: Query, r))
+          case q: Query.Logical => Weights.either(ts, q).map((r, by) => (q: Query, r.copy(name = by)))
+        } match
+          case Left(problem) => say("system", s"the program read failed: $problem\n$json")
+          case Right((q, result)) =>
+            log.update(_ :+ div(cls := "msg result",
+              pre(result.render(50)),
+              p(cls := "by", s"read from the model's states by the readers on ${Readers.on.api} in $ms ms — not generated"),
+              detailsTag(summaryTag(s"the program (${result.size} rows)"), pre(Query.print(q)))))
+    }.recover { case t => say("system", s"error: ${t.getMessage}") }
+      .map(_ => busy.set(false))
+
   def page: HtmlElement =
     val question = Var("")
     val model = Var("Qwen3-1.7B-q4f16_1-MLC")
@@ -131,8 +195,9 @@ object Main:
         select(value <-- model.signal, onChange.mapToValue --> model,
           option(value := "Qwen3-1.7B-q4f16_1-MLC", "Qwen3 1.7B (~1 GB)"),
           option(value := "Qwen3-0.6B-q4f16_1-MLC", "Qwen3 0.6B (~0.4 GB)"),
+          option(value := "readers", "Qwen3 0.6B cut + readers (244 MB, no generation)"),
           option(value := "Qwen2.5-3B-Instruct-q4f16_1-MLC", "Qwen2.5 3B (~1.7 GB)")),
-        " ", button("Load the model", disabled <-- busy.signal, onClick --> { _ => loadModel(model.now()); () }),
+        " ", button("Load the model", disabled <-- busy.signal, onClick --> { _ => if model.now() == "readers" then Readers.load("model", 19) else loadModel(model.now()); () }),
         " ", button("Open files", onClick --> { _ => openFiles() }),
         " ", button("Open a folder", onClick --> { _ => openFolder() }),
         input(idAttr := "files", tpe := "file", multiple := true, display := "none", onChange --> { e => fromInput(e.target.asInstanceOf[dom.html.Input]) }),

@@ -18,6 +18,7 @@ lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
       "io.github.okay-effects" %%% "okay-datalog" % "0.1.0",
       "io.github.okay-effects" %%% "okay-inlay" % "0.1.0",
       "io.github.okay-effects" %%% "okay-llm-qwen" % "0.1.0",
+      "io.github.okay-effects" %%% "okay-scala" % "0.1.1",
       "io.github.okay-effects" %%% "okay-effects-json-value" % "0.1.1",
       "org.scalameta" %%% "munit" % "1.2.3" % Test))
 
@@ -25,7 +26,7 @@ lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
 lazy val web = (project in file("web")).enablePlugins(ScalaJSPlugin).dependsOn(core.js)
   .settings(name := "okay-desk-web", publish / skip := true, scalaJSUseMainModuleInitializer := true,
     scalaJSLinkerConfig ~= (_.withModuleKind(org.scalajs.linker.interface.ModuleKind.NoModule)),
-    libraryDependencies ++= Seq("com.raquo" %%% "laminar" % "17.2.1"))
+    libraryDependencies ++= Seq("com.raquo" %%% "laminar" % "17.2.1", "io.github.okay-effects" %%% "okay-llm-qwen-browser" % "0.1.0"))
 
 lazy val root = (project in file(".")).aggregate(core.jvm, core.js, web).settings(publish / skip := true)
 

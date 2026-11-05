@@ -1,6 +1,7 @@
 package okay.desk.skill
 
 import okay.desk.*
+import okay.scala3.*
 
 /**
  * THE SLOTS READ FROM THE MODEL'S STATE (specs/data.md §7, step 1): over the page's prompt for a pair, the residual
@@ -41,12 +42,18 @@ object Probes:
     def indexOf(table: String, column: String): Int = names.indices.find(i => owners(i) == table && names(i)._1 == column).getOrElse(-1)
     def indexOfTable(table: String): Int = names.indices.find(i => owners(i) == table && names(i)._1 == table).getOrElse(-1)
 
-  def prompted(r: Reading, p: Pairs.Pair): Prompted =
+  def prompted[R[_]: Has[Read]](p: Pairs.Pair): Prompted ! R =
     val system = Prompt.system(p.tables)
-    val ids = r.prompt(system, p.question)
+    for
+      ids <- Read.prompt(system, p.question)
+      pieces <- Read.each(ids.toVector)(t => Read.decode(Seq(t)))
+      full <- Read.decode(ids.toIndexedSeq)
+    yield prompted(p, system, ids, pieces, full)
+
+  /** the positions found in the prompt: `pieces` each token decoded, `full` all of them */
+  def prompted(p: Pairs.Pair, system: String, ids: Array[Int], pieces: Vector[String], full: String): Prompted =
     // char offsets → token positions, by the decoded prefixes
-    val ends = ids.scanLeft(0)((n, t) => n + r.decode(Seq(t)).length).drop(1)
-    val full = r.decode(ids.toIndexedSeq)
+    val ends = pieces.scanLeft(0)((n, s) => n + s.length).drop(1)
     val base = full.indexOf(system.take(40))
     def at(c: Int): Int = ends.indexWhere(_ > c)
     val owned = p.tables.values.toVector.flatMap { t =>

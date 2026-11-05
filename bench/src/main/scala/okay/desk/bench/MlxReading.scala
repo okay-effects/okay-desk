@@ -33,8 +33,8 @@ final class MlxReading(chat: Chat, model: Qwen3, layer: Int) extends Reading:
 
 object MlxReading:
   /** the readers for a model and a layer: loaded from the cache when there (DESK_RETRAIN=1 trains again) */
-  def ready(chat: Chat, model: Qwen3, layer: Int, repo: String, pairs: => Vector[Pairs.Pair]): Readers =
-    val r = Readers(MlxReading(chat, model, layer))
+  def ready(chat: Chat, model: Qwen3, layer: Int, repo: String, pairs: => Vector[Pairs.Pair]): Readers.On =
+    val r = Readers.On(Readers(), MlxReading(chat, model, layer))
     val path = java.nio.file.Path.of(sys.props("user.home"), ".cache", "okay-desk", s"readers-${repo.split('/').last}-$layer.skill")
     if java.nio.file.Files.exists(path) && !scala.sys.env.contains("DESK_RETRAIN") then
       r.load(java.nio.file.Files.readAllBytes(path)); println(s"  readers loaded: $path")

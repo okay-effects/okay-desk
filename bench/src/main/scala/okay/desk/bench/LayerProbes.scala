@@ -43,7 +43,7 @@ object LayerProbes:
     final case class Ex(slots: Slots, names: Vector[String], q: Map[(String, Int), Array[Float]], keys: Map[Int, Vector[Array[Float]]], pr: Prompted)
     def examples(ps: Vector[Pairs.Pair]): Vector[Ex] = ps.flatMap { p =>
       slots(p.program).map { sl =>
-        val pr = prompted(MlxReading(chat, model, layers.head), p)
+        val pr = Read.run(prompted[Read](p), MlxReading(chat, model, layers.head))
         val base = states(model, pr.ids, layers, (pr.ids.length - 1) +: pr.names.map(_._2))
         val q = scala.collection.mutable.Map.empty[(String, Int), Array[Float]]
         for l <- layers do q(("last", l)) = base(l).head
