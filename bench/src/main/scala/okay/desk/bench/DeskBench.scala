@@ -131,6 +131,7 @@ object DeskBench:
               val t1 = System.nanoTime()
               val readers = Readers(chat, q3, scala.sys.env.getOrElse("DESK_LAYER", "20").toInt)
               readers.train(Pairs.many(42, 600))
+              readers.measure(Pairs.many(43, 200))
               println(f"readers trained (${(System.nanoTime() - t1) / 1e9}%.0f s)")
               var right = Map("en" -> 0, "ru" -> 0); var fails = Vector.empty[String]
               for (q, i) <- questions.zipWithIndex; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) do

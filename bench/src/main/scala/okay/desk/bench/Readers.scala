@@ -118,9 +118,11 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         val a = s.split(" ")
         if a.length < 8 then "}" else if a(2) != "-" then "where" else if a(3) == "group" then "group" else if a(1) != "-" then "aggregate"
         else if a(4) == "order" then "order" else if a(5) == "limit" then "limit" else "}"
+      // (the model asked for the first section hurt on the 0.6B — its prior there is "sum" for everything; the probe alone,
+      // weighted by the ask only when SHAPE_ASK is set, for the measure)
       val shapeQ = z(query(pr, prefixes.head._2(table)))
-      val asked = ask(pr, prefixes.head._2(table), shapeKeys)
       val probeScores = logSoftmax(shape.scores(shapeQ))
+      val asked = if scala.sys.env.contains("SHAPE_ASK") then ask(pr, prefixes.head._2(table), shapeKeys) else Array.fill(shapeKeys.size)(0f)
       val sh = shape.classes.zipWithIndex.map((c, i) => (c, probeScores(i) + asked(shapeKeys.indexOf(firstKey(c)))))
         .maxBy(_._2)._1.split(" ")
       def q(s: String) = "\"" + s + "\""
@@ -194,3 +196,26 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         if limit == "limit" then parts += s""""limit": ${number.getOrElse(1)}"""
         if select == "select" then column("order").foreach(c => parts += s""""select": ["id", ${q(c)}]""")
         Right(parts.result().mkString("{", ", ", "}"))
+
+  /** the readers measured on held-out pairs, slot by slot: the pointer alone against the pointer with ask — so a
+   * change is judged on 200 pairs, not on the bench's 12 questions */
+  def measure(pairs: Vector[Pairs.Pair]): Unit =
+    val exs = pairs.flatMap(p => slots(p.program).map(sl => (p, sl, prompted(chat, p))))
+    var shapeRight = 0
+    val right = scala.collection.mutable.Map.empty[String, (Int, Int, Int)].withDefaultValue((0, 0, 0))
+    for (p, sl, pr) <- exs do
+      val names = pr.names.map(_._1); val ks = keys(pr).map(z)
+      val t = p.tables(sl.table)
+      if shape.predict(z(query(pr, prefixes.head._2(sl.table)))) == sl.shape then shapeRight += 1
+      for (name, prefix) <- prefixes.tail do
+        val gold = (name match { case "where" => sl.where; case "group" => sl.group; case "agg" => sl.agg; case _ => sl.order })
+        gold.foreach { g =>
+          val q = z(query(pr, prefix(sl.table)))
+          val cands = t.columns.filter(names.contains)
+          val alone = cands(cands.map(names.indexOf).map(pointers(name).scores(q, ks)).zipWithIndex.maxBy(_._1)._2)
+          val withAsk = both(pr, prefix(sl.table), pointers(name), q, ks, names, cands)
+          val (n, a, b) = right(name)
+          right(name) = (n + 1, a + (if alone == g then 1 else 0), b + (if withAsk == g then 1 else 0))
+        }
+    println(f"  measured on ${exs.size} held-out pairs: shape ${shapeRight * 100.0 / exs.size}%.1f%%; " +
+      right.toVector.sortBy(_._1).map((k, v) => f"$k ${v._2 * 100.0 / v._1}%.0f%% → with ask ${v._3 * 100.0 / v._1}%.0f%% (${v._1})").mkString(", "))
