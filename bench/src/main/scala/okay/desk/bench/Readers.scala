@@ -18,6 +18,9 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     Array.tabulate(x.length)(i => math.max(-4f, math.min(4f, (x(i) - mean(i)) / std(i))) * scale)
   private var shape: Softmax = null
   private var op: Softmax = null
+  private var fnProbe: Softmax = null
+  val fns = Vector("count", "sum", "avg", "min", "max")
+  private def fnPrefix(t: String) = "```json\n{\"from\": \"" + t + "\", \"aggregate\": [{\"fn\": \""
   private val pointers = scala.collection.mutable.Map.empty[String, Pointer]
   val ops = Vector("=", "!=", "<", "<=", ">", ">=", "contains")
   private def opPrefix(t: String, c: String) = "```json\n{\"from\": \"" + t + "\", \"where\": [{\"column\": \"" + c + "\", \"op\": \""
@@ -99,6 +102,9 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     val withWhere = exs.flatMap { (p, sl, pr) =>
       Query.parse(p.program).toOption.collect { case Query.Relational(_, _, Cond.Cmp(c, o, v) +: _, _, _, _, _, _) => (p, sl, pr, c, o, v.text) }
     }
+    // the aggregate's function read at its own point, where it is written
+    fnProbe = Softmax(fns :+ "-", d)
+    fnProbe.train(exs.map((_, sl, pr) => (z(query(pr, fnPrefix(sl.table))), sl.shape.split(" ")(1))), steps = 300, lr = 0.05f)
     op = Softmax(ops, d)
     op.train(withWhere.map((_, sl, pr, c, o, _) => (z(query(pr, opPrefix(sl.table, c))), o)), steps = 300, lr = 0.05f)
     val value = Pointer(d)
@@ -123,21 +129,11 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     else
       val table = names(ti)
       val t = tables(table)
+      val lower = question.toLowerCase
       // the shape by two readers: the probe, and the model asked which section comes first at `{"from": T, "`
-      val shapeKeys = Vector("where", "group", "aggregate", "order", "limit", "}")
-      def firstKey(s: String): String =
-        val a = s.split(" ")
-        if a.length < 8 then "}" else if a(2) != "-" then "where" else if a(3) == "group" then "group" else if a(1) != "-" then "aggregate"
-        else if a(4) == "order" then "order" else if a(5) == "limit" then "limit" else "}"
-      // (the model asked for the first section hurt on the 0.6B — its prior there is "sum" for everything; the probe alone,
-      // weighted by the ask only when SHAPE_ASK is set, for the measure)
       val shapeQ = z(query(pr, prefixes.head._2(table)))
       val probeScores = logSoftmax(shape.scores(shapeQ))
-      val asked = if scala.sys.env.contains("SHAPE_ASK") then ask(pr, prefixes.head._2(table), shapeKeys) else Array.fill(shapeKeys.size)(0f)
-      val sh = shape.classes.zipWithIndex.map((c, i) => (c, probeScores(i) + asked(shapeKeys.indexOf(firstKey(c)))))
-        .maxBy(_._2)._1.split(" ")
       def q(s: String) = "\"" + s + "\""
-      val lower = question.toLowerCase
       // EXACT FACTS FROM THE DATA constrain the reads: a value of a column written in the question (a word of 3+ letters,
       // a date) means a condition on that column — and a join, when the column is in another table reachable by one
       def joinTo(o: Table): Option[String] =
@@ -154,6 +150,28 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       val join = fact.filter(_._1.name != table).flatMap((o, _, _) => joinTo(o).map(c => (o, c))).orElse(
         tables.values.filter(_.name != table).flatMap(o => joinTo(o).filter(_ => o.columns.exists(c =>
           c.length >= 3 && lower.matches(s"(?U).*\\b${c.toLowerCase}\\b.*"))).map(c => (o, c))).headOption)
+      // THE SHAPE AS SEPARATE DECISIONS, each exact where the question says it, read where it does not: the probe's
+      // marginals over its compound classes are the fallback
+      val probs = probeScores.map(v => math.exp(v.toDouble))
+      def marginal(p: String => Boolean): Double = shape.classes.zipWithIndex.collect { case (c, i) if p(c) => probs(i) }.sum
+      def word(ws: String*): Boolean = ws.exists(w => lower.matches(s"(?U).*\\b$w.*"))
+      val closure = marginal(_.startsWith("closure")) > 0.5 || word("reach", "depend", "lead", "достиж", "завис", "вед", "доход")
+      val closureTo = word("reach ", "lead", "ведут", "ведёт", "доход") && !word("reachable from", "достижимо из")
+      val fnAsk = ask(pr, fnPrefix(table), fns)
+      val fnProbeScores = logSoftmax(fnProbe.scores(z(query(pr, fnPrefix(table)))))
+      val fnByReaders = (fns :+ "-")(fnProbeScores.zipWithIndex.map((s, i) => (if i < fns.size then s + fnAsk(i) else s, i)).maxBy(_._1)._2)
+      val fn = if word("how many", "number of", "count", "сколько", "число", "посчитай") then "count"
+        else if word("average", "mean", "средн") then "avg" else if word("total", "sum of", "сумм", "итого") then "sum"
+        else if word("largest", "highest", "maximum", "самый больш", "наибольш", "максим") && !word("top", "топ", "три", "three", "five", "пять") && !word("per", "by", "по кажд", "в разрезе") then "-"
+        else fnByReaders
+      val hasGroup = word("per ", "by ", "each", "по кажд", "в разрезе", "по стат", "по город", "по клиент", "по стран") || (fn != "-" && fn != "count" && marginal(_.split(" ")(3) == "group") > 0.5)
+      val hasOrder = word("largest", "smallest", "highest", "lowest", "descending", "first", "top", "самы", "наибольш", "по убыван", "по возраст", "топ") || marginal(_.split(" ")(4) == "order") > 0.6
+      val hasLimit = word("top", "топ", "three", "five", "ten", "три", "пять", "десять") || (word("largest", "smallest", "highest", "самый", "наибольш") && fn == "-" && !hasGroup) || marginal(_.split(" ")(5) == "limit") > 0.6
+      val hasSelect = marginal(_.split(" ")(7) == "select") > 0.5
+      val hasWhere = fact.isDefined || marginal(_.split(" ")(2) != "-") > 0.5
+      val sh = if closure then Array(if closureTo then "closure-to" else "closure-from")
+        else Array("rel", fn, if hasWhere then "=" else "-", if hasGroup then "group" else "-", if hasOrder then "order" else "-",
+          if hasLimit then "limit" else "-", "-", if hasSelect then "select" else "-")
       val cols = t.columns.map(c => (table, c)) ++ join.map(j => j._1.columns.map(c => (j._1.name, c))).getOrElse(Vector.empty)
       // EXACT FIRST: a column named in the question (its name, a word of 3+ letters) is the column — the readers decide
       // only among what the question does not name (a translation: "по городам" for city)
@@ -249,6 +267,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       out.writeObject((mean, std, scale))
       out.writeObject((shape.classes, shape.w, shape.b))
       out.writeObject((op.classes, op.w, op.b))
+      out.writeObject((fnProbe.classes, fnProbe.w, fnProbe.b))
       out.writeObject(pointers.toMap.map((k, p) => k -> (p.wq, p.wk, p.none)))
     finally out.close()
     println(s"  readers saved: $path (${java.nio.file.Files.size(path) / 1024} KB)")
@@ -262,6 +281,8 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       shape = Softmax(sc1, m.length); sw.copyToArray(shape.w); sb.copyToArray(shape.b)
       val (oc, ow, ob) = in.readObject().asInstanceOf[(Vector[String], Array[Array[Float]], Array[Float])]
       op = Softmax(oc, m.length); ow.copyToArray(op.w); ob.copyToArray(op.b)
+      val (fc, fw, fb) = in.readObject().asInstanceOf[(Vector[String], Array[Array[Float]], Array[Float])]
+      fnProbe = Softmax(fc, m.length); fw.copyToArray(fnProbe.w); fb.copyToArray(fnProbe.b)
       val ps = in.readObject().asInstanceOf[Map[String, (Array[Array[Float]], Array[Array[Float]], Array[Float])]]
       for (k, (wq, wk, none)) <- ps do
         val p = Pointer(m.length); wq.copyToArray(p.wq); wk.copyToArray(p.wk); none.copyToArray(p.none); pointers(k) = p
