@@ -145,9 +145,11 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
             lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(v.toLowerCase)}\\b.*")).map(v => (o, c, v))
         }
       }.filter((o, _, _) => o.name == table || joinTo(o).isDefined).sortBy((o, _, v) => (if o.name == table then 0 else 1, -v.length))
+      // every fact a condition; the first the "fact" (the join and the where column)
+      val facts = found.distinctBy(_._2)
       val fact = found.headOption
       // a join only when the data needs one: a fact in another table, or a column of another table named in the question
-      val join = fact.filter(_._1.name != table).flatMap((o, _, _) => joinTo(o).map(c => (o, c))).orElse(
+      val join = facts.find(_._1.name != table).flatMap((o, _, _) => joinTo(o).map(c => (o, c))).orElse(
         tables.values.filter(_.name != table).flatMap(o => joinTo(o).filter(_ => o.columns.exists(c =>
           c.length >= 3 && lower.matches(s"(?U).*\\b${c.toLowerCase}\\b.*"))).map(c => (o, c))).headOption)
       // THE SHAPE AS SEPARATE DECISIONS, each exact where the question says it, read where it does not: the probe's
@@ -179,7 +181,11 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       val sh = if closure then Array(if closureTo then "closure-to" else "closure-from")
         else Array("rel", fn, if hasWhere then "=" else "-", if hasGroup then "group" else "-", if hasOrder then "order" else "-",
           if hasLimit then "limit" else "-", "-", if hasSelect then "select" else "-")
-      val cols = t.columns.map(c => (table, c)) ++ join.map(j => j._1.columns.map(c => (j._1.name, c))).getOrElse(Vector.empty)
+      // the joinable tables' columns are candidates too (a translated column may be theirs: "по странам" → country): a
+      // choice among them brings the join
+      val joinable = tables.values.toVector.filter(_.name != table).flatMap(o => joinTo(o).map(c => (o, c)))
+      var joinNow: Option[(Table, String)] = join
+      val cols = t.columns.map(c => (table, c)) ++ joinable.flatMap((o, _) => o.columns.filterNot(c => t.columns.contains(c) || c == "name").map(c => (o.name, c)))
       // EXACT FIRST: a column named in the question (its name, a word of 3+ letters) is the column — the readers decide
       // only among what the question does not name (a translation: "по городам" for city)
       val named = cols.filter((_, c) => c.length >= 3 && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase)}\\b.*"))
@@ -191,6 +197,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         val exact = named.map(_._2).filterNot(used).filter(c => if slot == "agg" || slot == "order" then numeric(c) else if slot == "group" then !numeric(c) else true)
         val chosen = exact.headOption.getOrElse(both(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, cols))
         used += chosen
+        if !t.columns.contains(chosen) then joinNow = joinNow.orElse(joinable.find(_._1.columns.contains(chosen)))
         Some(chosen)
       /** the value: from the read start among the question's tokens, the longest value of the column (or a number or
        * a date) that begins there; else by exact match anywhere in the question */
@@ -222,15 +229,22 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         val whereOp = if whereOp0 == "-" && fact.isDefined then "=" else whereOp0
         val parts = Vector.newBuilder[String]
         parts += s""""from": ${q(table)}"""
-        join.foreach((o, c) => parts += s""""join": {"table": ${q(o.name)}, "on": [[${q(c)}, ${q(o.columns.head)}]]}""")
+        // (the join after the columns are chosen: a column of a joinable table brings it)
+        val joinSlot = parts.result().size
         // the columns in the order that disambiguates them: the aggregate's (numeric) and the order's first, then the group's
         // (text), then the condition's (the fact's column, or the numeric one of a number condition)
         val aggCol = if fn != "-" && fn != "count" then column("agg") else None
         val orderCol = if hasOrder && !(fn != "-" && fn != "count" && hasGroup) then column("order") else None
         val groupCol = if hasGroup then column("group") else None
         val whereCol = if whereOp == "-" then None else fact.map(_._2).map { c => used += c; c }
-          .orElse(numberCond.flatMap(_ => t.columns.filterNot(used).find(c => t.column(c).exists(i => t.rows.forall(r => r(i) == Value.Empty || r(i).num.isDefined)) && t.column(c).exists(i => t.rows.exists(_(i).num.isDefined)))))
+          // a number condition: the numeric column whose values' range holds the number (not the key "id" by accident)
+          .orElse(numberCond.flatMap { n => val x = n.toDouble
+            val numericCols = t.columns.filterNot(used).filter(c => t.column(c).exists(i => t.rows.exists(_(i).num.isDefined) && t.rows.forall(r => r(i) == Value.Empty || r(i).num.isDefined)))
+            numericCols.find(c => named.exists(_._2 == c)).orElse(numericCols.find { c => val vs = t.rows.flatMap(_(t.column(c).get).num); vs.nonEmpty && vs.min <= x && x <= vs.max })
+              .orElse(numericCols.filterNot(_ == "id").headOption).orElse(numericCols.headOption) })
           .orElse(column("where"))
+        // the first condition, then one per further fact
+        val conds = Vector.newBuilder[String]
         whereCol.foreach { c =>
           val o = if whereOp == "empty" then "empty" else if fact.exists(_._2 == c) && !lower.matches("(?U).*\\b(not|не|кроме|except)\\b.*") then "="
             else if numberCond.isDefined then (if word("over", "above", "more than", "greater", "больше", "выше", "свыше") then ">" else "<")
@@ -238,7 +252,10 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
               val ps = logSoftmax(op.scores(z(query(pr, opPrefix(table, c))))); val as = ask(pr, opPrefix(table, c), ops)
               ops(ps.zip(as).map((a, b) => a + b).zipWithIndex.maxBy(_._1)._2)
           val v = fact.filter(_._2 == c).map(_._3).orElse(numberCond).orElse(constant(c, o)).getOrElse("")
-          parts += s""""where": [{"column": ${q(c)}, "op": ${q(o)}, "value": ${if v.matches("-?\\d+(\\.\\d+)?") && o != "=" then v else q(v)}}]""" }
+          conds += s"""{"column": ${q(c)}, "op": ${q(o)}, "value": ${if v.matches("-?\\d+(\\.\\d+)?") && o != "=" then v else q(v)}}""" }
+        for (_, c, v) <- facts.drop(1) if !whereCol.contains(c) do conds += s"""{"column": ${q(c)}, "op": "=", "value": ${q(v)}}"""
+        val cs = conds.result()
+        if cs.nonEmpty then parts += s""""where": [${cs.mkString(", ")}]"""
         if group == "group" then groupCol.foreach(c => parts += s""""group": [${q(c)}]""")
         if fn != "-" then
           val c = if fn == "count" then Some("*") else aggCol
@@ -248,7 +265,9 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
           c.foreach(col => parts += s""""order": [${q("-" + col)}]""")
         if limit == "limit" then parts += s""""limit": ${number.getOrElse(1)}"""
         if select == "select" then orderCol.foreach(c => parts += s""""select": ["id", ${q(c)}]""")
-        Right(parts.result().mkString("{", ", ", "}"))
+        val built = parts.result()
+        val withJoin = joinNow.fold(built)((o, c) => built.take(joinSlot) ++ Vector(s""""join": {"table": ${q(o.name)}, "on": [[${q(c)}, ${q(o.columns.head)}]]}""") ++ built.drop(joinSlot))
+        Right(withJoin.mkString("{", ", ", "}"))
 
   /** the readers measured on held-out pairs, slot by slot: the pointer alone against the pointer with ask — so a
    * change is judged on 200 pairs, not on the bench's 12 questions */
