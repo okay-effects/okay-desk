@@ -304,3 +304,23 @@ fact's to the condition).
 The untouched 0.6B now matches the trained 1.7B. Three misses left, each named: a number condition put on `id`
 instead of `amount` (the numeric column whose range holds the number is the exact rule), two facts in one question
 ("unpaid" and "UA": two conditions and a join), a translated column ("по странам" → country, in the joined table).
+
+**12/12 en, 11/12 ru on the untouched Qwen3-0.6B (2026-11-05 17:00)** — a numeric condition's column by the range
+that holds the number, every fact a condition, the join from any fact or from a column chosen in a joinable table
+(the readers' candidates include those: "по странам" → `customers.country`). The one miss left is a translated
+adjective beside a fact ("Неоплаченные … из UA": the UA condition found, the unpaid one not — a judgement over the
+main table's values that the exact copy cannot give and the value-ask does not run when a fact was found).
+
+| Qwen3-0.6B (400 MB, 4-bit), the bench | en | ru |
+|---|---|---|
+| as it is | 2/12 | 2/12 |
+| the grammar mask alone | 2/12 | 2/12 |
+| LoRA on 600 generated pairs | 6/12 | 5/12 |
+| **readers + exact facts + assembler, weights untouched** | **12/12** | **11/12** |
+| for comparison: Qwen3.5-4B as it is | 11/12 | 11/12 |
+
+The operator's thesis — a small model strengthened by exactness — measured: an untouched 0.6B with a 3 MB skill
+file answers the bench like an untouched 4B, in two languages, with nothing generated. What made it: reading the
+slots where the model decides them; two readers (a probe and the model asked) where a judgement is needed; exact
+facts from the data and the question's own words wherever the data knows; an assembler that cannot write a
+malformed program; and judging every reader on held-out pairs, not on the bench.
