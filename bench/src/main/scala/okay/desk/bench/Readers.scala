@@ -141,7 +141,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       val found: Vector[(Table, String, String)] = tables.values.toVector.flatMap { o =>
         o.columns.flatMap { c =>
           val vs = o.rows.map(_(o.columns.indexOf(c)).text).distinct
-          vs.filter(v => (v.length >= 3 && !v.forall(_.isDigit) || v.matches("\\d{4}-\\d\\d-\\d\\d")) &&
+          vs.filter(v => (v.length >= 3 && !v.forall(_.isDigit) || v.length >= 2 && v.forall(_.isUpper) || v.matches("\\d{4}-\\d\\d-\\d\\d")) &&
             lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(v.toLowerCase)}\\b.*")).map(v => (o, c, v))
         }
       }.filter((o, _, _) => o.name == table || joinTo(o).isDefined).sortBy((o, _, v) => (if o.name == table then 0 else 1, -v.length))
@@ -154,21 +154,28 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       // marginals over its compound classes are the fallback
       val probs = probeScores.map(v => math.exp(v.toDouble))
       def marginal(p: String => Boolean): Double = shape.classes.zipWithIndex.collect { case (c, i) if p(c) => probs(i) }.sum
-      def word(ws: String*): Boolean = ws.exists(w => lower.matches(s"(?U).*\\b$w.*"))
-      val closure = marginal(_.startsWith("closure")) > 0.5 || word("reach", "depend", "lead", "достиж", "завис", "вед", "доход")
-      val closureTo = word("reach ", "lead", "ведут", "ведёт", "доход") && !word("reachable from", "достижимо из")
+      // a word (or a stem ending in *) at a word boundary: "count" must not match "country"
+      def word(ws: String*): Boolean = ws.exists(w => lower.matches(s"(?U).*\\b${w.stripSuffix("*")}${if w.endsWith("*") then "\\w*" else ""}\\b.*"))
+      val closure = marginal(_.startsWith("closure")) > 0.5 || word("reach*", "depend*", "lead*", "достиж*", "завис*", "вед*", "доход*")
+      val closureTo = (word("reach", "reaches", "lead*", "ведут", "ведёт", "доход*") && !word("reachable", "достижим*"))
       val fnAsk = ask(pr, fnPrefix(table), fns)
       val fnProbeScores = logSoftmax(fnProbe.scores(z(query(pr, fnPrefix(table)))))
       val fnByReaders = (fns :+ "-")(fnProbeScores.zipWithIndex.map((s, i) => (if i < fns.size then s + fnAsk(i) else s, i)).maxBy(_._1)._2)
+      val topN = word("top", "топ", "three", "five", "ten", "три", "пять", "десять")
+      val perEach = word("per", "each", "по кажд*", "кажд*", "в разрезе", "по стат*", "по город*", "по клиент*", "по стран*")
       val fn = if word("how many", "number of", "count", "сколько", "число", "посчитай") then "count"
-        else if word("average", "mean", "средн") then "avg" else if word("total", "sum of", "сумм", "итого") then "sum"
-        else if word("largest", "highest", "maximum", "самый больш", "наибольш", "максим") && !word("top", "топ", "три", "three", "five", "пять") && !word("per", "by", "по кажд", "в разрезе") then "-"
+        else if word("average", "mean", "средн*") then "avg"
+        else if topN && !perEach then "-"
+        else if word("total", "sum of", "сумм*", "итого") then "sum"
+        else if word("largest", "highest", "maximum", "самый больш*", "наибольш*", "максим*") && !perEach then "-"
         else fnByReaders
-      val hasGroup = word("per ", "by ", "each", "по кажд", "в разрезе", "по стат", "по город", "по клиент", "по стран") || (fn != "-" && fn != "count" && marginal(c => Readers.part(c, 3) == "group") > 0.5)
-      val hasOrder = word("largest", "smallest", "highest", "lowest", "descending", "first", "top", "самы", "наибольш", "по убыван", "по возраст", "топ") || marginal(c => Readers.part(c, 4) == "order") > 0.6
-      val hasLimit = word("top", "топ", "three", "five", "ten", "три", "пять", "десять") || (word("largest", "smallest", "highest", "самый", "наибольш") && fn == "-" && !hasGroup) || marginal(c => Readers.part(c, 5) == "limit") > 0.6
+      val hasGroup = perEach || word("by") && fn != "-" || (fn != "-" && fn != "count" && marginal(c => Readers.part(c, 3) == "group") > 0.5)
+      val hasOrder = word("largest", "smallest", "highest", "lowest", "descending", "first", "top", "самы*", "наибольш*", "по убыван*", "по возраст*", "топ") || marginal(c => Readers.part(c, 4) == "order") > 0.6
+      val hasLimit = topN || (word("largest", "smallest", "highest", "самый", "наибольш*") && fn == "-" && !hasGroup) || marginal(c => Readers.part(c, 5) == "limit") > 0.6
       val hasSelect = marginal(c => Readers.part(c, 7) == "select") > 0.5
-      val hasWhere = fact.isDefined || marginal(c => Readers.part(c, 2) != "-") > 0.5
+      // a number with a comparison word is a condition on a numeric column
+      val numberCond = "\\d+(?:\\.\\d+)?".r.findFirstIn(question).filter(_ => word("over", "above", "more than", "greater", "больше", "выше", "свыше", "below", "under", "less than", "меньше", "ниже", "до"))
+      val hasWhere = fact.isDefined || numberCond.isDefined || marginal(c => Readers.part(c, 2) != "-") > 0.3
       val sh = if closure then Array(if closureTo then "closure-to" else "closure-from")
         else Array("rel", fn, if hasWhere then "=" else "-", if hasGroup then "group" else "-", if hasOrder then "order" else "-",
           if hasLimit then "limit" else "-", "-", if hasSelect then "select" else "-")
@@ -179,7 +186,9 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       val used = scala.collection.mutable.Set.empty[String]
       def column(slot: String): Option[String] =
         val prefix = prefixes.find(_._1 == slot).get._2(table)
-        val exact = named.map(_._2).filterNot(used).filter(c => slot != "agg" && slot != "order" || t.column(c).exists(i => t.rows.exists(_(i).num.isDefined)))
+        // a numeric column for agg and order, a text one for group; a named column not yet used
+        def numeric(c: String) = cols.find(_._2 == c).exists((tb, _) => tables(tb).column(c).exists(i => tables(tb).rows.exists(_(i).num.isDefined)))
+        val exact = named.map(_._2).filterNot(used).filter(c => if slot == "agg" || slot == "order" then numeric(c) else if slot == "group" then !numeric(c) else true)
         val chosen = exact.headOption.getOrElse(both(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, cols))
         used += chosen
         Some(chosen)
@@ -214,22 +223,31 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         val parts = Vector.newBuilder[String]
         parts += s""""from": ${q(table)}"""
         join.foreach((o, c) => parts += s""""join": {"table": ${q(o.name)}, "on": [[${q(c)}, ${q(o.columns.head)}]]}""")
-        if whereOp != "-" then fact.map(_._2).map { c => used += c; c }.orElse(column("where")).foreach { c =>
+        // the columns in the order that disambiguates them: the aggregate's (numeric) and the order's first, then the group's
+        // (text), then the condition's (the fact's column, or the numeric one of a number condition)
+        val aggCol = if fn != "-" && fn != "count" then column("agg") else None
+        val orderCol = if hasOrder && !(fn != "-" && fn != "count" && hasGroup) then column("order") else None
+        val groupCol = if hasGroup then column("group") else None
+        val whereCol = if whereOp == "-" then None else fact.map(_._2).map { c => used += c; c }
+          .orElse(numberCond.flatMap(_ => t.columns.filterNot(used).find(c => t.column(c).exists(i => t.rows.forall(r => r(i) == Value.Empty || r(i).num.isDefined)) && t.column(c).exists(i => t.rows.exists(_(i).num.isDefined)))))
+          .orElse(column("where"))
+        whereCol.foreach { c =>
           val o = if whereOp == "empty" then "empty" else if fact.exists(_._2 == c) && !lower.matches("(?U).*\\b(not|не|кроме|except)\\b.*") then "="
+            else if numberCond.isDefined then (if word("over", "above", "more than", "greater", "больше", "выше", "свыше") then ">" else "<")
             else
               val ps = logSoftmax(op.scores(z(query(pr, opPrefix(table, c))))); val as = ask(pr, opPrefix(table, c), ops)
               ops(ps.zip(as).map((a, b) => a + b).zipWithIndex.maxBy(_._1)._2)
-          val v = fact.filter(_._2 == c).map(_._3).orElse(constant(c, o)).getOrElse("")
+          val v = fact.filter(_._2 == c).map(_._3).orElse(numberCond).orElse(constant(c, o)).getOrElse("")
           parts += s""""where": [{"column": ${q(c)}, "op": ${q(o)}, "value": ${if v.matches("-?\\d+(\\.\\d+)?") && o != "=" then v else q(v)}}]""" }
-        if group == "group" then column("group").foreach(c => parts += s""""group": [${q(c)}]""")
+        if group == "group" then groupCol.foreach(c => parts += s""""group": [${q(c)}]""")
         if fn != "-" then
-          val c = if fn == "count" then Some("*") else column("agg")
+          val c = if fn == "count" then Some("*") else aggCol
           c.foreach(col => parts += s""""aggregate": [{"fn": ${q(fn)}, "column": ${q(col)}, "as": ${q(if col == "*" then "n" else fn)}}]""")
         if order == "order" then
-          val c = if fn != "-" && fn != "count" && group == "group" then Some(fn) else column("order")
+          val c = if fn != "-" && fn != "count" && group == "group" then Some(fn) else orderCol
           c.foreach(col => parts += s""""order": [${q("-" + col)}]""")
         if limit == "limit" then parts += s""""limit": ${number.getOrElse(1)}"""
-        if select == "select" then column("order").foreach(c => parts += s""""select": ["id", ${q(c)}]""")
+        if select == "select" then orderCol.foreach(c => parts += s""""select": ["id", ${q(c)}]""")
         Right(parts.result().mkString("{", ", ", "}"))
 
   /** the readers measured on held-out pairs, slot by slot: the pointer alone against the pointer with ask — so a
