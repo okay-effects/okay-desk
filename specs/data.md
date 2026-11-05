@@ -213,3 +213,7 @@ what still misses is a column read (`status` for `customer` in a group, for `day
 shape in English, "the largest unpaid order" read as a plain top-1, and the Russian translated constant. These
 are reads, each improvable by data (more phrasings) or a second reader (ask), as bridge-4's lesson: two readers
 that fail on different phrasings.
+
+The same readers on Qwen3-1.7B at layer 20: 6/12 en, 4/12 ru — below its LoRA (10/12, 9/12) and below the
+0.6B's readers; the where-column pointer reads `status` for nearly everything there. The layer was the 0.6B's
+choice; the 1.7B's is measured next (`Probes` per layer), as bridge-1 found the layer matters most.
