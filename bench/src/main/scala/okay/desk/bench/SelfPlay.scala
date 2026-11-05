@@ -62,8 +62,7 @@ object SelfPlay:
     val gold = Pairs.many(42, 600); val held = Pairs.many(43, 200)
     // the readers that answer during self-play: trained on the gold first (the bootstrap: a model must read before
     // it can judge itself); the EXPERIMENT trains fresh readers on the self-verified pairs alone
-    val answering = Readers(chat, model, layer)
-    answering.train(gold)
+    val answering = Readers.ready(chat, model, layer, repo, gold)
     val rnd = new scala.util.Random(9)
     val accepted = Vector.newBuilder[Pairs.Pair]
     var asked = 0; var programs = 0; var agreed = 0; var roundTrips = 0

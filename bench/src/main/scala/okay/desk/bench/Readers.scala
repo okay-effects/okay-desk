@@ -229,3 +229,39 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         }
     println(f"  measured on ${exs.size} held-out pairs: shape ${shapeRight * 100.0 / exs.size}%.1f%%; " +
       right.toVector.sortBy(_._1).map((k, v) => f"$k ${v._2 * 100.0 / v._1}%.0f%% → with ask ${v._3 * 100.0 / v._1}%.0f%% (${v._1})").mkString(", "))
+
+  // ---- the readers kept: trained once, loaded in seconds (Java serialization of the arrays: a skill is a file)
+  def save(path: java.nio.file.Path): Unit =
+    java.nio.file.Files.createDirectories(path.getParent)
+    val out = new java.io.ObjectOutputStream(java.nio.file.Files.newOutputStream(path))
+    try
+      out.writeObject((mean, std, scale))
+      out.writeObject((shape.classes, shape.w, shape.b))
+      out.writeObject((op.classes, op.w, op.b))
+      out.writeObject(pointers.toMap.map((k, p) => k -> (p.wq, p.wk, p.none)))
+    finally out.close()
+    println(s"  readers saved: $path (${java.nio.file.Files.size(path) / 1024} KB)")
+
+  def load(path: java.nio.file.Path): Unit =
+    val in = new java.io.ObjectInputStream(java.nio.file.Files.newInputStream(path))
+    try
+      val (m, s, sc) = in.readObject().asInstanceOf[(Array[Float], Array[Float], Float)]
+      mean = m; std = s; scale = sc
+      val (sc1, sw, sb) = in.readObject().asInstanceOf[(Vector[String], Array[Array[Float]], Array[Float])]
+      shape = Softmax(sc1, m.length); sw.copyToArray(shape.w); sb.copyToArray(shape.b)
+      val (oc, ow, ob) = in.readObject().asInstanceOf[(Vector[String], Array[Array[Float]], Array[Float])]
+      op = Softmax(oc, m.length); ow.copyToArray(op.w); ob.copyToArray(op.b)
+      val ps = in.readObject().asInstanceOf[Map[String, (Array[Array[Float]], Array[Array[Float]], Array[Float])]]
+      for (k, (wq, wk, none)) <- ps do
+        val p = Pointer(m.length); wq.copyToArray(p.wq); wk.copyToArray(p.wk); none.copyToArray(p.none); pointers(k) = p
+    finally in.close()
+    println(s"  readers loaded: $path")
+
+object Readers:
+  /** the readers for a model and a layer: loaded from the cache when there (DESK_RETRAIN=1 trains again) */
+  def ready(chat: Chat, model: Qwen3, layer: Int, repo: String, pairs: => Vector[Pairs.Pair]): Readers =
+    val r = Readers(chat, model, layer)
+    val path = java.nio.file.Path.of(sys.props("user.home"), ".cache", "okay-desk", s"readers-${repo.split('/').last}-$layer.bin")
+    if java.nio.file.Files.exists(path) && !scala.sys.env.contains("DESK_RETRAIN") then r.load(path)
+    else { r.train(pairs); r.save(path) }
+    r
