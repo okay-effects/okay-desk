@@ -36,7 +36,13 @@ object Probes:
   }
 
   /** the prompt's tokens, and the token position of each schema name (a table, a column) in it */
-  final case class Prompted(ids: Array[Int], names: Vector[(String, Int)], question: Vector[Int], qText: String, qChars: Vector[Int])
+  /** `names`: each schema name with its token position; `owners`: the table each belongs to (a table owns itself) — a
+   * column's index is looked up WITHIN its table, since tables share column names (the first run trained the pointers
+   * on another table's column of the same name and read them at 60%) */
+  final case class Prompted(ids: Array[Int], names: Vector[(String, Int)], question: Vector[Int], qText: String, qChars: Vector[Int],
+      owners: Vector[String]):
+    def indexOf(table: String, column: String): Int = names.indices.find(i => owners(i) == table && names(i)._1 == column).getOrElse(-1)
+    def indexOfTable(table: String): Int = names.indices.find(i => owners(i) == table && names(i)._1 == table).getOrElse(-1)
 
   def prompted(chat: Chat, p: Pairs.Pair): Prompted =
     val tok = chat.tokenizer
@@ -48,19 +54,20 @@ object Probes:
     val full = tok.decode(ids.toIndexedSeq)
     val base = full.indexOf(system.take(40))
     def at(c: Int): Int = ends.indexWhere(_ > c)
-    val names = p.tables.values.toVector.flatMap { t =>
+    val owned = p.tables.values.toVector.flatMap { t =>
       val head = system.indexOf(s"table ${t.name} (")
       val tablePos = at(base + head + 6 + t.name.length - 1)
-      (t.name -> tablePos) +: t.columns.map { c =>
+      ((t.name -> tablePos) -> t.name) +: t.columns.map { c =>
         val i = system.indexOf(s"\n  $c:", head)
-        c -> at(base + i + 3 + c.length - 1)
+        (c -> at(base + i + 3 + c.length - 1)) -> t.name
       }
     }
+    val names = owned.map(_._1)
     // the question's tokens: their positions and the char offset (in the question) each begins at
     val qBase = full.indexOf(p.question)
     val qToks = ids.indices.filter(i => ends(i) > qBase && (if i == 0 then 0 else ends(i - 1)) < qBase + p.question.length).toVector
     val qChars = qToks.map(i => math.max(0, (if i == 0 then 0 else ends(i - 1)) - qBase))
-    Prompted(ids, names, qToks, p.question, qChars)
+    Prompted(ids, names, qToks, p.question, qChars, owned.map(_._2))
 
   // ---- the probes
   /** softmax regression: classes over features, by gradient descent (a few hundred examples: plain Scala) */
@@ -156,7 +163,7 @@ object Probes:
     // every example: its slots, the schema names' states, and the query state per slot READ WHERE THE MODEL
     // DECIDES: after a forced prefix of the program up to that slot ("…, \"where\": [{\"column\": \"") — the last
     // token of the question alone does not hold which column is meant (the first run: the pointers at the "none" rate)
-    final case class Ex(slots: Slots, names: Vector[String], q: Map[(String, Int), Array[Float]], keys: Map[Int, Vector[Array[Float]]])
+    final case class Ex(slots: Slots, names: Vector[String], q: Map[(String, Int), Array[Float]], keys: Map[Int, Vector[Array[Float]]], pr: Prompted)
     def examples(ps: Vector[Pairs.Pair]): Vector[Ex] = ps.flatMap { p =>
       slots(p.program).map { sl =>
         val pr = prompted(chat, p)
@@ -167,7 +174,7 @@ object Probes:
           val ids = pr.ids ++ chat.tokenizer.encode(prefix(sl.table))
           val st = states(model, ids, layers, Vector(ids.length - 1))
           for l <- layers do q((name, l)) = st(l).head
-        Ex(sl, pr.names.map(_._1), q.toMap, base.map((l, v) => l -> v.tail))
+        Ex(sl, pr.names.map(_._1), q.toMap, base.map((l, v) => l -> v.tail), pr)
       }
     }
     val t0 = System.nanoTime()
@@ -189,7 +196,7 @@ object Probes:
       val shapeAcc = testEx.count(e => shape.predict(z(e.q(("shape", l)))) == e.slots.shape) * 100.0 / testEx.size
       def pointerAcc(at: String, slot: Slots => Option[String]): (Double, Double) =
         val p = Pointer(d)
-        def target(e: Ex) = slot(e.slots).map(e.names.indexOf).filter(_ >= 0).getOrElse(e.names.size)
+        def target(e: Ex) = slot(e.slots).map(c => e.pr.indexOf(e.slots.table, c)).filter(_ >= 0).getOrElse(e.names.size)
         p.train(trainEx.map(e => (z(e.q((at, l))), e.keys(l).map(z), target(e))), steps = 150, lr = 0.05f)
         val preds = testEx.map(e => p.predict(z(e.q((at, l))), e.keys(l).map(z)))
         val acc = preds.zip(testEx).count((pr, e) => pr == target(e)) * 100.0 / testEx.size

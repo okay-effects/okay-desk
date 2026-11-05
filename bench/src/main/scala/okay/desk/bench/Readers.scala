@@ -45,12 +45,21 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     val m = xs.max; val z = math.log(xs.map(v => math.exp((v - m).toDouble)).sum)
     xs.map(v => (v - m - z).toFloat)
   /** both readers summed: the pointer's log-probabilities over the candidates and the model's */
+  // `candidates`: (table, column) pairs — the index found within the table
   private def both(pr: Prompted, prefix: String, pointer: Pointer, q: Array[Float], ks: Vector[Array[Float]],
-      names: Vector[String], candidates: Vector[String]): String =
-    val idx = candidates.map(names.indexOf)
+      candidates: Vector[(String, String)]): String =
+    val idx = candidates.map((t, c) => pr.indexOf(t, c))
+    val names = candidates.map(_._2)
     val ps = logSoftmax(idx.map(pointer.scores(q, ks)).toArray)
-    val as = ask(pr, prefix, candidates)
-    candidates(ps.zip(as).map((a, b) => a + b).zipWithIndex.maxBy(_._1)._2)
+    val as = ask(pr, prefix, names)
+    // the two readers disagreeing is remembered: the self-play judge takes only answers they agreed on
+    if ps.zipWithIndex.maxBy(_._1)._2 != as.zipWithIndex.maxBy(_._1)._2 then agreedAll = false
+    names(ps.zip(as).map((a, b) => a + b).zipWithIndex.maxBy(_._1)._2)
+  private var agreedAll = true
+  /** the program, and whether every slot the two readers both read was read alike */
+  def programWith(tables: Map[String, Table], question: String): Option[(String, Boolean)] =
+    agreedAll = true
+    program(tables, question).toOption.map(p => (p, agreedAll))
 
   /** the gold value's first token among the question's, if the value is written verbatim in the question */
   private def valueStart(pr: Prompted, value: String): Option[Int] =
@@ -59,7 +68,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
 
   def train(pairs: Vector[Pairs.Pair]): Unit =
     val exs = pairs.flatMap(p => slots(p.program).map(sl => (p, sl, prompted(chat, p))))
-    val base = exs.map((_, sl, pr) => (sl, pr.names.map(_._1), states(model, pr.ids, Seq(layer), (pr.ids.length - 1) +: pr.names.map(_._2))(layer)))
+    val base = exs.map((_, sl, pr) => (sl, pr, states(model, pr.ids, Seq(layer), (pr.ids.length - 1) +: pr.names.map(_._2))(layer)))
     val all = base.flatMap(_._3)
     val d = all.head.length
     mean = Array.tabulate(d)(i => all.map(_(i)).sum / all.size)
@@ -67,7 +76,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     scale = 8f / math.sqrt(d).toFloat
     val keyStates = base.map(_._3.tail.map(z))
     val table = Pointer(d)
-    table.train(base.zip(keyStates).map { case ((sl, names, st), ks) => (z(st.head), ks, names.indexOf(sl.table)) })
+    table.train(base.zip(keyStates).map { case ((sl, pr, st), ks) => (z(st.head), ks, pr.indexOfTable(sl.table)) })
     pointers("table") = table
     for (name, prefix) <- prefixes do
       val qs = exs.map((_, sl, pr) => z(query(pr, prefix(sl.table))))
@@ -82,7 +91,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
           case "agg" => _.agg
           case _ => _.order
         p.train(qs.zip(exs).zip(keyStates).map { case ((q, (_, sl, pr)), ks) =>
-          (q, ks, slot(sl).map(pr.names.map(_._1).indexOf).filter(_ >= 0).getOrElse(ks.size)) })
+          (q, ks, slot(sl).map(c => pr.indexOf(sl.table, c)).filter(_ >= 0).getOrElse(ks.size)) })
         pointers(name) = p
     // the op and the value's start, on the pairs that have a condition
     val withWhere = exs.flatMap { (p, sl, pr) =>
@@ -143,11 +152,11 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       val join = fact.filter(_._1.name != table).flatMap((o, _, _) => joinTo(o).map(c => (o, c))).orElse(
         tables.values.filter(_.name != table).flatMap(o => joinTo(o).filter(_ => o.columns.exists(c =>
           c.length >= 3 && lower.matches(s"(?U).*\\b${c.toLowerCase}\\b.*"))).map(c => (o, c))).headOption)
-      val cols = t.columns ++ join.map(_._1.columns).getOrElse(Vector.empty)
+      val cols = t.columns.map(c => (table, c)) ++ join.map(j => j._1.columns.map(c => (j._1.name, c))).getOrElse(Vector.empty)
       // a column slot the shape says is there: the two readers over this table's (and the joined one's) columns
       def column(slot: String): Option[String] =
         val prefix = prefixes.find(_._1 == slot).get._2(table)
-        Some(both(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, names, cols.filter(names.contains)))
+        Some(both(pr, prefix, pointers(slot), z(query(pr, prefix)), ks, cols))
       /** the value: from the read start among the question's tokens, the longest value of the column (or a number or
        * a date) that begins there; else by exact match anywhere in the question */
       def constant(col: String, o: String): Option[String] =
@@ -204,16 +213,17 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     var shapeRight = 0
     val right = scala.collection.mutable.Map.empty[String, (Int, Int, Int)].withDefaultValue((0, 0, 0))
     for (p, sl, pr) <- exs do
-      val names = pr.names.map(_._1); val ks = keys(pr).map(z)
+      val ks = keys(pr).map(z)
       val t = p.tables(sl.table)
       if shape.predict(z(query(pr, prefixes.head._2(sl.table)))) == sl.shape then shapeRight += 1
       for (name, prefix) <- prefixes.tail do
         val gold = (name match { case "where" => sl.where; case "group" => sl.group; case "agg" => sl.agg; case _ => sl.order })
         gold.foreach { g =>
           val q = z(query(pr, prefix(sl.table)))
-          val cands = t.columns.filter(names.contains)
-          val alone = cands(cands.map(names.indexOf).map(pointers(name).scores(q, ks)).zipWithIndex.maxBy(_._1)._2)
-          val withAsk = both(pr, prefix(sl.table), pointers(name), q, ks, names, cands)
+          val cands = t.columns.map(c => (sl.table, c))
+          val sc = pointers(name).scores(q, ks)
+          val alone = cands(cands.map((tb, c) => sc(pr.indexOf(tb, c))).zipWithIndex.maxBy(_._1)._2)._2
+          val withAsk = both(pr, prefix(sl.table), pointers(name), q, ks, cands)
           val (n, a, b) = right(name)
           right(name) = (n + 1, a + (if alone == g then 1 else 0), b + (if withAsk == g then 1 else 0))
         }
