@@ -204,7 +204,10 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         val keyLike = Set("id", "key", "uid")
         val pool0 = if named.exists((_, c) => keyLike(c)) then cols else cols.filterNot((_, c) => keyLike(c) && slot != "where")
         // an aggregate or an order is over a numeric column, a group over a text one: the readers choose among those only
-        val pool = if slot == "agg" || slot == "order" then pool0.filter((_, c) => numeric(c)) else if slot == "group" then pool0.filterNot((_, c) => numeric(c)) else pool0
+        // a joined table's columns only for a group ("по странам"): a condition, an order or an aggregate stay on the table's
+        // own unless a fact of the data brought the join
+        val pool1 = if slot == "group" || joinNow.isDefined then pool0 else pool0.filter((tb, _) => tb == table)
+        val pool = if slot == "agg" || slot == "order" then pool1.filter((_, c) => numeric(c)) else if slot == "group" then pool1.filterNot((_, c) => numeric(c)) else pool1
         // the table's own columns first; a joined table's column only when the readers prefer it by a clear margin
         val chosen = exact.headOption.getOrElse {
           val cands = if pool.nonEmpty then pool else cols
@@ -212,7 +215,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
           val own = cands.zipWithIndex.filter((tc, _) => tc._1 == table); val other = cands.zipWithIndex.filter((tc, _) => tc._1 != table)
           val ownBest = own.map((tc, i) => (scores(i), tc._2)).maxByOption(_._1); val otherBest = other.map((tc, i) => (scores(i), tc._2)).maxByOption(_._1)
           (ownBest, otherBest) match
-            case (Some((so, co)), Some((st, ct))) => if st > so + 1.5f then ct else co
+            case (Some((so, co)), Some((st, ct))) => if st > so + 3f then ct else co
             case (Some((_, co)), None) => co
             case (None, Some((_, ct))) => ct
             case _ => cands.head._2 }
