@@ -421,7 +421,7 @@ Step 4 DONE 2026-11-05: the skill is a PROGRAM over the effect `Read` (okay-scal
 the JVM, `Read.async` by futures through `Async` — the continuation a value of the machine, no replay); `OnQwen`
 answers it over `Qwen3Compute` on the page's device, the template by hand (TemplateCheck: the same tokens). The
 page (`?selftest`, scripts/page.sh) on WebGPU: en 12/12, ru 9/12 — the JVM's numbers to the question, the same
-three Russian misses (2, 7, 8); 2.3–7.6 s a question (10–15 forwards over the ~400-token prompt, no prefix cache).
+three Russian misses (2, 7, 8); 2.3–7.6 s a question; on WebGL2 the same 12/12 and 9/12, 4–12 s a question (10–15 forwards over the ~400-token prompt, no prefix cache).
 On the cut model `ask` is near zero in the measure (the cut has no head layers: 18%/0%/0%/18%); the pointers and
 the exact facts carry the bench. Next: a prefix cache (one forward of the prompt, the prefixes appended) for speed;
 the missed Russian phrasings; the model fetched once into the browser's cache.
