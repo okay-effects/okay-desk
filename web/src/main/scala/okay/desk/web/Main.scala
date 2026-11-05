@@ -138,6 +138,18 @@ object Main:
       w.showDirectoryPicker().asInstanceOf[js.Promise[js.Dynamic]].toFuture.flatMap(walk(_, 0)).recover { case _ => () }
     else dom.document.getElementById("folder").asInstanceOf[dom.html.Input].click()
 
+  /** a file from the internet: its URL fetched (the host must allow it — CORS: GitHub's raw files, a Google Sheet
+   * published as CSV, open-data portals do; a plain web page usually does not) */
+  def openUrl(): Unit =
+    val url = dom.window.prompt("The address of a CSV, TSV or JSON file (the host must allow cross-origin reads):", "")
+    if url != null && url.trim.nonEmpty then
+      val u = url.trim
+      val name = u.split("[?#]").head.split("/").last match { case n if n.matches(".*\\.(csv|tsv|json|jsonl|ndjson)$") => n; case n => n + ".csv" }
+      dom.fetch(u).toFuture.flatMap { r =>
+        if !r.ok then Future.failed(IllegalStateException(s"HTTP ${r.status}")) else r.text().toFuture
+      }.map(text => addFile(name, text))
+        .recover { case t => say("system", s"$u not read: ${t.getMessage} — the host may not allow cross-origin reads; download the file and open it") }
+
   private def fromInput(input: dom.html.Input): Unit =
     val fs = (0 until input.files.length).map(input.files(_)).toVector
     Future.traverse(fs.filter(_.name.toLowerCase.matches(".*\\.(csv|tsv|json|jsonl|ndjson)$")))(readFile)
@@ -219,6 +231,7 @@ object Main:
         " ", button("Load the model", disabled <-- busy.signal, onClick --> { _ => if model.now() == "readers" then Readers.load("model", 19) else loadModel(model.now()); () }),
         " ", button("Open files", onClick --> { _ => openFiles() }),
         " ", button("Open a folder", onClick --> { _ => openFolder() }),
+        " ", button("Open a URL", onClick --> { _ => openUrl() }),
         input(idAttr := "files", tpe := "file", multiple := true, display := "none", onChange --> { e => fromInput(e.target.asInstanceOf[dom.html.Input]) }),
         input(idAttr := "folder", tpe := "file", htmlAttr("webkitdirectory", com.raquo.laminar.codecs.BooleanAsAttrPresenceCodec) := true, display := "none",
           onChange --> { e => fromInput(e.target.asInstanceOf[dom.html.Input]) }),
