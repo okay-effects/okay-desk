@@ -48,9 +48,9 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
   // `candidates`: (table, column) pairs — the index found within the table
   private def both(pr: Prompted, prefix: String, pointer: Pointer, q: Array[Float], ks: Vector[Array[Float]],
       candidates: Vector[(String, String)]): String =
-    val idx = candidates.map((t, c) => pr.indexOf(t, c))
     val names = candidates.map(_._2)
-    val ps = logSoftmax(idx.map(pointer.scores(q, ks)).toArray)
+    val cks = candidates.map((t, c) => ks(pr.indexOf(t, c)))
+    val ps = logSoftmax(pointer.scores(q, cks).take(cks.size))
     val as = ask(pr, prefix, names)
     // the two readers disagreeing is remembered: the self-play judge takes only answers they agreed on
     if ps.zipWithIndex.maxBy(_._1)._2 != as.zipWithIndex.maxBy(_._1)._2 then agreedAll = false
@@ -90,8 +90,10 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
           case "group" => _.group
           case "agg" => _.agg
           case _ => _.order
-        p.train(qs.zip(exs).zip(keyStates).map { case ((q, (_, sl, pr)), ks) =>
-          (q, ks, slot(sl).map(c => pr.indexOf(sl.table, c)).filter(_ >= 0).getOrElse(ks.size)) })
+        // trained over the table's own columns (and none): other tables' names would only dilute the choice
+        p.train(qs.zip(exs).zip(keyStates).map { case ((q, (p0, sl, pr)), ks) =>
+          val cols = p0.tables(sl.table).columns
+          (q, cols.map(c => ks(pr.indexOf(sl.table, c))), slot(sl).map(cols.indexOf).filter(_ >= 0).getOrElse(cols.size)) })
         pointers(name) = p
     // the op and the value's start, on the pairs that have a condition
     val withWhere = exs.flatMap { (p, sl, pr) =>
@@ -211,7 +213,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
   def measure(pairs: Vector[Pairs.Pair]): Unit =
     val exs = pairs.flatMap(p => slots(p.program).map(sl => (p, sl, prompted(chat, p))))
     var shapeRight = 0
-    val right = scala.collection.mutable.Map.empty[String, (Int, Int, Int)].withDefaultValue((0, 0, 0))
+    val right = scala.collection.mutable.Map.empty[String, (Int, Int, Int, Int)].withDefaultValue((0, 0, 0, 0))
     for (p, sl, pr) <- exs do
       val ks = keys(pr).map(z)
       val t = p.tables(sl.table)
@@ -221,14 +223,17 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         gold.foreach { g =>
           val q = z(query(pr, prefix(sl.table)))
           val cands = t.columns.map(c => (sl.table, c))
-          val sc = pointers(name).scores(q, ks)
-          val alone = cands(cands.map((tb, c) => sc(pr.indexOf(tb, c))).zipWithIndex.maxBy(_._1)._2)._2
+          val cks = cands.map((tb, c) => ks(pr.indexOf(tb, c)))
+          val sc = pointers(name).scores(q, cks).take(cks.size)
+          val alone = t.columns(sc.zipWithIndex.maxBy(_._1)._2)
+          val asked = ask(pr, prefix(sl.table), t.columns)
+          val byAsk = t.columns(asked.zipWithIndex.maxBy(_._1)._2)
           val withAsk = both(pr, prefix(sl.table), pointers(name), q, ks, cands)
-          val (n, a, b) = right(name)
-          right(name) = (n + 1, a + (if alone == g then 1 else 0), b + (if withAsk == g then 1 else 0))
+          val (n, a, k, b) = right(name)
+          right(name) = (n + 1, a + (if alone == g then 1 else 0), k + (if byAsk == g then 1 else 0), b + (if withAsk == g then 1 else 0))
         }
     println(f"  measured on ${exs.size} held-out pairs: shape ${shapeRight * 100.0 / exs.size}%.1f%%; " +
-      right.toVector.sortBy(_._1).map((k, v) => f"$k ${v._2 * 100.0 / v._1}%.0f%% → with ask ${v._3 * 100.0 / v._1}%.0f%% (${v._1})").mkString(", "))
+      right.toVector.sortBy(_._1).map((k, v) => f"$k pointer ${v._2 * 100.0 / v._1}%.0f%% ask ${v._3 * 100.0 / v._1}%.0f%% both ${v._4 * 100.0 / v._1}%.0f%% (${v._1})").mkString(", "))
 
   // ---- the readers kept: trained once, loaded in seconds (Java serialization of the arrays: a skill is a file)
   def save(path: java.nio.file.Path): Unit =
