@@ -10,6 +10,7 @@ number in it is in the result. The model never computes a number. Nothing leaves
 sbt coreJVM/test                       # the exact engine's laws
 sbt web/fullLinkJS && cp web/target/scala-3.3.8/okay-desk-web-opt/main.js web/page/
 cd web/page && npx -y serve .          # http://localhost:3000 — Chrome (WebGPU, File System Access)
+scripts/page.sh                        # the readers in the page (the cut model + the skill) on the sample, in Chromium; GL=1 for WebGL2
 ```
 
 A proof of concept of okay-inlay `specs/assistant.md` (the "data" pack): what a small model does well — understand,

@@ -215,5 +215,37 @@ object Main:
         a(href := "https://okay-effects.github.io/#author", "Get in touch"), "."))
     )
 
+  /** THE PAGE'S SELF-TEST (`?selftest`): the readers loaded on the page's device, the sample's questions in both
+   * languages read into programs and run by the exact engine, each against the gold's result — the JVM bench's
+   * measure, in the browser; written into the page (#selftest) */
+  def selftest(): Unit =
+    val out = dom.document.createElement("pre"); out.id = "selftest"
+    dom.document.body.appendChild(out)
+    def say(s: String): Unit = { out.textContent = out.textContent + s + "\n"; println(s) }
+    val now = () => js.Dynamic.global.performance.now().asInstanceOf[Double]
+    val ts = Sample.tables
+    val golds = Sample.questions.map(q => Sample.run(Query.parse(q.gold).toOption.get).toOption.get)
+    val t0 = now()
+    Readers.load("model", 19).flatMap { _ =>
+      say(s"${status.now()} (${((now() - t0) / 1000).toInt} s)")
+      if Readers.skill == null then Future.successful(Left("not loaded"))
+      else
+        val asks = for (q, i) <- Sample.questions.zipWithIndex; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) yield (i, lang, text)
+        asks.foldLeft(Future.successful(Map("en" -> 0, "ru" -> 0))) { (acc, a) => acc.flatMap { right =>
+          val (i, lang, text) = a
+          val t1 = now()
+          Readers.program(ts, text).map { got =>
+            val result = got.flatMap(Query.parse).flatMap(Sample.run)
+            val ok = result.exists(Sample.same(_, golds(i)))
+            say(f"[$lang ${i + 1}] ${if ok then "ok" else "MISS"} ${(now() - t1) / 1000}%.1f s: ${got.fold(e => e, identity)}")
+            if ok then right.updated(lang, right(lang) + 1) else right
+          }
+        } }.map(right => Right(s"en: ${right("en")}/${Sample.questions.size} | ru: ${right("ru")}/${Sample.questions.size}"))
+    }.map {
+      case Right(line) => say(s"readers in the page on ${Readers.on.api}: $line"); say("selftest: done")
+      case Left(why) => say(s"selftest: failed: $why")
+    }.recover { case t => say(s"selftest: failed: $t") }
+
   def main(args: Array[String]): Unit =
     renderOnDomContentLoaded(dom.document.getElementById("app"), page)
+    if dom.window.location.search.contains("selftest") then selftest()

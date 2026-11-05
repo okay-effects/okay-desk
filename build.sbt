@@ -25,6 +25,8 @@ lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
 /** the page: files opened in the browser, the model (WebLLM, WebGPU) in the page, the chat */
 lazy val web = (project in file("web")).enablePlugins(ScalaJSPlugin).dependsOn(core.js)
   .settings(name := "okay-desk-web", publish / skip := true, scalaJSUseMainModuleInitializer := true,
+    // the readers' word boundaries with Cyrillic ((?U)) need ES2018's regular expressions
+    scalaJSLinkerConfig ~= { _.withESFeatures(_.withESVersion(org.scalajs.linker.interface.ESVersion.ES2018)) },
     scalaJSLinkerConfig ~= (_.withModuleKind(org.scalajs.linker.interface.ModuleKind.NoModule)),
     libraryDependencies ++= Seq("com.raquo" %%% "laminar" % "17.2.1", "io.github.okay-effects" %%% "okay-llm-qwen-browser" % "0.1.0"))
 

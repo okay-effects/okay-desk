@@ -417,5 +417,11 @@ locally): `Compute` with OnCpu / OnWebGpu / OnWebGl2, `Qwen3Compute` over it; th
 Qwen3Forward, exact), ForwardSuite here (Qwen3Forward == mlx-scala on cut19), okay-llm scripts/selftest.sh in
 Chromium on the 16-token prompt: WebGPU diff 6e-5, WebGL2 8e-3 (states up to 7942), the same next token; CPU 11 s,
 WebGPU 0.1 s, WebGL2 0.4 s. Step 3 the tokenizer encodes in the page (Nfc by the string's `normalize` on JS).
-Next: step 4 — a `Reading` over `Qwen3Compute` (asynchronous: `states` and `logits` as Futures, so `Readers` needs
-an async face or the program assembled after one forward per prefix), the skill file fetched, the page's mode.
+Step 4 DONE 2026-11-05: the skill is a PROGRAM over the effect `Read` (okay-scala; `Read.sync` answers it in place on
+the JVM, `Read.async` by futures through `Async` — the continuation a value of the machine, no replay); `OnQwen`
+answers it over `Qwen3Compute` on the page's device, the template by hand (TemplateCheck: the same tokens). The
+page (`?selftest`, scripts/page.sh) on WebGPU: en 12/12, ru 9/12 — the JVM's numbers to the question, the same
+three Russian misses (2, 7, 8); 2.3–7.6 s a question (10–15 forwards over the ~400-token prompt, no prefix cache).
+On the cut model `ask` is near zero in the measure (the cut has no head layers: 18%/0%/0%/18%); the pointers and
+the exact facts carry the bench. Next: a prefix cache (one forward of the prompt, the prefixes appended) for speed;
+the missed Russian phrasings; the model fetched once into the browser's cache.
