@@ -391,3 +391,20 @@ A quarter smaller at no loss in English; the Russian loses two questions, both t
 ("по каждому клиенту" → customer, "Неоплаченные" → unpaid), where the readers' judgement at this size is the limit.
 Below 18 layers the understanding is not there (§14's curve). The floor by size is the embedding; the next cut is
 the vocabulary (152k tokens → the languages in use) or 2-bit MLPs, measured the same way.
+
+## 15. The readers in the browser (plan, 2026-11-05)
+
+The thesis as a page: the cut 0.6B (244 MB) and a 3 MB skill file, no generation — a question read into a program
+in one pass. What it takes, in order, each step checked on the JVM before the browser:
+
+1. **The readers and the assembler into `core`** (plain Scala, JVM + Scala.js): `Readers` depends only on a
+   `States` provider — the residual after layer L at given positions for given token ids — and a tokenizer; the
+   probes in a plain binary format (float32 LE, as `Micro`'s) instead of Java serialization. Law: the JVM provider
+   (mlx-scala) gives the bench's numbers as before.
+2. **A Qwen3 forward on WebGPU in Scala.js**: safetensors read in the browser (MLX's 4-bit layout: packed uint32,
+   scales and biases per group of 64), WGSL kernels — dequantized matmul, RMSNorm, RoPE, attention over the prompt,
+   SwiGLU — hidden states at layer L for the requested positions; no KV cache, no sampling. Law: the states equal
+   mlx-scala's on the same prompt (a tolerance per element).
+3. **The tokenizer in Scala.js**: mlx-scala's byte-level BPE is plain Scala (llm/Tokenizer.scala) — cross-built.
+4. **The page**: the model and the readers fetched once and cached; the question → the program → the exact
+   engine, the program shown, with the mode's name ("read, not generated").
