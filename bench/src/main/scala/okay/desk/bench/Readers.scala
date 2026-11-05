@@ -112,7 +112,17 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     else
       val table = names(ti)
       val t = tables(table)
-      val sh = shape.predict(z(query(pr, prefixes.head._2(table)))).split(" ")
+      // the shape by two readers: the probe, and the model asked which section comes first at `{"from": T, "`
+      val shapeKeys = Vector("where", "group", "aggregate", "order", "limit", "}")
+      def firstKey(s: String): String =
+        val a = s.split(" ")
+        if a.length < 8 then "}" else if a(2) != "-" then "where" else if a(3) == "group" then "group" else if a(1) != "-" then "aggregate"
+        else if a(4) == "order" then "order" else if a(5) == "limit" then "limit" else "}"
+      val shapeQ = z(query(pr, prefixes.head._2(table)))
+      val asked = ask(pr, prefixes.head._2(table), shapeKeys)
+      val probeScores = logSoftmax(shape.scores(shapeQ))
+      val sh = shape.classes.zipWithIndex.map((c, i) => (c, probeScores(i) + asked(shapeKeys.indexOf(firstKey(c)))))
+        .maxBy(_._2)._1.split(" ")
       def q(s: String) = "\"" + s + "\""
       val lower = question.toLowerCase
       // EXACT FACTS FROM THE DATA constrain the reads: a value of a column written in the question (a word of 3+ letters,
@@ -127,9 +137,10 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         }
       }.filter((o, _, _) => o.name == table || joinTo(o).isDefined).sortBy((o, _, v) => (if o.name == table then 0 else 1, -v.length))
       val fact = found.headOption
-      // a join when the shape says so, or when the fact needs one
+      // a join only when the data needs one: a fact in another table, or a column of another table named in the question
       val join = fact.filter(_._1.name != table).flatMap((o, _, _) => joinTo(o).map(c => (o, c))).orElse(
-        Option.when(sh.length > 6 && sh(6) == "join")(tables.values.filter(_.name != table).flatMap(o => joinTo(o).map(c => (o, c))).headOption).flatten)
+        tables.values.filter(_.name != table).flatMap(o => joinTo(o).filter(_ => o.columns.exists(c =>
+          c.length >= 3 && lower.matches(s"(?U).*\\b${c.toLowerCase}\\b.*"))).map(c => (o, c))).headOption)
       val cols = t.columns ++ join.map(_._1.columns).getOrElse(Vector.empty)
       // a column slot the shape says is there: the two readers over this table's (and the joined one's) columns
       def column(slot: String): Option[String] =

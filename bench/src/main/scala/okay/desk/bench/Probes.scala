@@ -26,7 +26,7 @@ object Probes:
         case Cond.Cmp(_, op, _) => op
         case Cond.Has(_, _) => "contains"
         case Cond.Empty(_, _) => "empty" }.getOrElse("-"), if group.nonEmpty then "group" else "-",
-        if order.nonEmpty then "order" else "-", if limit.isDefined then "limit" else "-", if join.isDefined then "join" else "-",
+        if order.nonEmpty then "order" else "-", if limit.isDefined then "limit" else "-", "-", // the join is not read from the state: the data decides it (a value or a column of another table named)
         if select.nonEmpty then "select" else "-").mkString(" ")
       Slots(shape, from, where.headOption.map {
         case Cond.Cmp(c, _, _) => c
