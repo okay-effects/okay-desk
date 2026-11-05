@@ -88,6 +88,9 @@ object Pairs:
       say(Vector(s"The ${t.name} with $tc = $v, largest $nc first.", s"${t.name} where $tc is $v, by $nc descending."),
           Vector(s"${t.name} с $tc = $v, сначала с большим $nc.", s"${t.name}, где $tc равен $v, по убыванию $nc.")) ->
         s"""{"from": ${q(t.name)}, "where": [{"column": ${q(tc)}, "op": "=", "value": ${q(v)}}], "order": ["-$nc"]}""",
+      say(Vector(s"The largest $nc among ${t.name} with $tc = $v.", s"The ${t.name} row with $tc $v and the highest $nc."),
+          Vector(s"Самый большой $nc среди ${t.name} с $tc = $v.", s"Строка ${t.name} с $tc $v и наибольшим $nc.")) ->
+        s"""{"from": ${q(t.name)}, "where": [{"column": ${q(tc)}, "op": "=", "value": ${q(v)}}], "order": ["-$nc"], "limit": 1}""",
       say(Vector(s"Sum of $nc for ${t.name} with $tc = $v.", s"Total $nc where $tc is $v."),
           Vector(s"Сумма $nc для ${t.name} с $tc = $v.", s"Итого $nc, где $tc равен $v.")) ->
         s"""{"from": ${q(t.name)}, "where": [{"column": ${q(tc)}, "op": "=", "value": ${q(v)}}], "aggregate": [{"fn": "sum", "column": ${q(nc)}, "as": "total"}]}""")
@@ -95,8 +98,8 @@ object Pairs:
     val base = Map(t.name -> t)
     // a join or a datalog shape one time in four, with a second table
     rnd.nextInt(4) match
-      case 0 if text.contains("owner") || text.contains("name") =>
-        val key = if t.columns.contains("owner") then "owner" else "name"
+      case 0 =>
+        val key = tc
         val other = lookup(rnd, pick(rnd, Vector("people", "accounts", "staff")), t.rows.map(_(t.columns.indexOf(key)).text))
         val extra = other.columns(1); val ev = pick(rnd, other.rows.map(_(1).text))
         val qj = say(Vector(s"${t.name} whose $key has $extra = $ev in ${other.name}.", s"Total $nc per $extra of ${other.name}."),

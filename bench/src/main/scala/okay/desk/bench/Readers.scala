@@ -115,10 +115,21 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
       val sh = shape.predict(z(query(pr, prefixes.head._2(table)))).split(" ")
       def q(s: String) = "\"" + s + "\""
       val lower = question.toLowerCase
-      // a join when the shape says so: the other table whose first column holds this table's column's values
-      val join = Option.when(sh.length > 6 && sh(6) == "join")(tables.values.filter(_.name != table).flatMap { o =>
-        t.columns.filter(c => t.rows.forall(r => o.rows.exists(_(0).text == r(t.columns.indexOf(c)).text))).map(c => (o, c))
-      }.headOption).flatten
+      // EXACT FACTS FROM THE DATA constrain the reads: a value of a column written in the question (a word of 3+ letters,
+      // a date) means a condition on that column — and a join, when the column is in another table reachable by one
+      def joinTo(o: Table): Option[String] =
+        t.columns.find(c => t.rows.forall(r => o.rows.exists(_(0).text == r(t.columns.indexOf(c)).text)))
+      val found: Vector[(Table, String, String)] = tables.values.toVector.flatMap { o =>
+        o.columns.flatMap { c =>
+          val vs = o.rows.map(_(o.columns.indexOf(c)).text).distinct
+          vs.filter(v => (v.length >= 3 && !v.forall(_.isDigit) || v.matches("\\d{4}-\\d\\d-\\d\\d")) &&
+            lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(v.toLowerCase)}\\b.*")).map(v => (o, c, v))
+        }
+      }.filter((o, _, _) => o.name == table || joinTo(o).isDefined).sortBy((o, _, v) => (if o.name == table then 0 else 1, -v.length))
+      val fact = found.headOption
+      // a join when the shape says so, or when the fact needs one
+      val join = fact.filter(_._1.name != table).flatMap((o, _, _) => joinTo(o).map(c => (o, c))).orElse(
+        Option.when(sh.length > 6 && sh(6) == "join")(tables.values.filter(_.name != table).flatMap(o => joinTo(o).map(c => (o, c))).headOption).flatten)
       val cols = t.columns ++ join.map(_._1.columns).getOrElse(Vector.empty)
       // a column slot the shape says is there: the two readers over this table's (and the joined one's) columns
       def column(slot: String): Option[String] =
@@ -149,15 +160,18 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
           s"""{"datalog": "reach(X, Y) :- ${e.name}(X, Y). reach(X, Z) :- ${e.name}(X, Y), reach(Y, Z).", "goal": ${q(goal.replace("\"", "\\\""))}}"""
         }
       else
-        val Array(_, fn, whereOp, group, order, limit, _, select) = sh
+        val Array(_, fn, whereOp0, group, order, limit, _, select) = sh
+        // the fact forces the condition the shape may have missed
+        val whereOp = if whereOp0 == "-" && fact.isDefined then "=" else whereOp0
         val parts = Vector.newBuilder[String]
         parts += s""""from": ${q(table)}"""
         join.foreach((o, c) => parts += s""""join": {"table": ${q(o.name)}, "on": [[${q(c)}, ${q(o.columns.head)}]]}""")
-        if whereOp != "-" then column("where").foreach { c =>
-          val o = if whereOp == "empty" then "empty" else
-            val ps = logSoftmax(op.scores(z(query(pr, opPrefix(table, c))))); val as = ask(pr, opPrefix(table, c), ops)
-            ops(ps.zip(as).map((a, b) => a + b).zipWithIndex.maxBy(_._1)._2)
-          val v = constant(c, o).getOrElse("")
+        if whereOp != "-" then fact.map(_._2).orElse(column("where")).foreach { c =>
+          val o = if whereOp == "empty" then "empty" else if fact.exists(_._2 == c) && !lower.matches("(?U).*\\b(not|не|кроме|except)\\b.*") then "="
+            else
+              val ps = logSoftmax(op.scores(z(query(pr, opPrefix(table, c))))); val as = ask(pr, opPrefix(table, c), ops)
+              ops(ps.zip(as).map((a, b) => a + b).zipWithIndex.maxBy(_._1)._2)
+          val v = fact.filter(_._2 == c).map(_._3).orElse(constant(c, o)).getOrElse("")
           parts += s""""where": [{"column": ${q(c)}, "op": ${q(o)}, "value": ${if v.matches("-?\\d+(\\.\\d+)?") && o != "=" then v else q(v)}}]""" }
         if group == "group" then column("group").foreach(c => parts += s""""group": [${q(c)}]""")
         if fn != "-" then
