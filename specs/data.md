@@ -425,3 +425,12 @@ three Russian misses (2, 7, 8); 2.3–7.6 s a question; on WebGL2 the same 12/12
 On the cut model `ask` is near zero in the measure (the cut has no head layers: 18%/0%/0%/18%); the pointers and
 the exact facts carry the bench. Next: a prefix cache (one forward of the prompt, the prefixes appended) for speed;
 the missed Russian phrasings; the model fetched once into the browser's cache.
+
+Real data (2026-11-05, the examples page): the assembler was quadratic (a join searched row by row per candidate:
+90 s a question on airports 3376 × S&P 503) and the exact facts matched words of the question ("how MANY" the city
+Many, "in" the state IN). Fixed: the join by a set once per table; a value is named when it is a run of the
+question's words (up to four), never a stop word, a short code (AK, UA) only in capitals; the TABLE by exact facts
+first — named, else the one table a named column belongs to, else the pointer. Live: state AK 263 (3.4 s), city
+Boston, companies per GICS Sector — right; "in Alaska" gives the plain count (AK is not written: honest, not wrong).
+The law stayed 12/12 and 9/12. The examples page (examples.html): open data whose hosts allow CORS, one or several
+opened by `?open=<url>`; each open table closed by its × (the others stay).
