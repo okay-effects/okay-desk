@@ -1,17 +1,32 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>okay-desk — chat with your data, in the browser</title>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Chat with your data in the browser, offline: a small model reads the question into a program, an exact engine computes the answer. Nothing leaves the browser.">
+<title>okay-desk — chat with your data, in the browser</title>
 <style>
-body{font:15px/1.45 system-ui;max-width:60em;margin:1.5em auto;padding:0 1em;color:#222}
-h1{font-size:22px}.bar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:8px 0}.status{color:#555;margin-left:8px}
-.tables details{margin:4px 0}.tables pre,.msg pre{white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:6px;overflow-x:auto}
-.msg{margin:8px 0}.msg.user pre{background:#e8f0fe}.msg.model pre{background:#eef9ee}.msg.system pre{background:#fff6e5;color:#664}
-.msg.result pre{background:#f5f5f5}.tables summary{cursor:pointer}.tables button.close{border:none;background:#eee;border-radius:10px;padding:0 7px;cursor:pointer;color:#833}.q{width:70%;padding:8px}footer{margin-top:2em;color:#666;font-size:13px}
-</style></head>
-<body>
-<div id="app"></div>
+  body > footer { border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+    color: var(--okay-muted, #5b6472); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body > footer .bar { max-width: 1000px; margin: 0 auto; padding: 18px 14px 32px; display: flex; flex-wrap: wrap;
+    align-items: baseline; gap: 6px; }
+  body > footer .more { margin-left: auto; font-weight: 600; }
+  body > footer a { color: var(--okay-accent, #2b5bd7); }
+  #engine-status { max-width: 1000px; margin: 0 auto; padding: 0 14px; font: 13px system-ui; color: #5b6472; }
+</style>
 <script type="module">
   import * as webllm from "https://esm.run/@mlc-ai/web-llm";
   window.webllm = webllm;
 </script>
-<script src="main.js"></script>
-</body></html>
+<script defer src="main.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="engine-status"></div>
+  <footer><div class="bar">
+    Built on <a href="https://okay-effects.github.io/" target="_blank" rel="noopener noreferrer">okay-effects</a> —
+    algebraic effects for Scala
+    <a class="more" href="https://okay-effects.github.io/#author" target="_blank" rel="noopener noreferrer">Need more?</a>
+  </div></footer>
+</body>
+</html>

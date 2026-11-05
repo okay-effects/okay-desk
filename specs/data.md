@@ -434,3 +434,16 @@ first — named, else the one table a named column belongs to, else the pointer.
 Boston, companies per GICS Sector — right; "in Alaska" gives the plain count (AK is not written: honest, not wrong).
 The law stayed 12/12 and 9/12. The examples page (examples.html): open data whose hosts allow CORS, one or several
 opened by `?open=<url>`; each open table closed by its × (the others stay).
+
+## 16. The page as an okay-ui program (2026-11-05)
+
+The desk's page is written as okay-ui's business screens: `okay.desk.ui.App` — a state (the tables open, the
+conversation, the model), one `Screen[Msg]` of it (the data as a tree with a close button per table, the forms for
+files or a folder, an address, the model, the question), a press a message, a message the next state. What the world
+does is an effect: okay-http's `Fetch` for an address, `Model` (load, program, summary) for the model. The page
+(`web/Main`) runs it by okay-ui's DOM face with `Fetch` by the browser and `Model` by the engine (the readers on
+okay-llm's forward, or WebLLM); a test (`ui/AppSuite`) plays the same program with a model of the sample's gold
+programs and a fetch by a table — opened, closed, loaded, asked, the result on the screen. The examples page is a
+screen too. okay-ui got one thing for it: the file choosers drawn as buttons, the native input hidden (its own words
+said "Choose Files / No file chosen" beside "Choose a folder…"). On a phone the program is told so and says the cut
+model is the one that fits; the cut model is the default everywhere.

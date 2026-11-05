@@ -1,9 +1,25 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>okay-desk — examples of open data</title>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>okay-desk — examples of open data</title>
 <style>
-body{font:15px/1.45 system-ui;max-width:64em;margin:1.5em auto;padding:0 1em;color:#222}
-h1{font-size:22px}.status{color:#555}.btn{display:inline-block;padding:6px 12px;background:#2b5bd7;color:#fff;border-radius:6px;text-decoration:none}
-table.examples{border-collapse:collapse;width:100%}table.examples td,table.examples th{border-top:1px solid #ddd;padding:8px 6px;vertical-align:top;text-align:left}
-table.examples code{font-size:12px;color:#555}footer{margin-top:2em;color:#666;font-size:13px}
-</style></head>
-<body><div id="examples"></div><script src="main.js"></script></body></html>
+  body > footer { border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+    color: var(--okay-muted, #5b6472); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body > footer .bar { max-width: 1000px; margin: 0 auto; padding: 18px 14px 32px; display: flex; flex-wrap: wrap;
+    align-items: baseline; gap: 6px; }
+  body > footer .more { margin-left: auto; font-weight: 600; }
+  body > footer a { color: var(--okay-accent, #2b5bd7); }
+</style>
+<script defer src="main.js"></script>
+</head>
+<body>
+  <div id="app"></div><div id="examples"></div>
+  <footer><div class="bar">
+    Built on <a href="https://okay-effects.github.io/" target="_blank" rel="noopener noreferrer">okay-effects</a> —
+    algebraic effects for Scala
+    <a class="more" href="https://okay-effects.github.io/#author" target="_blank" rel="noopener noreferrer">Need more?</a>
+  </div></footer>
+</body>
+</html>

@@ -1,11 +1,11 @@
 package okay.desk.web
 
-import com.raquo.laminar.api.L.*
+import okay.business.scala3.*
 
 /**
- * EXAMPLES OF OPEN DATA (examples.html): files on the internet whose hosts allow a page to read them (CORS), each
- * opened in okay-desk by one link — or several chosen together. Every entry was checked: the host answers with
- * `access-control-allow-origin: *` and the file is a CSV or a JSON array.
+ * EXAMPLES OF OPEN DATA (examples.html), an okay-ui screen: files on the internet whose hosts allow a page to read
+ * them (CORS), each opened in okay-desk by one link — or several ticked and opened together. Every entry was checked:
+ * the host answers with `access-control-allow-origin: *` and the file is a CSV or a JSON array.
  */
 object Examples:
   final case class Example(name: String, urls: Vector[String], about: String, source: String)
@@ -30,8 +30,7 @@ object Examples:
       "The World Bank's series, 17,000 rows: country, code, year, value. Try: the population of Ukraine in 2020? the ten largest in 2023?",
       "datasets/population"),
     Example("GDP of countries by year", Vector(raw + "datasets/gdp/main/data/gdp.csv"),
-      "The World Bank's series: country, code, year, value in current US dollars.",
-      "datasets/gdp"),
+      "The World Bank's series: country, code, year, value in current US dollars.", "datasets/gdp"),
     Example("COVID-19, the latest figures by country", Vector(raw + "owid/covid-19-data/master/public/data/latest/owid-covid-latest.csv"),
       "Our World in Data's last snapshot: cases, deaths, vaccinations, population, per country. Try: the ten countries with the most total cases?",
       "owid/covid-19-data"),
@@ -39,29 +38,19 @@ object Examples:
       "Service requests: agency, complaint type, borough, status, dates. Any Socrata open-data portal answers the same way. Try: how many complaints per borough?",
       "NYC Open Data"))
 
-  /** the page's address with these files to open */
-  def link(urls: Vector[String]): String = "index.html?" + urls.map(u => "open=" + scala.scalajs.js.URIUtils.encodeURIComponent(u)).mkString("&")
+  /** the desk's address with these files to open */
+  def link(urls: Vector[String]): String =
+    "index.html?" + urls.map(u => "open=" + scala.scalajs.js.URIUtils.encodeURIComponent(u)).mkString("&")
 
-  def page: HtmlElement =
-    val chosen: Var[Set[String]] = Var(Set.empty)
-    div(
-      h1("Examples of open data"),
-      p("Each file comes straight from its host into your browser; okay-desk reads it there and nothing leaves the page. ",
-        "A host must allow cross-origin reads for that — these do. Open one, or tick several and open them together: ",
-        "every file becomes a table, and a question may join them."),
-      p(child <-- chosen.signal.map { c =>
-        if c.isEmpty then span(cls := "status", "nothing chosen yet")
-        else a(cls := "btn", href := link(all.filter(e => c(e.name)).flatMap(_.urls)), s"Open the ${c.size} chosen together")
-      }),
-      table(cls := "examples",
-        thead(tr(th(""), th("Data"), th("About"), th("Source"), th(""))),
-        tbody(all.map(e => tr(
-          td(input(tpe := "checkbox", onChange.mapToChecked --> { on => chosen.update(c => if on then c + e.name else c - e.name) })),
-          td(b(e.name)),
-          td(e.about, br(), small(e.urls.map(u => span(code(u.take(72) + (if u.length > 72 then "…" else "")), " ")))),
-          td(e.source),
-          td(a(href := link(e.urls), "Open")))))),
-      p(a(href := "index.html", "← okay-desk")),
-      footerTag(p("Built on ", a(href := "https://okay-effects.github.io/", "okay-effects"), ". Need more? ",
-        a(href := "https://okay-effects.github.io/#author", "Get in touch"), "."))
-    )
+  /** the screen: each example a card with its link; a form of ticks, and one button that opens the ticked together —
+   * the program's value is the addresses chosen */
+  def program[R[_]](using In[Ui, R]): Vector[String] ! R =
+    val ticks = Form.list(all.toList.map(e => Field.flag(e.name)))
+    val cards = all.map(e => Part.block("example", e.name)(Part.text(e.about), Part.block("small")(Part.text(e.urls.mkString("  "))),
+      Part.text(s"Source: ${e.source}"), Part.link("Open in okay-desk", link(e.urls))))
+    show[Vector[String], R](Screen[Vector[String]]("Examples of open data")((List(
+      Part.block("top")(Part.block("brand")(Part.text("okay-desk")), Part.link("← okay-desk", "index.html")),
+      Part.text("Each file comes straight from its host into your browser; okay-desk reads it there and nothing leaves the page. " +
+        "A host must allow cross-origin reads for that — these do. Open one, or tick several and open them together: " +
+        "every file becomes a table, and a question may join them.")) ++ cards :+ Part.section("Open several together")(ticks))*)(
+      Button.submit("Open the ticked together", ticks)(on => all.zip(on).filter(_._2).flatMap(_._1.urls))))

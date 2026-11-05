@@ -14,5 +14,8 @@ scripts/page.sh                        # the readers in the page (the cut model 
 scripts/publish.sh                     # the page to GitHub Pages: https://okay-effects.github.io/okay-desk/ (the weights in parts)
 ```
 
+The page is an [okay-ui](https://github.com/okay-effects/okay-ui) program: one screen shown again after every press, its
+effects (`Model`, okay-http's `Fetch`) answered by the browser — or by a test script on the JVM (`sbt uiJVM/test`).
+
 A proof of concept of okay-inlay `specs/assistant.md` (the "data" pack): what a small model does well — understand,
 write a program, phrase — and what it never does — compute. [specs/data.md](specs/data.md).
