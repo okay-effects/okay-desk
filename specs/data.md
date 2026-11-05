@@ -281,3 +281,10 @@ not on the bench's 24 questions: `Readers.measure` now reports each reader alone
 pairs before the bench runs. And the 0.6B's own prior at the shape prefix is "sum" for everything — ask helps a
 column (the choice is among the schema's names) and hurts the shape (a choice among sections the model has no
 feel for); so the shape stays with the probe, and the join is the data's decision, never the model's.
+
+**The measure corrected (2026-11-05 15:30).** `Readers.measure` counts a column slot only where the gold has one;
+`Probes` had counted the empty slots too (60–85% of them), so its 93–98% was mostly "empty or not". The honest
+column accuracy of a pointer alone is ~58% (group 55%, where 59%, order 58%), with ask 66–75%; the aggregate's
+column 93% → 100% with ask. Scoping names to their tables (a real bug: shared column names) did not move these
+numbers, so the pointers are now trained over the table's own columns only, ask is measured alone, and the pairs
+are 1,500. The readers are kept in `~/.cache/okay-desk/readers-<model>-<layer>.bin` (3 MB: a skill is a file).
