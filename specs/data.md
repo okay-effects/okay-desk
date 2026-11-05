@@ -340,3 +340,13 @@ agrees with itself; and the accepted set is small and narrow (28 of 161 with a c
 correctness. The judge must hold exact facts: a table, a column or a value the question names must be in the
 program, and nothing named must be absent — the data's own check, as everywhere else in this work; and the
 questions must be asked for their variety (a condition, a group, a top-N, a reach). Next run with both.
+
+**The second run, the exact judge and varied questions:** 150 rounds, 713 questions, 618 programs, 126 agreed,
+92 accepted (13%). Readers trained on the 92 alone: shape 25.5% (84.0% on the gold), pointers 22–46% (56–62%),
+ask unchanged (it needs no training). Still far. The judge now rejects what is wrong (the accepted programs are
+right), but the WRITER is the weak link: a 0.6B asked for questions parrots the instruction ("Which rows meet a
+condition on a column (e.g., 'category')?"), so the accepted set is small and unnatural. Conclusion: a 0.6B can
+answer and can be judged, but cannot yet ask well enough to teach itself from scratch; the bootstrap needs a
+better asker — a larger local model writing the questions (the 4B), the 0.6B answering, the exact judge deciding,
+the readers learning — or thousands of rounds. Stage 2 stands as designed, with the asker swapped; stage 1's
+result (12/12) does not depend on it.
