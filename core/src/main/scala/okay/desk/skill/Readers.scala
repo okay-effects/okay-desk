@@ -150,8 +150,18 @@ final class Readers:
       ks <- keys(pr).map(_.map(z))
       last <- Read.states(pr.ids, Vector(pr.ids.length - 1)).map(st => z(st.head))
       ti = pointers("table").predict(last, ks)
-      result <- if ti >= names.size then pure[Either[String, String], R](Left("no table read"))
-        else assemble(tables, question, pr, ks, names(ti))
+      // EXACT FIRST, for the table too: a table named in the question is the table (the pointer's choice among several
+      // named); else the one table a named column belongs to (real data: "GICS Sector" is a column of one table only);
+      // else the pointer's
+      chosen =
+        val lowerQ = question.toLowerCase
+        def mentioned(n: String) = n.length >= 3 && lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*")
+        val byName = tables.keys.toVector.sorted.filter(mentioned)
+        val byColumn = tables.values.toVector.sortBy(_.name).filter(t => t.columns.exists(mentioned)).map(_.name)
+        val pointed = Option.when(ti < names.size)(names(ti)).filter(tables.contains)
+        pointed.filter(byName.contains).orElse(byName.headOption)
+          .orElse(if byColumn.size == 1 then byColumn.headOption else pointed.filter(byColumn.contains).orElse(pointed).orElse(byColumn.headOption))
+      result <- chosen.fold(pure[Either[String, String], R](Left("no table read")))(t => assemble(tables, question, pr, ks, t))
     yield result
 
   /** the program for the table read: the shape as decisions, the columns, the condition's op and value */
