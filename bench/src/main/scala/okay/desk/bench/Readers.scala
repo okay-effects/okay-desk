@@ -104,7 +104,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     }
     // the aggregate's function read at its own point, where it is written
     fnProbe = Softmax(fns :+ "-", d)
-    fnProbe.train(exs.map((_, sl, pr) => (z(query(pr, fnPrefix(sl.table))), sl.shape.split(" ")(1))), steps = 300, lr = 0.05f)
+    fnProbe.train(exs.map((_, sl, pr) => (z(query(pr, fnPrefix(sl.table))), Readers.part(sl.shape, 1))), steps = 300, lr = 0.05f)
     op = Softmax(ops, d)
     op.train(withWhere.map((_, sl, pr, c, o, _) => (z(query(pr, opPrefix(sl.table, c))), o)), steps = 300, lr = 0.05f)
     val value = Pointer(d)
@@ -164,11 +164,11 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
         else if word("average", "mean", "средн") then "avg" else if word("total", "sum of", "сумм", "итого") then "sum"
         else if word("largest", "highest", "maximum", "самый больш", "наибольш", "максим") && !word("top", "топ", "три", "three", "five", "пять") && !word("per", "by", "по кажд", "в разрезе") then "-"
         else fnByReaders
-      val hasGroup = word("per ", "by ", "each", "по кажд", "в разрезе", "по стат", "по город", "по клиент", "по стран") || (fn != "-" && fn != "count" && marginal(_.split(" ")(3) == "group") > 0.5)
-      val hasOrder = word("largest", "smallest", "highest", "lowest", "descending", "first", "top", "самы", "наибольш", "по убыван", "по возраст", "топ") || marginal(_.split(" ")(4) == "order") > 0.6
-      val hasLimit = word("top", "топ", "three", "five", "ten", "три", "пять", "десять") || (word("largest", "smallest", "highest", "самый", "наибольш") && fn == "-" && !hasGroup) || marginal(_.split(" ")(5) == "limit") > 0.6
-      val hasSelect = marginal(_.split(" ")(7) == "select") > 0.5
-      val hasWhere = fact.isDefined || marginal(_.split(" ")(2) != "-") > 0.5
+      val hasGroup = word("per ", "by ", "each", "по кажд", "в разрезе", "по стат", "по город", "по клиент", "по стран") || (fn != "-" && fn != "count" && marginal(c => Readers.part(c, 3) == "group") > 0.5)
+      val hasOrder = word("largest", "smallest", "highest", "lowest", "descending", "first", "top", "самы", "наибольш", "по убыван", "по возраст", "топ") || marginal(c => Readers.part(c, 4) == "order") > 0.6
+      val hasLimit = word("top", "топ", "three", "five", "ten", "три", "пять", "десять") || (word("largest", "smallest", "highest", "самый", "наибольш") && fn == "-" && !hasGroup) || marginal(c => Readers.part(c, 5) == "limit") > 0.6
+      val hasSelect = marginal(c => Readers.part(c, 7) == "select") > 0.5
+      val hasWhere = fact.isDefined || marginal(c => Readers.part(c, 2) != "-") > 0.5
       val sh = if closure then Array(if closureTo then "closure-to" else "closure-from")
         else Array("rel", fn, if hasWhere then "=" else "-", if hasGroup then "group" else "-", if hasOrder then "order" else "-",
           if hasLimit then "limit" else "-", "-", if hasSelect then "select" else "-")
@@ -290,6 +290,8 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     println(s"  readers loaded: $path")
 
 object Readers:
+  /** a part of a compound shape class; "-" where the class has none (a closure) */
+  def part(shape: String, i: Int): String = shape.split(" ").lift(i).getOrElse("-")
   /** the readers for a model and a layer: loaded from the cache when there (DESK_RETRAIN=1 trains again) */
   def ready(chat: Chat, model: Qwen3, layer: Int, repo: String, pairs: => Vector[Pairs.Pair]): Readers =
     val r = Readers(chat, model, layer)
