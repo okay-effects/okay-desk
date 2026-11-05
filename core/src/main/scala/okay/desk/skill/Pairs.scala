@@ -1,4 +1,4 @@
-package okay.desk.bench
+package okay.desk.skill
 
 import okay.desk.*
 

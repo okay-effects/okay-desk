@@ -2,6 +2,7 @@ package okay.desk.bench
 
 import mlx.llm.{Adaptable, Chat, Lora, Model, Models, Qwen35}
 import okay.desk.Prompt
+import okay.desk.skill.Pairs
 
 /**
  * A SMALL MODEL TRAINED ON THE PAIRS (specs/data.md §5): LoRA on MLX (mlx-scala), each example the page's prompt

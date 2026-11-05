@@ -2,6 +2,7 @@ package okay.desk.bench
 
 import mlx.llm.{Chat, Model, Models, Qwen3, Session}
 import okay.desk.*
+import okay.desk.skill.*
 
 /**
  * SELF-PLAY WITH A CONSISTENCY JUDGE (specs/data.md §13, stage 2 of the plan): the small model learns from itself.
@@ -67,7 +68,7 @@ object SelfPlay:
     val gold = Pairs.many(42, 600); val held = Pairs.many(43, 200)
     // the readers that answer during self-play: trained on the gold first (the bootstrap: a model must read before
     // it can judge itself); the EXPERIMENT trains fresh readers on the self-verified pairs alone
-    val answering = Readers.ready(chat, model, layer, repo, gold)
+    val answering = MlxReading.ready(chat, model, layer, repo, gold)
     val rnd = new scala.util.Random(9)
     val accepted = Vector.newBuilder[Pairs.Pair]
     var asked = 0; var programs = 0; var agreed = 0; var roundTrips = 0
@@ -96,7 +97,7 @@ object SelfPlay:
       if r % 10 == 0 then println(f"round $r: asked $asked, programs $programs, readers agreed $agreed, round trips $roundTrips (${(System.nanoTime() - t0) / 1e9}%.0f s)")
     val self = accepted.result()
     println(s"self-verified pairs: ${self.size} of $asked questions; e.g.\n  " + self.take(5).map(p => s"${p.question}\n    → ${p.program}").mkString("\n  "))
-    val fresh = Readers(chat, model, layer)
+    val fresh = Readers(MlxReading(chat, model, layer))
     if self.size >= 50 then
       fresh.train(self)
       println("readers trained on the self-verified pairs alone, measured on the held-out gold:")

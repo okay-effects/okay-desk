@@ -10,7 +10,7 @@ object PointerProbe:
       val q = if y < 4 then keys(y).map(_ + rnd.nextGaussian().toFloat * 0.3f) else vec()
       (q, keys, y)
     }
-    val p = Probes.Pointer(d, 16)
+    val p = okay.desk.skill.Probes.Pointer(d, 16)
     val before = data.count((q, k, y) => p.predict(q, k) == y)
     p.train(data, steps = 150, lr = 0.05f)
     val after = data.count((q, k, y) => p.predict(q, k) == y)

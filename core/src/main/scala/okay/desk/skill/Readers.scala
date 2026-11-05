@@ -1,6 +1,5 @@
-package okay.desk.bench
+package okay.desk.skill
 
-import mlx.llm.{Chat, Qwen3}
 import okay.desk.*
 
 /**
@@ -10,9 +9,8 @@ import okay.desk.*
  * not generated); the program is assembled — exact, well-formed by construction. `program` answers a question the
  * way the page's loop would, with no generation at all.
  */
-final class Readers(chat: Chat, model: Qwen3, layer: Int):
+final class Readers(reading: Reading):
   import Probes.*
-  private val tok = chat.tokenizer
   private var mean: Array[Float] = Array.empty; private var std: Array[Float] = Array.empty; private var scale = 1f
   private def z(x: Array[Float]): Array[Float] =
     Array.tabulate(x.length)(i => math.max(-4f, math.min(4f, (x(i) - mean(i)) / std(i))) * scale)
@@ -27,23 +25,20 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
   private def valuePrefix(t: String, c: String, o: String) = opPrefix(t, c) + o + "\", \"value\": "
 
   private def query(pr: Prompted, prefix: String): Array[Float] =
-    val ids = pr.ids ++ tok.encode(prefix)
-    states(model, ids, Seq(layer), Vector(ids.length - 1))(layer).head
+    val ids = pr.ids ++ reading.encode(prefix)
+    reading.states(ids, Vector(ids.length - 1)).head
   private def keys(pr: Prompted): Vector[Array[Float]] =
-    states(model, pr.ids, Seq(layer), pr.names.map(_._2))(layer)
+    reading.states(pr.ids, pr.names.map(_._2))
   private def questionStates(pr: Prompted): Vector[Array[Float]] =
-    states(model, pr.ids, Seq(layer), pr.question)(layer)
+    reading.states(pr.ids, pr.question)
 
   /** ASK — the second reader (bridge-4's lesson: two readers fail on different phrasings; their sum read 100%): the
    * model's own next-token log-probabilities at the prefix's end, over the candidates' first tokens */
   private def ask(pr: Prompted, prefix: String, candidates: Vector[String]): Array[Float] =
-    val ids = pr.ids ++ tok.encode(prefix)
-    val st = model.newState(); val s = new mlx.Scope
-    try
-      val l = mlx.Mlx.astype(model.logits(mlx.Mlx.ints(ids, 1, ids.length)(using s), st)(using s), mlx.Dtype.Float32)(using s).toFloats
-      val m = l.max; val z = math.log(l.map(v => math.exp((v - m).toDouble)).sum)
-      candidates.map(c => (l(tok.encode(c).head) - m - z).toFloat).toArray
-    finally { s.close(); st.close() }
+    val ids = pr.ids ++ reading.encode(prefix)
+    val l = reading.logits(ids)
+    val m = l.max; val z = math.log(l.map(v => math.exp((v - m).toDouble)).sum)
+    candidates.map(c => (l(reading.encode(c).head) - m - z).toFloat).toArray
   private def logSoftmax(xs: Array[Float]): Array[Float] =
     val m = xs.max; val z = math.log(xs.map(v => math.exp((v - m).toDouble)).sum)
     xs.map(v => (v - m - z).toFloat)
@@ -75,8 +70,8 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     Option.when(at >= 0)(pr.qChars.lastIndexWhere(_ <= at)).filter(_ >= 0)
 
   def train(pairs: Vector[Pairs.Pair]): Unit =
-    val exs = pairs.flatMap(p => slots(p.program).map(sl => (p, sl, prompted(chat, p))))
-    val base = exs.map((_, sl, pr) => (sl, pr, states(model, pr.ids, Seq(layer), (pr.ids.length - 1) +: pr.names.map(_._2))(layer)))
+    val exs = pairs.flatMap(p => slots(p.program).map(sl => (p, sl, prompted(reading, p))))
+    val base = exs.map((_, sl, pr) => (sl, pr, reading.states(pr.ids, (pr.ids.length - 1) +: pr.names.map(_._2))))
     val all = base.flatMap(_._3)
     val d = all.head.length
     mean = Array.tabulate(d)(i => all.map(_(i)).sum / all.size)
@@ -125,10 +120,10 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
 
   /** the question answered by the readers: the program's text, or why not */
   def program(tables: Map[String, Table], question: String): Either[String, String] =
-    val pr = prompted(chat, Pairs.Pair(tables, question, ""))
+    val pr = prompted(reading, Pairs.Pair(tables, question, ""))
     val names = pr.names.map(_._1)
     val ks = keys(pr).map(z)
-    val last = z(states(model, pr.ids, Seq(layer), Vector(pr.ids.length - 1))(layer).head)
+    val last = z(reading.states(pr.ids, Vector(pr.ids.length - 1)).head)
     val ti = pointers("table").predict(last, ks)
     if ti >= names.size then Left("no table read")
     else
@@ -295,7 +290,7 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
   /** the readers measured on held-out pairs, slot by slot: the pointer alone against the pointer with ask — so a
    * change is judged on 200 pairs, not on the bench's 12 questions */
   def measure(pairs: Vector[Pairs.Pair]): Unit =
-    val exs = pairs.flatMap(p => slots(p.program).map(sl => (p, sl, prompted(chat, p))))
+    val exs = pairs.flatMap(p => slots(p.program).map(sl => (p, sl, prompted(reading, p))))
     var shapeRight = 0
     val right = scala.collection.mutable.Map.empty[String, (Int, Int, Int, Int)].withDefaultValue((0, 0, 0, 0))
     for (p, sl, pr) <- exs do
@@ -319,43 +314,53 @@ final class Readers(chat: Chat, model: Qwen3, layer: Int):
     println(f"  measured on ${exs.size} held-out pairs: shape ${shapeRight * 100.0 / exs.size}%.1f%%; " +
       right.toVector.sortBy(_._1).map((k, v) => f"$k pointer ${v._2 * 100.0 / v._1}%.0f%% ask ${v._3 * 100.0 / v._1}%.0f%% both ${v._4 * 100.0 / v._1}%.0f%% (${v._1})").mkString(", "))
 
-  // ---- the readers kept: trained once, loaded in seconds (Java serialization of the arrays: a skill is a file)
-  def save(path: java.nio.file.Path): Unit =
-    java.nio.file.Files.createDirectories(path.getParent)
-    val out = new java.io.ObjectOutputStream(java.nio.file.Files.newOutputStream(path))
-    try
-      out.writeObject((mean, std, scale))
-      out.writeObject((shape.classes, shape.w, shape.b))
-      out.writeObject((op.classes, op.w, op.b))
-      out.writeObject((fnProbe.classes, fnProbe.w, fnProbe.b))
-      out.writeObject(pointers.toMap.map((k, p) => k -> (p.wq, p.wk, p.none)))
-    finally out.close()
-    println(s"  readers saved: $path (${java.nio.file.Files.size(path) / 1024} KB)")
+  // ---- the readers as bytes (a skill is a file, read on the JVM and in the browser alike): a header, then named
+  // tensors — a text line "name length" and float32 LE; the classes of a probe as a text line
+  def bytes: Array[Byte] =
+    val out = new java.io.ByteArrayOutputStream
+    def line(s: String): Unit = out.write((s + "\n").getBytes("UTF-8"))
+    def tensor(name: String, xs: Array[Float]): Unit =
+      line(s"$name ${xs.length}")
+      val b = java.nio.ByteBuffer.allocate(xs.length * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      xs.foreach(b.putFloat); out.write(b.array())
+    def probe(name: String, p: Softmax): Unit =
+      line(s"$name.classes ${p.classes.mkString("\t")}"); tensor(s"$name.w", p.w.flatten); tensor(s"$name.b", p.b)
+    line(s"readers ${mean.length} ${pointers.size}")
+    tensor("mean", mean); tensor("std", std); tensor("scale", Array(scale))
+    probe("shape", shape); probe("op", op); probe("fn", fnProbe)
+    for (k, p) <- pointers.toVector.sortBy(_._1) do
+      line(s"pointer $k ${p.wq.length}"); tensor(s"$k.wq", p.wq.flatten); tensor(s"$k.wk", p.wk.flatten); tensor(s"$k.none", p.none)
+    out.toByteArray
 
-  def load(path: java.nio.file.Path): Unit =
-    val in = new java.io.ObjectInputStream(java.nio.file.Files.newInputStream(path))
-    try
-      val (m, s, sc) = in.readObject().asInstanceOf[(Array[Float], Array[Float], Float)]
-      mean = m; std = s; scale = sc
-      val (sc1, sw, sb) = in.readObject().asInstanceOf[(Vector[String], Array[Array[Float]], Array[Float])]
-      shape = Softmax(sc1, m.length); sw.copyToArray(shape.w); sb.copyToArray(shape.b)
-      val (oc, ow, ob) = in.readObject().asInstanceOf[(Vector[String], Array[Array[Float]], Array[Float])]
-      op = Softmax(oc, m.length); ow.copyToArray(op.w); ob.copyToArray(op.b)
-      val (fc, fw, fb) = in.readObject().asInstanceOf[(Vector[String], Array[Array[Float]], Array[Float])]
-      fnProbe = Softmax(fc, m.length); fw.copyToArray(fnProbe.w); fb.copyToArray(fnProbe.b)
-      val ps = in.readObject().asInstanceOf[Map[String, (Array[Array[Float]], Array[Array[Float]], Array[Float])]]
-      for (k, (wq, wk, none)) <- ps do
-        val p = Pointer(m.length); wq.copyToArray(p.wq); wk.copyToArray(p.wk); none.copyToArray(p.none); pointers(k) = p
-    finally in.close()
-    println(s"  readers loaded: $path")
+  def load(bytes: Array[Byte]): Unit =
+    var at = 0
+    def line(): String =
+      val start = at
+      while bytes(at) != '\n'.toByte do at += 1
+      at += 1
+      new String(bytes, start, at - 1 - start, "UTF-8")
+    def tensor(): Array[Float] =
+      val len = line().split(" ").last.toInt
+      val b = java.nio.ByteBuffer.wrap(bytes, at, len * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      at += len * 4
+      Array.fill(len)(b.getFloat)
+    def probe(): Softmax =
+      val classes = line().split(" ", 2).last.split("\t").toVector
+      val w = tensor(); val b = tensor()
+      val p = Softmax(classes, w.length / classes.size)
+      w.grouped(w.length / classes.size).zipWithIndex.foreach((row, i) => row.copyToArray(p.w(i))); b.copyToArray(p.b)
+      p
+    val head = line().split(" ")
+    val d = head(1).toInt; val n = head(2).toInt
+    mean = tensor(); std = tensor(); scale = tensor()(0)
+    shape = probe(); op = probe(); fnProbe = probe()
+    for _ <- 1 to n do
+      val h = line().split(" "); val k = h(1); val rows = h(2).toInt
+      val wq = tensor(); val wk = tensor(); val none = tensor()
+      val p = Pointer(d, rows)
+      wq.grouped(d).zipWithIndex.foreach((row, i) => row.copyToArray(p.wq(i))); wk.grouped(d).zipWithIndex.foreach((row, i) => row.copyToArray(p.wk(i)))
+      none.copyToArray(p.none); pointers(k) = p
 
 object Readers:
   /** a part of a compound shape class; "-" where the class has none (a closure) */
   def part(shape: String, i: Int): String = shape.split(" ").lift(i).getOrElse("-")
-  /** the readers for a model and a layer: loaded from the cache when there (DESK_RETRAIN=1 trains again) */
-  def ready(chat: Chat, model: Qwen3, layer: Int, repo: String, pairs: => Vector[Pairs.Pair]): Readers =
-    val r = Readers(chat, model, layer)
-    val path = java.nio.file.Path.of(sys.props("user.home"), ".cache", "okay-desk", s"readers-${repo.split('/').last}-$layer.bin")
-    if java.nio.file.Files.exists(path) && !scala.sys.env.contains("DESK_RETRAIN") then r.load(path)
-    else { r.train(pairs); r.save(path) }
-    r
