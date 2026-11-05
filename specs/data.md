@@ -324,3 +324,19 @@ file answers the bench like an untouched 4B, in two languages, with nothing gene
 slots where the model decides them; two readers (a probe and the model asked) where a judgement is needed; exact
 facts from the data and the question's own words wherever the data knows; an assembler that cannot write a
 malformed program; and judging every reader on held-out pairs, not on the bench.
+
+## 13. Self-play, the first run (2026-11-05)
+
+`SelfPlay`: the 0.6B writes 5 questions per random schema (en or ru, its own words), the readers answer each with a
+program, the judge accepts when the two readers agreed on every slot AND the program said back as a question
+reads to the same program; fresh readers trained on the accepted pairs alone, measured against the gold-trained
+ones on the same 200 held-out gold pairs. 60 rounds: 296 questions, 273 programs, 197 agreed, 161 round trips
+(54% accepted). The result, honestly negative: shape 13.5% against 84.0%; the columns by ask the same (ask needs
+no training), by the pointer worse (34–63% against 56–62%).
+
+Why: the consistency judge passes what is CONSISTENTLY WRONG — "How many edges are there in the 'cache'
+category?" read as a count over `flights` by both readers, and the round trip (a paraphrase of the wrong program)
+agrees with itself; and the accepted set is small and narrow (28 of 161 with a condition). Consistency is not
+correctness. The judge must hold exact facts: a table, a column or a value the question names must be in the
+program, and nothing named must be absent — the data's own check, as everywhere else in this work; and the
+questions must be asked for their variety (a condition, a group, a top-N, a reach). Next run with both.
