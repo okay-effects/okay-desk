@@ -140,10 +140,10 @@ object Main:
 
   /** a file from the internet: its URL fetched (the host must allow it — CORS: GitHub's raw files, a Google Sheet
    * published as CSV, open-data portals do; a plain web page usually does not) */
-  def openUrl(): Unit =
+  def openUrlPrompt(): Unit =
     val url = dom.window.prompt("The address of a CSV, TSV or JSON file (the host must allow cross-origin reads):", "")
-    if url != null && url.trim.nonEmpty then
-      val u = url.trim
+    if url != null && url.trim.nonEmpty then openUrl(url.trim)
+  def openUrl(u: String): Future[Unit] =
       val name = u.split("[?#]").head.split("/").last match { case n if n.matches(".*\\.(csv|tsv|json|jsonl|ndjson)$") => n; case n => n + ".csv" }
       dom.fetch(u).toFuture.flatMap { r =>
         if !r.ok then Future.failed(IllegalStateException(s"HTTP ${r.status}")) else r.text().toFuture
@@ -231,13 +231,17 @@ object Main:
         " ", button("Load the model", disabled <-- busy.signal, onClick --> { _ => if model.now() == "readers" then Readers.load("model", 19) else loadModel(model.now()); () }),
         " ", button("Open files", onClick --> { _ => openFiles() }),
         " ", button("Open a folder", onClick --> { _ => openFolder() }),
-        " ", button("Open a URL", onClick --> { _ => openUrl() }),
+        " ", button("Open a URL", onClick --> { _ => openUrlPrompt() }),
+        " ", a(href := "examples.html", "Examples of open data"),
         input(idAttr := "files", tpe := "file", multiple := true, display := "none", onChange --> { e => fromInput(e.target.asInstanceOf[dom.html.Input]) }),
         input(idAttr := "folder", tpe := "file", htmlAttr("webkitdirectory", com.raquo.laminar.codecs.BooleanAsAttrPresenceCodec) := true, display := "none",
           onChange --> { e => fromInput(e.target.asInstanceOf[dom.html.Input]) }),
         span(cls := "status", child.text <-- status.signal)),
+      // the open tables: each with its schema folded, and a button that closes it (the others stay)
       div(cls := "tables", children <-- tables.signal.map(ts => ts.values.toVector.sortBy(_.name).map(t =>
-        detailsTag(summaryTag(s"${t.name}: ${t.size} rows"), pre(t.describe))))),
+        detailsTag(summaryTag(span(s"${t.name}: ${t.size} rows, ${t.columns.size} columns"), " ",
+          button(cls := "close", title := s"close ${t.name}", "×", onClick.preventDefault.stopPropagation --> { _ =>
+            tables.update(_ - t.name); say("system", s"closed ${t.name}") })), pre(t.describe))))),
       div(cls := "log", children <-- log.signal),
       form(onSubmit.preventDefault --> { _ => val q = question.now().trim; if q.nonEmpty then { question.set(""); ask(q) } },
         input(cls := "q", placeholder := "ask about the data: how many orders are unpaid? total by customer? …",
@@ -279,5 +283,10 @@ object Main:
     }.recover { case t => say(s"selftest: failed: $t") }
 
   def main(args: Array[String]): Unit =
-    renderOnDomContentLoaded(dom.document.getElementById("app"), page)
+    if dom.document.getElementById("examples") != null then renderOnDomContentLoaded(dom.document.getElementById("examples"), Examples.page)
+    else
+      renderOnDomContentLoaded(dom.document.getElementById("app"), page)
+      // `?open=<url>` (repeated): the files opened as the page starts — the examples page's links
+      val opens = new dom.URLSearchParams(dom.window.location.search).getAll("open").toVector
+      if opens.nonEmpty then opens.foldLeft(Future.unit)((acc, u) => acc.flatMap(_ => openUrl(u)))
     if dom.window.location.search.contains("selftest") then selftest()

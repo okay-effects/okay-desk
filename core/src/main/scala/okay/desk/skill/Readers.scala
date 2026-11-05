@@ -162,13 +162,26 @@ final class Readers:
     def q(s: String) = "\"" + s + "\""
     // EXACT FACTS FROM THE DATA constrain the reads: a value of a column written in the question (a word of 3+ letters,
     // a date) means a condition on that column — and a join, when the column is in another table reachable by one
-    def joinTo(o: Table): Option[String] =
-      t.columns.find(c => t.rows.forall(r => o.rows.exists(_(0).text == r(t.columns.indexOf(c)).text)))
+    // a join to another table: the table's column whose every value names a row of the other (its first column) —
+    // found once per table, by a set (on 3376 × 503 rows the row-by-row search took 90 s a question)
+    val joinOf: Map[String, Option[String]] = tables.values.map { o =>
+      val keys = o.rows.map(_(0).text).toSet
+      o.name -> (if o.name == table || t.rows.isEmpty then None
+        else t.columns.zipWithIndex.collectFirst { case (c, i) if t.rows.forall(r => keys(r(i).text)) => c })
+    }.toMap
+    def joinTo(o: Table): Option[String] = joinOf(o.name)
+    // the question's words and their runs of up to four (a value of several words): a value is named when it is one
+    // of them — but never a word of the question itself ("how MANY" is not the city Many, "IN" not the state), and a
+    // short code (AK, IN, UA) only as written, in capitals
+    val qWords = "(?U)[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*".r.findAllIn(question).map(_.replaceAll("[.'-]+$", "")).toVector
+    val grams: Set[String] = (1 to 4).flatMap(k => if qWords.size >= k then qWords.sliding(k).map(_.mkString(" ")) else Nil).toSet
+    val gramsLower = grams.map(_.toLowerCase)
+    def inQuestion(v: String): Boolean =
+      !Readers.stop(v.toLowerCase) && (if v.length <= 3 && v.forall(_.isUpper) then grams(v) else gramsLower(v.toLowerCase))
     val found: Vector[(Table, String, String)] = tables.values.toVector.flatMap { o =>
-      o.columns.flatMap { c =>
-        val vs = o.rows.map(_(o.columns.indexOf(c)).text).distinct
-        vs.filter(v => (v.length >= 3 && !v.forall(_.isDigit) || v.length >= 2 && v.forall(_.isUpper) || v.matches("\\d{4}-\\d\\d-\\d\\d")) &&
-          lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(v.toLowerCase)}\\b.*")).map(v => (o, c, v))
+      o.columns.zipWithIndex.flatMap { (c, i) =>
+        o.rows.map(_(i).text).distinct.filter(v => (v.length >= 3 && !v.forall(_.isDigit) || v.length >= 2 && v.forall(_.isUpper) ||
+          v.matches("\\d{4}-\\d\\d-\\d\\d")) && inQuestion(v)).map(v => (o, c, v))
       }
     }.filter((o, _, _) => o.name == table || joinTo(o).isDefined).sortBy((o, _, v) => (if o.name == table then 0 else 1, -v.length))
     // every fact a condition; the first the "fact" (the join and the where column)
@@ -235,7 +248,7 @@ final class Readers:
         rest = question.drop(from)
         copied = vs.find(v => rest.toLowerCase.startsWith(v.toLowerCase))
           .orElse("^\\s*(\\d{4}-\\d\\d-\\d\\d|\\d+(?:\\.\\d+)?)".r.findFirstMatchIn(rest).map(_.group(1)))
-          .orElse(vs.find(v => lower.contains(v.toLowerCase)))
+          .orElse(vs.find(inQuestion))
           .orElse("\\d{4}-\\d\\d-\\d\\d|\\d+(?:\\.\\d+)?".r.findAllIn(question).toVector.lastOption)
         // nothing copied (a translated value, "не оплачено"): the model asked over the column's values
         v <- copied.fold(
@@ -432,6 +445,12 @@ final class Readers:
       none.copyToArray(p.none); pointers(k) = p
 
 object Readers:
+  /** the words of a question that are never a value of the data */
+  val stop: Set[String] = Set("how", "many", "much", "which", "what", "where", "who", "when", "in", "of", "per", "by", "the",
+    "a", "an", "is", "are", "was", "were", "with", "for", "from", "to", "on", "at", "and", "or", "not", "all", "each", "every",
+    "there", "that", "this", "than", "сколько", "какие", "какой", "какая", "какое", "что", "кто", "где", "когда", "в", "по",
+    "из", "на", "и", "или", "не", "все", "всех", "каждый", "каждом", "каждого", "за", "с", "у", "от", "до", "для", "как", "это",
+    "есть", "чем")
   /** a part of a compound shape class; "-" where the class has none (a closure) */
   def part(shape: String, i: Int): String = shape.split(" ").lift(i).getOrElse("-")
 
