@@ -250,3 +250,17 @@ readers on the untouched 1.7B are now a question away from its LoRA. What is lef
 constant that translates the table's value (`не оплачено` → `unpaid`: ask over the column's VALUES will say it),
 "Три" not read as 3 (a `\b` that does not know Cyrillic), the op `!=` where `=` was meant on the 1.7B, a join read
 on a question without one.
+
+**With the translated constant read by ask over the column's values, and Cyrillic number words:**
+
+| readers + assembler, model untouched | en | ru |
+|---|---|---|
+| Qwen3-0.6B | 8/12 | **8/12** |
+| Qwen3-1.7B (layer 22) | 9/12 | **9/12** |
+| for comparison: 1.7B with LoRA (free / masked) | 10/12 / 9/12 | 8+1/12 / 9/12 |
+
+Russian caught up with English on both models (6 → 8, 7 → 9): `не оплачено` is now read as `unpaid` by the
+model's own judgement over the column's values — a judgement, read, not generated. The readers on the untouched
+1.7B now equal its LoRA; on the 0.6B they pass it by two. What is left: the op `!=` read where `=` was meant
+(the 1.7B on "unpaid" and "paid": the op reader at `"op": "` before the value is known), a join read on a plain
+question, the closure's direction in one Russian question, a group column. Each a read; each with a name.
