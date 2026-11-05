@@ -264,3 +264,20 @@ model's own judgement over the column's values — a judgement, read, not genera
 1.7B now equal its LoRA; on the 0.6B they pass it by two. What is left: the op `!=` read where `=` was meant
 (the 1.7B on "unpaid" and "paid": the op reader at `"op": "` before the value is known), a join read on a plain
 question, the closure's direction in one Russian question, a group column. Each a read; each with a name.
+
+## 12. Toward no errors on the 0.6B (2026-11-05, in progress)
+
+The operator: "focus on the 0.6B — can it stop erring, with our ideas?" Tried so far, each on the bench:
+
+| change | en | ru |
+|---|---|---|
+| pointers + ask, the value by ask over values (§11) | 8/12 | 8/12 |
+| + exact facts from the data (a value in the question forces its column's condition and the join); pairs rebalanced (joins on any text column, "the largest with a condition") | 9/12 | 7/12 |
+| + the shape by two readers (the probe + the model asked which section comes first), the join from the data only | 6/12 | 4/12 |
+
+Two lessons. The exact facts help where they apply (the date's column, the join) but the rebalanced pairs made the
+shape probe see joins everywhere — a bias moves when the data moves, so a reader must be judged on held-out PAIRS,
+not on the bench's 24 questions: `Readers.measure` now reports each reader alone and with ask on 200 held-out
+pairs before the bench runs. And the 0.6B's own prior at the shape prefix is "sum" for everything — ask helps a
+column (the choice is among the schema's names) and hurts the shape (a choice among sections the model has no
+feel for); so the shape stays with the probe, and the join is the data's decision, never the model's.
