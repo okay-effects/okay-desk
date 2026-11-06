@@ -40,3 +40,8 @@ local/Qwen3-0.6B-4bit-cut19-noattn17           readers | en: 10/12 | ru: 6/12  (
 local/Qwen3-0.6B-4bit-cut19-nomlp17            readers | en: 12/12 | ru: 8/12  (399 s)
 local/Qwen3-0.6B-4bit-cut19-noattn18           readers | en: 12/12 | ru: 6/12  (414 s)
 local/Qwen3-0.6B-4bit-cut19-nomlp18            readers | en: 12/12 | ru: 8/12  (396 s)
+# 2026-11-06T17:36 the student by the map: sets silenced together, the teacher's skill unchanged / retrained
+free           (4 components, 14 MB less) | the teacher's skill: en: 11/12 | ru: 2/12 | retrained: en: 10/12 | ru: 6/12  (446 s)
+free+near      (15 components, 59 MB less) | the teacher's skill: en: 6/12 | ru: 1/12 | retrained: en: 6/12 | ru: 3/12  (436 s)
+free+ru        (13 components, 48 MB less) | the teacher's skill: en: 9/12 | ru: 5/12 | retrained: en: 6/12 | ru: 3/12  (435 s)
+free+near+ru   (24 components, 94 MB less) | the teacher's skill: en: 6/12 | ru: 1/12 | retrained: en: 6/12 | ru: 3/12  (431 s)
