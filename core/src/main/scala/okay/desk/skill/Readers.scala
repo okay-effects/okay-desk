@@ -222,7 +222,9 @@ final class Readers:
     val cols = t.columns.map(c => (table, c)) ++ joinable.flatMap((o, _) => o.columns.filterNot(c => t.columns.contains(c) || c == "name").map(c => (o.name, c)))
     // EXACT FIRST: a column named in the question (its name, a word of 3+ letters) is the column — the readers decide
     // only among what the question does not name (a translation: "по городам" for city)
-    val named = cols.filter((_, c) => c.length >= 3 && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase)}\\b.*"))
+    // (a column is named by its name, or its name's plural or singular: "values" names Value, "orders" an order column)
+    val named = cols.filter((_, c) => c.length >= 3 && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase)}(s|es)?\\b.*") ||
+      c.length >= 4 && c.toLowerCase.endsWith("s") && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase.dropRight(1))}\\b.*"))
     val used = scala.collection.mutable.Set.empty[String]
     def column(slot: String): Option[String] ! R =
       val prefix = prefixes.find(_._1 == slot).get._2(table)
