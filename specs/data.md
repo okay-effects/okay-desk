@@ -458,3 +458,18 @@ CacheSuite and self-test). The page on WebGPU: 0.5–0.9 s a question (was 2.3�
 For the phone (an older iPhone: WebGL2): the weights are read from the fetched buffer with no copy and not kept
 (the tab had 244 MB twice beside the GPU's copy), WebGL2 keeps a pool of textures instead of creating and deleting
 one per op (the driver freed them late), and the model's failures are written on the page.
+
+## 18. Growth, and a time in the question (2026-11-06)
+
+"Where GDP grows fastest?" on the World Bank's series read as `Country Name = ""`: an empty condition, and no way to
+say growth at all — a change between rows of one entity in the order of time is not a filter, a group or a sum.
+Added to the language: `growth` and `change` aggregates with `by` (the time column): within each group the last
+value against the first in the order of `by` — a fraction of the first, or a difference (GrowthSuite). The readers
+read a question of growth by its words (grow, growth, fastest, rose, рост, вырос…) when the table has a time
+column (year, date, day, month…), the entity as the first text column that is not a code, the measure as the
+first number column that is not the time; the shape group + growth + order + limit (ten unless a number is said).
+A year written in the question that is a value of the time column is a condition on it ("in 2020"), and not the
+limit's number. A condition with no value is no condition. Live: Ukraine in 2020 → one row; the ten largest in
+2023; growth per country — Georgia first, its series beginning near zero (the measure is the whole series' growth;
+"recent" growth would need a window, not yet said). The phone (an older iPhone, WebGL2) loads the model and
+answers — the first report from it came with the earlier program, before this landed.
