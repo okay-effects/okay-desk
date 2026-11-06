@@ -35,7 +35,7 @@ class AppSuite extends munit.FunSuite:
 
   test("files opened, a table closed, the model loaded, a question answered by the exact engine"):
     val p = play(Nil, Act.press("Open the files", "Files, or a whole folder (CSV, TSV, JSON)" -> bundle),
-      Act.press("Close customers"), Act.press("Load the model"),
+      Act.press("Close customers"), Act.press("Qwen3 0.6B cut + readers (244 MB, no generation)"),
       Act.press("Ask", "Ask about the data: how many orders are unpaid? total by customer? …" -> "How many orders are unpaid?"))
     assert(p.problems.isEmpty, p.problems.toString)
     val t = text(p)

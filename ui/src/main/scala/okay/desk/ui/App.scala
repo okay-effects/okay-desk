@@ -116,16 +116,19 @@ object App:
   // ---- the screen
   val filesForm: Form[List[(String, String)]] = Form.one(Field.files("Files, or a whole folder (CSV, TSV, JSON)", accept))
   val urlForm: Form[String] = Form.one(Field.text("The address of a file on the internet (the host must allow cross-origin reads)"))
-  def modelForm(current: String): Form[String] =
-    Form.one(Field.choice[String]("The model", Model.choices.map((k, l) => (l, k))*).initially(current))
-  val questionForm: Form[String] = Form.one(Field.text("Ask about the data: how many orders are unpaid? total by customer? …"))
+  val questionForm: Form[String] = Form.one(Field.longText("Ask about the data: how many orders are unpaid? total by customer? …"))
 
+  // THE ORDER OF THE PAGE: the model first (buttons at the top, one a model, the current one marked), then the data
+  // and the ways to open more, then the conversation, and the question last — a form is drawn where its button is
+  // (okay-faces), so the question's button is the last
   def render(s: State): Screen[Msg] =
-    val models = modelForm(s.modelName)   // one form: the screen finds a button's form by identity
     val head = List(Part.block("top")(Part.block("brand")(Part.text("okay-desk")),
       Part.text("Chat with your data — in the browser, offline. Open files from your machine or the internet; a small model " +
         "in the page reads the question into a program, an exact engine runs it. Numbers come from the engine, never " +
-        "from the model. Nothing leaves the browser."))) ++ s.problem.toList.map(Part.problem)
+        "from the model. Nothing leaves the browser.")),
+      Part.section("The model")(Part.block("models")(Part.slot("models")), Part.block("small")(Part.text(s.model.getOrElse(
+        if s.phone then "not loaded yet — on a phone the cut model with the readers (244 MB) is the one that fits; the models that generate (0.4–1.7 GB) are for a computer"
+        else "not loaded yet"))))) ++ s.problem.toList.map(Part.problem)
     // the open tables as a tree: each closed, its columns under it; the buttons that close them in one row
     val tables = if s.tables.isEmpty then Vector(Part.block("small")(Part.text("no file open yet")))
       else Vector(Part.tree("", s.tables.values.toVector.sortBy(_.name).map(t => Part.TreeNode(t.name,
@@ -133,17 +136,15 @@ object App:
           Part.TreeNode(t.name + ":" + l.trim.takeWhile(_ != ':'), l.trim))))*), Part.block("tables")(Part.slot("tables")))
     val data = Part.section("The data")((tables :+ (filesForm: Part) :+ (urlForm: Part) :+
       Part.block("small")(Part.link("Examples of open data — files that open by one link", "examples.html")))*)
-    val model = Part.section("The model")(models, Part.block("small")(Part.text(s.model.getOrElse(
-      if s.phone then "not loaded yet — on a phone the cut model with the readers (244 MB) is the one that fits; the models that generate (0.4–1.7 GB) are for a computer"
-      else "not loaded yet"))))
     val log = s.log.map { e =>
       Part.block(e.role)((List(if e.role == "result" then Part.code(e.text) else Part.text(e.text)) ++
         e.note.toList.map(n => Part.block("small")(Part.text(n))) ++
         e.program.toList.map(p => Part.code("the program", p.split("\n").toList, Set.empty)))*)
     }
     val closes = s.tables.keys.toList.sorted.map(n => Button(s"Close $n")(Msg.Close(n): Msg).at("tables"))
-    Screen[Msg]("okay-desk")((head ++ List(data, model) ++ log :+ (questionForm: Part))*)(
-      (List(Button.submit("Ask", questionForm)(Msg.Ask(_): Msg),
+    val models = Model.choices.map((k, l) => Button(l, if s.modelName == k && s.model.isDefined then Style.Primary else Style.Plain)(Msg.Load(k): Msg).at("models"))
+    Screen[Msg]("okay-desk")((head ++ List(data) ++ log :+ (questionForm: Part))*)(
+      (models ++ closes ++ List(
         Button.submit("Open the files", filesForm, Style.Plain)(Msg.Opened(_): Msg),
         Button.submit("Open the address", urlForm, Style.Plain)(Msg.OpenUrl(_): Msg),
-        Button.submit("Load the model", models, Style.Plain)(Msg.Load(_): Msg)) ++ closes)*)
+        Button.submit("Ask", questionForm)(Msg.Ask(_): Msg)))*)

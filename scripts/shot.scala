@@ -24,9 +24,9 @@ import scala.jdk.CollectionConverters.*
   def body() = p.locator("body").textContent()
   def snap(name: String): Unit = p.screenshot(com.microsoft.playwright.Page.ScreenshotOptions().setPath(Path.of(out).resolveSibling(s"$name.png")).setType(ScreenshotType.PNG))
   p.navigate(url)
-  p.waitForSelector("text=Load the model")
+  p.waitForSelector("text=\"Qwen3 0.6B cut + readers (244 MB, no generation)\"")
   try
-    p.click("button:text-is('Load the model')")
+    p.click("text=\"Qwen3 0.6B cut + readers (244 MB, no generation)\"")
     p.waitForFunction("() => /readers on|cannot load/.test(document.body.textContent)")
   catch
     case e: Throwable =>
@@ -39,7 +39,7 @@ import scala.jdk.CollectionConverters.*
   println("files: opened " + p.locator(".okay-mark-table").count() + " tables")
   for q <- Seq("How many orders are unpaid?", "Total amount per country.") do
     val before = p.locator(".okay-mark-result").count()
-    p.fill("input[id^=f-ask]", q); p.click("button:text-is('Ask')")
+    p.fill("textarea[id^=f-ask]", q); p.click("button:text-is('Ask')")
     try p.waitForFunction(s"() => document.querySelectorAll('.okay-mark-result').length > $before")
     catch
       case e: Throwable =>
