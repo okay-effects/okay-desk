@@ -9,6 +9,7 @@ MODEL_DIR=${MODEL_DIR:-$HOME/.cache/huggingface/hub/models--local--Qwen3-0.6B-4b
 SKILL=${SKILL:-$HOME/.cache/okay-desk/readers-Qwen3-0.6B-4bit-cut19-19.skill}
 # the student (§21), the default model: 12 layers distilled toward the cut's layer-19 state, the same skill file
 SMALL_DIR=${SMALL_DIR:-$HOME/.cache/huggingface/hub/models--local--Qwen3-0.6B-4bit-cut19-vocab-p12-m4/snapshots/main}
+CORE_DIR=${CORE_DIR:-$HOME/.cache/huggingface/hub/models--local--Qwen3-0.6B-4bit-cut19-no-free-ru-m4/snapshots/main}
 sbt -batch coreJVM/test web/fullLinkJS > /dev/null
 out=/tmp/okay-desk-pages
 # THE BRANCH HAS NO HISTORY: every publish is one orphan commit, force-pushed — each kept a 250 MB copy of the weights
@@ -30,6 +31,13 @@ sbt -batch "bench/runMain okay.desk.bench.SplitWeights $MODEL_DIR $out/model" > 
 mkdir -p "$out/model-small"
 cp "$SMALL_DIR/config.json" "$SMALL_DIR/tokenizer.json" "$out/model-small/" && cp "$SKILL" "$out/model-small/readers.skill"
 sbt -batch "bench/runMain okay.desk.bench.SplitWeights $SMALL_DIR $out/model-small" > /dev/null
+# THE CORE (okay-inlay specs/core.md §11): the map's components removed, the contract distilled back, merged — its files
+# without the removed components (SplitWeights leaves them out; the forward skips them), the same skill
+if [ -d "$CORE_DIR" ]; then
+  mkdir -p "$out/model-core"
+  cp "$CORE_DIR/config.json" "$CORE_DIR/tokenizer.json" "$out/model-core/" && cp "$SKILL" "$out/model-core/readers.skill"
+  sbt -batch "bench/runMain okay.desk.bench.SplitWeights $CORE_DIR $out/model-core" > /dev/null
+fi
 touch "$out/.nojekyll"
 git -C "$out" add -A
 git -C "$out" commit -q -m "the page, from $(git rev-parse --short HEAD)"

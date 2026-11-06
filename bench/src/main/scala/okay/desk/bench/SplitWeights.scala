@@ -14,8 +14,20 @@ object SplitWeights:
     java.nio.file.Files.createDirectories(out)
     val st = Safetensors(java.nio.file.Files.readAllBytes(src.resolve("model.safetensors")))
     val tok = Tokenizer.fromJson(okay.effects.json.Json.fromText(java.nio.file.Files.readString(src.resolve("tokenizer.json"))))
-    // the layers, without the embedding
-    val layers = Safetensors.split(st, 60 * 1048576, skip = _.startsWith("model.embed_tokens."))
+    // the layers, without the embedding — and WITHOUT THE COMPONENTS THE MAP REMOVED (okay-inlay specs/core.md §11): a
+    // component whose output's scales are all zero (silenced by Ablate) is left out of the file whole, and the forward
+    // skips it (okay-llm Qwen3Compute: a layer's attention or MLP is optional; SkipSuite: absent == silenced)
+    // (W = scales·q + biases: zero when the scales are, or when the words and the biases are — a merge re-quantizes zeros to
+    // words 0, biases 0, scales −1e-7)
+    def silenced(out: String) = st.has(out + ".weight") && (st.floats(out + ".scales").forall(_ == 0f) ||
+      (st.words(out + ".weight").forall(_ == 0) && st.floats(out + ".biases").forall(_ == 0f)))
+    val gone = (0 until 64).flatMap { i =>
+      val p = s"model.layers.$i."
+      (if silenced(p + "self_attn.o_proj") then Seq(p + "self_attn.", p + "input_layernorm.") else Nil) ++
+        (if silenced(p + "mlp.down_proj") then Seq(p + "mlp.", p + "post_attention_layernorm.") else Nil)
+    }
+    if gone.nonEmpty then println(s"components left out: ${gone.filter(g => g.endsWith("_attn.") || g.endsWith("mlp.")).mkString(", ")}")
+    val layers = Safetensors.split(st, 60 * 1048576, skip = n => n.startsWith("model.embed_tokens.") || gone.exists(n.startsWith))
     val names = layers.indices.map(i => f"weights-$i%02d.safetensors")
     layers.zip(names).foreach((bytes, name) => java.nio.file.Files.write(out.resolve(name), bytes))
     // the embedding by block

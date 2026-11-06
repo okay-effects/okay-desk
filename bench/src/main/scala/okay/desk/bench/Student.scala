@@ -116,7 +116,19 @@ object Distill:
     val std = Array.tabulate(d)(k => math.sqrt(vs.map(v => (v(k) - mean(k)) * (v(k) - mean(k))).sum / vs.size).max(1e-3))
     println(s"teacher $teacherRepo at layer $layer: the spread from ${vs.size} positions; student $studentRepo " +
       s"(${student.layerCount} layers), LoRA rank $rank on every projection")
-    val lora = Lora(student, rank, Seq("q", "k", "v", "o", "gate", "up", "down"), Nil, alpha = 2f * rank, lr = lr)
+    // THE COMPONENTS THE MAP REMOVED (their output's scales all zero) get no adapter: an adapter on a silenced o_proj or
+    // down_proj would grow a low-rank copy of the component back, and the merge would keep it
+    val silenced: Set[String] =
+      val dir = Models.snapshot(studentRepo).get
+      val st = okay.llm.qwen.Safetensors(Files.readAllBytes(dir.resolve("model.safetensors")))
+      (0 until student.layerCount).flatMap { i =>
+        def zero(out: String) = st.has(out + ".weight") && (st.floats(out + ".scales").forall(_ == 0f) ||
+          (st.words(out + ".weight").forall(_ == 0) && st.floats(out + ".biases").forall(_ == 0f)))
+        (if zero(s"model.layers.$i.self_attn.o_proj") then Seq(s"$i.q", s"$i.k", s"$i.v", s"$i.o") else Nil) ++
+          (if zero(s"model.layers.$i.mlp.down_proj") then Seq(s"$i.gate", s"$i.up", s"$i.down") else Nil)
+      }.toSet
+    if silenced.nonEmpty then println(s"no adapter on the removed components: ${silenced.toVector.sorted.mkString(" ")}")
+    val lora = Lora(student, rank, Seq("q", "k", "v", "o", "gate", "up", "down"), Nil, alpha = 2f * rank, lr = lr, except = silenced)
     val keep = new Scope
     val invStd = floats(std.map(x => (1 / x).toFloat), 1, d)(using keep)
     val pairs = Pairs.many(2000, steps)

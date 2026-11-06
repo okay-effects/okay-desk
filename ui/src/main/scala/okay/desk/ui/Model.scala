@@ -42,6 +42,7 @@ object Model:
   /** THE MODELS A PAGE OFFERS: the readers first (the thesis) — the student by default (§21: 12 layers distilled
    * toward the cut's layer-19 state, the same skill file), the cut for comparison — then the models that generate */
   val choices: List[(String, String)] = List(
+    "readers-core" -> "The core: Qwen3 0.6B cut, the map's components removed, distilled back + readers (no generation)",
     "readers-small" -> "Qwen3 0.6B student, 12 layers + readers (122 MB, no generation)",
     "readers" -> "Qwen3 0.6B cut, 19 layers + readers (244 MB, no generation; for comparison)",
     "Qwen3-1.7B-q4f16_1-MLC" -> "Qwen3 1.7B (~1 GB, generates)",
@@ -49,9 +50,9 @@ object Model:
     "Qwen2.5-3B-Instruct-q4f16_1-MLC" -> "Qwen2.5 3B (~1.7 GB, generates)")
 
   /** the models read by the readers: their files' directory on the page and the layer the skill reads */
-  val readers: Map[String, (String, Int)] = Map("readers-small" -> ("model-small", 12), "readers" -> ("model", 19))
+  val readers: Map[String, (String, Int)] = Map("readers-core" -> ("model-core", 19), "readers-small" -> ("model-small", 12), "readers" -> ("model", 19))
   /** the model a page loads unless another is chosen */
-  val default = "readers-small"
+  val default = "readers-core"
   /** whether a model is read by the readers (no generation) */
   def reads(name: String): Boolean = readers.contains(name)
 

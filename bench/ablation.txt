@@ -45,3 +45,12 @@ free           (4 components, 14 MB less) | the teacher's skill: en: 11/12 | ru:
 free+near      (15 components, 59 MB less) | the teacher's skill: en: 6/12 | ru: 1/12 | retrained: en: 6/12 | ru: 3/12  (436 s)
 free+ru        (13 components, 48 MB less) | the teacher's skill: en: 9/12 | ru: 5/12 | retrained: en: 6/12 | ru: 3/12  (435 s)
 free+near+ru   (24 components, 94 MB less) | the teacher's skill: en: 6/12 | ru: 1/12 | retrained: en: 6/12 | ru: 3/12  (431 s)
+free distilled (2000 steps, rank 32), the teacher's skill unchanged: local/Qwen3-0.6B-4bit-cut19-no-free        readers | en: 12/12 | ru: 7/12
+free+ru distilled (2000 steps, rank 32), the teacher's skill unchanged: local/Qwen3-0.6B-4bit-cut19-no-free-ru     readers | en: 12/12 | ru: 7/12
+free+near distilled (2000 steps, rank 32), the teacher's skill unchanged: local/Qwen3-0.6B-4bit-cut19-no-free-near   readers | en: 11/12 | ru: 7/12
+free+near+ru distilled (2000 steps, rank 32), the teacher's skill unchanged: local/Qwen3-0.6B-4bit-cut19-no-free-near-ru readers | en: 11/12 | ru: 5/12
+free+near+ru distilled (5000 steps, rank 64), the teacher's skill unchanged: 
+free+near+ru distilled (5000 steps, rank 64, adapters everywhere), the teacher's skill unchanged: local/Qwen3-0.6B-4bit-cut19-no-free-near-ru readers | en: 12/12 | ru: 6/12
+free+ru distilled (2000 steps, rank 32, NO adapter on the removed), the teacher's skill unchanged: local/Qwen3-0.6B-4bit-cut19-no-free-ru     readers | en: 12/12 | ru: 7/12
+free+near+ru distilled (2000 steps, rank 32, NO adapter on the removed), the teacher's skill unchanged: local/Qwen3-0.6B-4bit-cut19-no-free-near-ru readers | en: 11/12 | ru: 4/12
+the core (free+ru removed, distilled with no adapter on the removed, merged at 4 bits), the teacher's skill unchanged: local/Qwen3-0.6B-4bit-cut19-no-free-ru-m4  readers | en: 12/12 | ru: 6/12
