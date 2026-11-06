@@ -504,3 +504,16 @@ state, so the model stays loaded across them (the examples page is gone; `?open=
 (`Disk`: put, get, names, remove): every file opened is kept by the browser's Cache API under its name, the names
 in local storage, and the tables are there again at the next visit; the model's files are fetched cache-first from
 the same storage, so the second load reads 244 MB from the device. A quota refused is no failure.
+
+## 20. The vocabulary in blocks by language (2026-11-06)
+
+The embedding is 78.7 of the cut model's 244 MB, and most of its rows are tokens of languages a page never meets
+(okay-llm `Vocab`, scripts/vocab.scala): Latin 94,743 rows (49 MB, every Latin language), CJK 30,561 (16 MB),
+common (bytes, digits, marks, the chat's special tokens) 10,088 (5 MB), Cyrillic 4,149 (2.2 MB), Arabic, Hebrew,
+Thai and the rest 12,142 (6 MB). The Latin split by use: the tokens met when a word list with the usual endings and
+the desk's own prompt are encoded are latin-en (~49k rows, 28 MB), the rest latin-rest (26 MB). SplitWeights
+writes a file a block and an index (a byte a token); the page loads common, latin-en and cyrillic (37 MB) and
+fetches another block when a token of it appears (a Chinese word fetched cjk, 17 MB, and the question went on).
+Law (okay-llm VocabSuite): all blocks together == the whole embedding exactly; English and Russian alone: the same
+states, the logits of the loaded tokens the same, the rest −∞. The page: 12/12 and 9/12 unchanged; a page for
+English and Russian is ~205 MB instead of 244.

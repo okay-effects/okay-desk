@@ -45,20 +45,56 @@ object Engine:
       }
     }
   private def text(ab: ArrayBuffer): String = js.Dynamic.newInstance(js.Dynamic.global.TextDecoder)().decode(ab).asInstanceOf[String]
+  /** THE EMBEDDING IN BLOCKS BY LANGUAGE (okay-llm `Vocab`): the manifest names a file a block and an index (a byte a
+   * token: its block); the page loads the blocks of its languages — common, latin-en, cyrillic — and fetches another
+   * when a token of it appears (`ensure`, before a forward; the head made again). Where the manifest has no
+   * blocks, the embedding is in the weights' files as before */
+  private var blocksOf: Option[(String, Map[String, String], Array[Byte], okay.llm.qwen.Rows.Blocks)] = None
+  private val wanted = Vector("common", "latin-en", "cyrillic")
+  private def loadBlock(dir: String, name: String): Future[Unit] = blocksOf match
+    case Some((_, files, _, rows)) if files.contains(name) =>
+      stage(s"the embedding: the $name block…")
+      fetch(s"$dir/${files(name)}").map { b =>
+        val (ids, q) = okay.llm.qwen.Vocab.readBlock(new Safetensors(TypedArrayBuffer.wrap(b))); rows.add(ids, q) }
+    case _ => Future.unit
+  /** the blocks of every token of `ids` loaded (fetched if not yet), the head made again when any was */
+  def ensure(ids: Array[Int]): Future[Unit] = blocksOf match
+    case Some((dir, _, index, rows)) =>
+      val missing = ids.filter(id => id < index.length && !rows.has(id)).map(id => okay.llm.qwen.Vocab.blocks(index(id).toInt)).distinct
+      if missing.isEmpty then Future.unit
+      else missing.foldLeft(Future.unit)((acc, b) => acc.flatMap(_ => loadBlock(dir, b))).map { _ =>
+        Option(on).foreach(_.rehead()); idle() }
+    case None => Future.unit
   /** the weights: the files manifest.json lists (a few layers each, `Tensors.Many` reads them as one — a page never
-   * holds the whole of them twice; GitHub Pages caps a file at 100 MB), else the one model.safetensors */
-  private def weights(dir: String): Future[Tensors] =
+   * holds the whole of them twice; GitHub Pages caps a file at 100 MB), else the one model.safetensors; and the
+   * embedding: in blocks when the manifest has them */
+  private def weights(dir: String, vocab: Int): Future[(Tensors, Option[okay.llm.qwen.Rows])] =
     dom.fetch(s"$dir/manifest.json").toFuture.flatMap { r =>
-      if !r.ok then fetch(s"$dir/model.safetensors").map(b => new Safetensors(TypedArrayBuffer.wrap(b)))
+      if !r.ok then fetch(s"$dir/model.safetensors").map(b => (new Safetensors(TypedArrayBuffer.wrap(b)), None))
       else r.text().toFuture.flatMap { t =>
-        val files = okay.effects.json.Json.fromText(t) match
-          case okay.effects.json.Json.Obj(fs) => fs.collectFirst { case ("files", okay.effects.json.Json.Arr(xs)) =>
-            xs.collect { case okay.effects.json.Json.Str(s) => s } }.getOrElse(Vector.empty)
+        val m = okay.effects.json.Json.fromText(t) match
+          case okay.effects.json.Json.Obj(fs) => fs.toMap
+          case _ => Map.empty[String, okay.effects.json.Json]
+        def strings(k: String) = m.get(k) match
+          case Some(okay.effects.json.Json.Arr(xs)) => xs.collect { case okay.effects.json.Json.Str(s) => s }
           case _ => Vector.empty
-        files.zipWithIndex.foldLeft(Future.successful(Vector.empty[Tensors])) { (acc, f) => acc.flatMap { got =>
+        val files = strings("files")
+        val blocks = m.get("embedding") match
+          case Some(okay.effects.json.Json.Obj(fs)) => fs.collect { case (k, okay.effects.json.Json.Str(v)) => k -> v }.toMap
+          case _ => Map.empty[String, String]
+        val layers = files.zipWithIndex.foldLeft(Future.successful(Vector.empty[Tensors])) { (acc, f) => acc.flatMap { got =>
           stage(s"the weights: file ${f._2 + 1} of ${files.size}…")
           fetch(s"$dir/${f._1}").map(b => got :+ (new Safetensors(TypedArrayBuffer.wrap(b)): Tensors)) } }
-          .map(parts => Tensors.Many(parts))
+        val embedding: Future[Option[okay.llm.qwen.Rows]] =
+          if blocks.isEmpty then Future.successful(None)
+          else
+            val indexFile = m.get("index") match { case Some(okay.effects.json.Json.Str(s)) => s; case _ => "embed-index.bin" }
+            fetch(s"$dir/$indexFile").flatMap { ib =>
+              val rows = okay.llm.qwen.Rows.Blocks(vocab, 1024)
+              blocksOf = Some((dir, blocks, new Int8Array(ib).toArray, rows))
+              wanted.filter(blocks.contains).foldLeft(Future.unit)((acc, b) => acc.flatMap(_ => loadBlock(dir, b))).map(_ => Some(rows))
+            }
+        for ls <- layers; e <- embedding yield (Tensors.Many(ls), e)
       }
     }
   /** THE STAGE, KEPT (local storage): a phone that kills the tab reloads it with no word — the next visit says where
@@ -82,11 +118,11 @@ object Engine:
       c = device.fold(_ => OnCpu(), identity)
       // the weights last, read straight from the fetched buffer (no copy) onto the device, and not kept: a phone's
       // tab has no room for a second copy of 244 MB
-      model <- weights(dir).map { st =>
+      model <- weights(dir, config.vocab).map { (st, embed) =>
         stage(s"the weights to ${c.api}…")
-        Qwen3Compute(c, st, config, headOnCpu = phone && c.api != "WebGPU") }
+        Qwen3Compute(c, st, config, headOnCpu = phone && c.api != "WebGPU", embedGiven = embed) }
     yield
-      on = OnQwen(model, tok, layer)
+      on = OnQwen(model, tok, layer, ensure)
       idle()
       skill = Skill(); skill.load(new Int8Array(skillBytes).toArray)
       engine = null

@@ -14,10 +14,15 @@ import scala.concurrent.{ExecutionContext, Future}
  * values and states on the device, every later ask that begins with it runs only the tokens after — a question
  * costs one forward of the prompt, not fifteen. A sequence that does not begin with the cached one replaces it.
  */
-final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int)(using ExecutionContext):
+/** `ensure`: the embedding's rows of these tokens loaded before a forward (blocks by language fetched as needed) */
+final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Array[Int] => Future[Unit] = _ => Future.unit)(
+    using ExecutionContext):
+  def rehead(): Unit = model.rehead()
   private var cached: Option[(Array[Int], model.Cache)] = None
   /** the forward: after the cached prefix when `ids` begins with it, else whole and kept */
   private def run(ids: Array[Int], at: Seq[Int], withLogits: Boolean): Future[(Vector[Array[Float]], Array[Float])] =
+    ensure(ids).flatMap(_ => forward(ids, at, withLogits))
+  private def forward(ids: Array[Int], at: Seq[Int], withLogits: Boolean): Future[(Vector[Array[Float]], Array[Float])] =
     cached match
       case Some((prefix, cache)) if ids.length >= prefix.length && ids.startsWith(prefix) =>
         model.run(ids, layer, at, withLogits, Some(cache), keep = false).map((s, l, _) => (s, l))

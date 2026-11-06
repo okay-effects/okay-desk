@@ -11,8 +11,10 @@ import mlx.Mlx.*
  * `sbt "bench/runMain okay.desk.bench.Ablate local/Qwen3-0.6B-4bit-cut19 mlp 7"`.
  */
 object Ablate:
-  def main(args: Array[String]): Unit =
-    val repo = args(0); val kind = args(1); val layer = args(2).toInt
+  def main(args: Array[String]): Unit = println(make(args(0), args(1), args(2).toInt))
+
+  /** the variant written; its repo name */
+  def make(repo: String, kind: String, layer: Int): String =
     val src = mlx.llm.Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
     val name = s"${repo.stripPrefix("local/")}-no$kind$layer"
     val dst = mlx.llm.Models.hubCache.resolve("models--local--" + name).resolve("snapshots").resolve("main")
@@ -29,5 +31,5 @@ object Ablate:
       for f <- Seq("config.json", "tokenizer.json", "tokenizer_config.json", "vocab.json", "merges.txt", "added_tokens.json", "special_tokens_map.json", "generation_config.json")
           if java.nio.file.Files.exists(src.resolve(f)) do
         java.nio.file.Files.copy(src.resolve(f), dst.resolve(f), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-      println(s"local/$name: $target silenced, at $dst")
+      s"local/$name"
     finally s.close()
