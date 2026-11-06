@@ -447,3 +447,14 @@ programs and a fetch by a table — opened, closed, loaded, asked, the result on
 screen too. okay-ui got one thing for it: the file choosers drawn as buttons, the native input hidden (its own words
 said "Choose Files / No file chosen" beside "Choose a folder…"). On a phone the program is told so and says the cut
 model is the one that fits; the cut model is the default everywhere.
+
+## 17. The prefix cache, and a phone (2026-11-06)
+
+A question made the readers run the prompt whole ten to fifteen times, once per ask (a prefix of a few tokens
+appended each time). Now `OnQwen` keeps one cached prefix on the device (okay-llm `Qwen3Compute.run`: every
+layer's k and v, the residual at the skill's layer): the first ask of a sequence runs it whole and keeps it, every
+later ask that begins with it runs only the tokens after. Exact on the CPU, WebGPU and WebGL2 (okay-llm's
+CacheSuite and self-test). The page on WebGPU: 0.5–0.9 s a question (was 2.3–7.6), the same 12/12 and 9/12.
+For the phone (an older iPhone: WebGL2): the weights are read from the fetched buffer with no copy and not kept
+(the tab had 244 MB twice beside the GPU's copy), WebGL2 keeps a pool of textures instead of creating and deleting
+one per op (the driver freed them late), and the model's failures are written on the page.

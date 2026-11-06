@@ -8,11 +8,25 @@ import scala.concurrent.{ExecutionContext, Future}
  * THE BROWSER'S READING (specs/data.md §15, step 4): `Read` answered by okay-llm's Qwen3 forward on a `Compute`
  * device — WebGPU, WebGL2 or the CPU — each a future (`Read.future`). The chat prompt is Qwen3's template with
  * thinking off, as mlx-scala renders it on the JVM: the same tokens, so the skill trained there reads here.
+ *
+ * ONE PREFIX CACHED (§17): the readers ask ten to fifteen times about the same prompt with a few tokens appended
+ * (`{"from": "orders", "where": [{"column": "`); the first ask of a sequence runs it whole and keeps its keys,
+ * values and states on the device, every later ask that begins with it runs only the tokens after — a question
+ * costs one forward of the prompt, not fifteen. A sequence that does not begin with the cached one replaces it.
  */
 final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int)(using ExecutionContext):
+  private var cached: Option[(Array[Int], model.Cache)] = None
+  /** the forward: after the cached prefix when `ids` begins with it, else whole and kept */
+  private def run(ids: Array[Int], at: Seq[Int], withLogits: Boolean): Future[(Vector[Array[Float]], Array[Float])] =
+    cached match
+      case Some((prefix, cache)) if ids.length >= prefix.length && ids.startsWith(prefix) =>
+        model.run(ids, layer, at, withLogits, Some(cache), keep = false).map((s, l, _) => (s, l))
+      case _ =>
+        cached.foreach(_._2.free()); cached = None
+        model.run(ids, layer, at, withLogits, None, keep = true).map { (s, l, c) => cached = c.map(ids -> _); (s, l) }
   def answer[X](op: Read[X]): Future[X] = op match
-    case Read.States(ids, at) => model.forward(ids, layer, at, withLogits = false).map(_._1)
-    case Read.Logits(ids) => model.forward(ids, 0, Nil, withLogits = true).map(_._2)
+    case Read.States(ids, at) => run(ids, at, withLogits = false).map(_._1)
+    case Read.Logits(ids) => run(ids, Nil, withLogits = true).map(_._2)
     case Read.Encode(text) => Future.successful(tok.encode(text))
     case Read.Decode(ids) => Future.successful(tok.decode(ids))
     case Read.Prompt(system, user) => Future.successful(tok.encode(OnQwen.template(system, user)))
