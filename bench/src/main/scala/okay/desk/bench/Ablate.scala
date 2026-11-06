@@ -14,19 +14,22 @@ object Ablate:
   def main(args: Array[String]): Unit = println(make(args(0), args(1), args(2).toInt))
 
   /** the variant written; its repo name */
-  def make(repo: String, kind: String, layer: Int): String =
+  def make(repo: String, kind: String, layer: Int): String = silence(repo, Seq((kind, layer)), s"no$kind$layer")
+
+  /** SEVERAL COMPONENTS SILENCED AT ONCE (a set the map calls free, or a language's): `local/<repo>-<name>` */
+  def silence(repo: String, parts: Seq[(String, Int)], suffix: String): String =
     val src = mlx.llm.Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
-    val name = s"${repo.stripPrefix("local/")}-no$kind$layer"
+    val name = s"${repo.stripPrefix("local/")}-$suffix"
     val dst = mlx.llm.Models.hubCache.resolve("models--local--" + name).resolve("snapshots").resolve("main")
     java.nio.file.Files.createDirectories(dst)
-    val target = s"model.layers.$layer." + (if kind == "attn" then "self_attn.o_proj" else "mlp.down_proj")
+    val targets = parts.map((kind, layer) => s"model.layers.$layer." + (if kind == "attn" then "self_attn.o_proj" else "mlp.down_proj")).toSet
     Mlx.init()
     val s = new Scope
     given Scope = s
     try
       val all = loadSafetensors(src.resolve("model.safetensors").toString)
       val changed = all.map { (n, a) =>
-        if n == s"$target.scales" || n == s"$target.biases" then n -> zeros(a.shape, a.dtype) else n -> a }
+        if targets.exists(t => n == s"$t.scales" || n == s"$t.biases") then n -> zeros(a.shape, a.dtype) else n -> a }
       saveSafetensors(dst.resolve("model.safetensors").toString, changed.toSeq.sortBy(_._1))
       for f <- Seq("config.json", "tokenizer.json", "tokenizer_config.json", "vocab.json", "merges.txt", "added_tokens.json", "special_tokens_map.json", "generation_config.json")
           if java.nio.file.Files.exists(src.resolve(f)) do
