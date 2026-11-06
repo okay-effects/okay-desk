@@ -14,6 +14,9 @@ rm -rf "$out"
 git fetch -q origin gh-pages 2>/dev/null && git worktree add -q "$out" gh-pages || git worktree add -q --orphan -b gh-pages "$out"
 rm -rf "$out/index.html" "$out/main.js" "$out/model"
 cp web/page/index.html web/page/examples.html "$out/" && cp web/target/scala-3.3.8/okay-desk-web-opt/main.js "$out/"
+# the script's address carries the build's hash: a browser that cached the page gets the new script without a hard reload
+v=$(md5 -q "$out/main.js" | cut -c1-8)
+sed -i "" "s#src=\"main.js\"#src=\"main.js?v=$v\"#" "$out/index.html" "$out/examples.html"
 rm -rf "$out/sample" && cp -r web/page/sample "$out/"
 mkdir -p "$out/model"
 cp "$MODEL_DIR/config.json" "$MODEL_DIR/tokenizer.json" "$out/model/" && cp "$SKILL" "$out/model/readers.skill"
