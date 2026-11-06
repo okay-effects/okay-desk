@@ -576,7 +576,7 @@ The models offered: **the student by default** (`readers-small`: §21, 12 layers
 layers, `model/`), then the models that generate. The same skill file for both. The page's self-test (`?selftest`,
 `&model=readers` for the cut) on WebGPU: the student 11/12 en, 7/12 ru; the cut 12/12, 9/12 — the JVM's numbers.
 
-## 22. The core on the page (2026-11-06, late)
+## 22b. The core on the page (2026-11-06, late)
 
 `model-core`, the page's default: cut19 with the map's FREE and RU sets removed (13 components: attention 1, 2, 4,
 9, 10, 12, 16, 18; MLP 3, 4, 11, 15, 16 — okay-inlay specs/core.md §11), the contract distilled back with no adapter
@@ -605,3 +605,41 @@ READERS (a direction is a predicate on the bus like the shape) and by widening t
 languages; the words stay as EXACT FACTS only where the data itself decides (a value, a column, a time). The next
 reader to train: the direction; the next pairs: growth and direction phrasings; the next measure: those phrasings
 in the held-out set, so a gap is a number, not a report from a phone.
+
+## 24. The skill universal within Datalog (the operator, 2026-11-06, night)
+
+The operator asked for the skill to be universal within what Datalog can say. What Datalog adds over the relational
+query: conjunction of several relations (joins of any number), recursion (the closures, already there), stratified
+negation (rows with NO matching row elsewhere), and comparisons in rules. What was missing on each side:
+
+- **okay-datalog** had `=` and `!=` only: `<, <=, >, >=` added (numeric when both sides are numbers, text order
+  otherwise; `OrderSuite`), published locally; the desk's `ConjunctiveSuite` passes on it.
+- **The compiler `Conjunctive.program`** (Logic.scala): one builder for every conjunctive program — the target
+  table's columns as variables, joined tables sharing the key's variable, conditions as comparisons on the
+  variables, `not has(key)` with `has(key) :- absent(…)` for the negation, the goal `q(selected…)`. A program is
+  well-formed by construction; the law: a join with two conditions compiled this way gives the relational engine's
+  rows; "customers with no orders" gives `fay` (added to the sample's customers for it); `amount > 100` the four.
+- **The shape "absent"** through the pipeline: the pairs (a lookup table with keys the first lacks; "Which people have
+  no products?", "people without products", "Какие people без products?", "у которых нет"), the probe's slot
+  (the rule's first body relation is the table), the assembler (the words `without/no/never/без/нет` where present,
+  the probe's marginal otherwise; the other table by the data — the one with a column INTO this table's first, the
+  reverse of a join; the target is the named table NOT after the negation word), `Readers.form`,
+  `SelfPlay.restate`, the sample's Q13 ("Which customers have no orders?" / "Какие клиенты без заказов?"). The
+  denominator is 13 from here; earlier numbers are over 12.
+- **What stays outside**: arbitrary rule sets the question implies (a path with a condition on the nodes, two-level
+  negation) — the compiler could emit them, no phrasing reads them yet; disjunction (two rules with one head), which
+  the pairs do not cover. The assembler's branches are the known shapes; the compiler is where every new one goes.
+
+The law `AbsentPairsSuite`: every generated absent pair's slots read "absent" and the lookup table, and its
+answer is exactly the lookup's keys the first table lacks.
+
+**Measured 2026-11-06 (night), cut19, the skill retrained on the new pairs.** The sample: en 13/13, ru 9/13 (the
+three Russian misses are the old ones: a translated VALUE — "не оплачено", "неоплаченные" — is read as no condition
+in Q1, Q7, Q12; "по каждому клиенту" groups by status in Q2; Q13 in Russian is right by the absence swap). The
+held-out 200: table pointer 61% (ru 60%), shape 86.5%, agg 100%, where 70%, order 67%, group 44% (pointer alone).
+Two readings of the table tried and dropped, each measured: the pointer among the tables' names alone (59%, and
+the sample 11/13, 4/13 — it chose customers for everything), and the pointer with the model asked at `{"from": "`
+(59%; the model prefers a first letter). The pointer among every name with the exact rules after it stays. The
+Russian table names in half of the Russian pairs (`Pairs.translated`: товары/товаров/товарах by the word before)
+did not move the ru table pointer (60%), so the table pointer is the next reader to improve — a measured number
+now, printed by `Readers.measure`. The translated value is the next pairs' phrasing (§23).

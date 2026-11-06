@@ -17,8 +17,11 @@ object Probes:
 
   /** the gold slots of a program */
   def slots(program: String): Option[Slots] = Query.parse(program).toOption.map {
-    case Query.Logical(_, goal) => Slots(if goal.matches("^\\w+\\(\\s*[A-Z].*") then "closure-to" else "closure-from",
-      "edges", None, None, None, None)
+    case Query.Logical(rules, _) if rules.contains(" not ") =>
+        // an absence (Conjunctive.program): the table is the rule's first body relation
+        Slots("absent", "\\w+\\(.*?\\)\\s*:-\\s*(\\w+)\\(".r.findFirstMatchIn(rules).map(_.group(1)).getOrElse("-"), None, None, None, None)
+      case Query.Logical(_, goal) => Slots(if goal.matches("^\\w+\\(\\s*[A-Z].*") then "closure-to" else "closure-from",
+        "edges", None, None, None, None)
     case Query.Relational(from, join, where, group, aggs, select, order, limit) =>
       val shape = Vector("rel", aggs.headOption.map(_.fn).getOrElse("-"), where.headOption.map {
         case Cond.Cmp(_, op, _) => op

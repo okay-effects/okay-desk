@@ -30,9 +30,10 @@ object Pairs:
     }))
 
   /** a second table joined to the first by a text column of the first naming rows of the second */
-  def lookup(rnd: scala.util.Random, name: String, keys: Vector[String]): Table =
+  /** `more`: rows with keys the first table has not (the absent shape's answer) */
+  def lookup(rnd: scala.util.Random, name: String, keys: Vector[String], more: Vector[String] = Vector.empty): Table =
     val extra = rnd.shuffle(textCols.filter(c => c != "name")).head
-    Table(name, Vector("name", extra, "since"), keys.distinct.map(k =>
+    Table(name, Vector("name", extra, "since"), (keys.distinct ++ more).map(k =>
       Vector(Value.Str(k), Value.Str(words(rnd.nextInt(words.size))), Value.Num(2020 + rnd.nextInt(7)))))
 
   def edges(rnd: scala.util.Random): Table =
@@ -41,10 +42,38 @@ object Pairs:
       Vector(Vector(Value.Str(ns(0)), Value.Str(ns(2)))))
 
   private def pick[A](rnd: scala.util.Random, xs: Vector[A]): A = xs(rnd.nextInt(xs.size))
+
+  /** A TABLE'S NAME IN RUSSIAN (§24): nominative, genitive and prepositional plural — half of the Russian questions
+   * say the table in Russian, so the table pointer learns a translated name as the column pointers learned "по
+   * городам" (the sample's "Сколько заказов не оплачено?" names orders in Russian; before, the pointer had only ever
+   * seen the English name in a Russian question and read "edges" for it) */
+  private val russian: Map[String, (String, String, String)] = Map(
+    "products" -> ("товары", "товаров", "товарах"), "employees" -> ("сотрудники", "сотрудников", "сотрудниках"),
+    "invoices" -> ("счета", "счетов", "счетах"), "flights" -> ("рейсы", "рейсов", "рейсах"),
+    "tickets" -> ("билеты", "билетов", "билетах"), "students" -> ("студенты", "студентов", "студентах"),
+    "visits" -> ("визиты", "визитов", "визитах"), "shipments" -> ("отправки", "отправок", "отправках"),
+    "sales" -> ("продажи", "продаж", "продажах"), "reviews" -> ("отзывы", "отзывов", "отзывах"),
+    "calls" -> ("звонки", "звонков", "звонках"), "bookings" -> ("брони", "броней", "бронях"),
+    "people" -> ("люди", "людей", "людях"), "accounts" -> ("аккаунты", "аккаунтов", "аккаунтах"),
+    "staff" -> ("работники", "работников", "работниках"))
+  /** the table's English name in a Russian question replaced by its Russian one in the case the word before asks */
+  def translated(question: String, names: Iterable[String]): String =
+    names.foldLeft(question) { (q, n) =>
+      russian.get(n).fold(q) { (nom, gen, prep) =>
+        q.replaceAll(s"(?U)\\b(в|во)\\s+$n\\b", s"$$1 $prep")
+          .replaceAll(s"(?U)\\b(Сколько|Посчитай|для|из|без|нет|Сумма|сумма|Число|Строка)\\s+$n\\b", s"$$1 $gen")
+          .replaceAll(s"(?U)\\b(всего|строк)\\s+$n\\b", s"$$1 $gen")
+          .replaceAll(s"(?U)\\b$n\\b", nom)
+      }
+    }
   private def q(s: String) = "\"" + s + "\""
 
   /** one pair: a shape drawn, phrased in `ru` or English */
   def one(rnd: scala.util.Random, ru: Boolean): Pair =
+    val p = one0(rnd, ru)
+    if ru && rnd.nextBoolean() then p.copy(question = translated(p.question, p.tables.keys.filter(_ != "edges"))) else p
+
+  private def one0(rnd: scala.util.Random, ru: Boolean): Pair =
     val t = table(rnd, pick(rnd, tableNames), 5 + rnd.nextInt(8))
     val text = t.columns.filter(c => textCols.contains(c)); val nums = t.columns.filter(c => numCols.contains(c))
     val tc = pick(rnd, text); val nc = pick(rnd, nums)
@@ -96,8 +125,8 @@ object Pairs:
         s"""{"from": ${q(t.name)}, "where": [{"column": ${q(tc)}, "op": "=", "value": ${q(v)}}], "aggregate": [{"fn": "sum", "column": ${q(nc)}, "as": "total"}]}""")
     val (question, program) = pick(rnd, shapes)
     val base = Map(t.name -> t)
-    // a join or a datalog shape one time in four, with a second table
-    rnd.nextInt(4) match
+    // a join or a datalog shape (a closure, an absence) with a second table, else the one table
+    rnd.nextInt(5) match
       case 0 =>
         val key = tc
         val other = lookup(rnd, pick(rnd, Vector("people", "accounts", "staff")), t.rows.map(_(t.columns.indexOf(key)).text))
@@ -117,8 +146,20 @@ object Pairs:
             Vector(s"От чего зависит $a, прямо или через другие?", s"Что достижимо из $a?"))
         val goal = if toward then s"reach(X, ${Logic.constant(z)})" else s"reach(${Logic.constant(a)}, X)"
         Pair(base + ("edges" -> e), qd, s"""{"datalog": "reach(X, Y) :- edges(X, Y). reach(X, Z) :- edges(X, Y), reach(Y, Z).", "goal": ${q(goal.replace("\"", "\\\""))}}""")
+      case 2 =>
+        // ABSENCE (specs/data.md §24): the rows of a lookup table with no row of the first naming them — Datalog's
+        // negation, the one shape the relational query cannot say; the lookup has keys the first table lacks
+        val key = tc
+        val had = t.rows.map(_(t.columns.indexOf(key)).text)
+        val more = rnd.shuffle(words.filterNot(had.contains)).take(1 + rnd.nextInt(2))
+        val other = lookup(rnd, pick(rnd, Vector("people", "accounts", "staff")), had, more)
+        val qa = say(Vector(s"Which ${other.name} have no ${t.name}?", s"${other.name} without ${t.name}.", s"${other.name} that never appear in ${t.name}."),
+          Vector(s"Какие ${other.name} без ${t.name}?", s"${other.name}, у которых нет ${t.name}.", s"${other.name}, не встречающиеся в ${t.name}."))
+        val pa = Conjunctive.program(base + (other.name -> other), other.name, absent = Some(Conjunctive.Join(t.name, "name", key)),
+          select = Vector("name")).toOption.get
+        Pair(base + (other.name -> other), qa, Query.print(pa))
       case _ =>
-        // other tables present but unused (edges, a lookup), so that a table's PRESENCE is no signal of the program —
+          // other tables present but unused (edges, a lookup), so that a table's PRESENCE is no signal of the program —
         // the first readers learned "edges present ⇒ a closure" from pairs where edges appeared only then
         val extra = (if rnd.nextInt(3) == 0 then Map("edges" -> edges(rnd)) else Map.empty) ++
           (if rnd.nextInt(3) == 0 then { val o = lookup(rnd, pick(rnd, Vector("people", "accounts", "staff")), t.rows.map(_(0).text)); Map(o.name -> o) } else Map.empty)

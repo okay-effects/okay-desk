@@ -47,6 +47,11 @@ final class Readers:
     yield
       val m = l.max; val z = math.log(l.map(v => math.exp((v - m).toDouble)).sum)
       firsts.map(f => (l(f) - m - z).toFloat).toArray
+  /** the table by both readers: the pointer at the question's last token and the model asked at the program's start */
+  private def tableBoth[R[_]: Has[Read]](pr: Prompted, last: Array[Float], ks: Vector[Array[Float]], names: Vector[String]): Array[Float] ! R =
+    val tks = names.map(n => ks(pr.indexOfTable(n)))
+    val ps = logSoftmax(pointers("table").scores(last, tks).take(tks.size))
+    ask(pr, "```json\n{\"from\": \"", names).map(as => ps.zip(as).map((a, b) => a + b))
   private def logSoftmax(xs: Array[Float]): Array[Float] =
     val m = xs.max; val z = math.log(xs.map(v => math.exp((v - m).toDouble)).sum)
     xs.map(v => (v - m - z).toFloat)
@@ -150,6 +155,8 @@ final class Readers:
       names = pr.names.map(_._1)
       ks <- keys(pr).map(_.map(z))
       last <- Read.states(pr.ids, Vector(pr.ids.length - 1)).map(st => z(st.head))
+      // the table by the pointer among every name (§24: 61% of the held-out tables; among the tables' names alone or
+      // with the model asked at `{"from": "` it read fewer of the sample — a column pointed at falls to the exact rules)
       ti = pointers("table").predict(last, ks)
       // EXACT FIRST, for the table too: a table named in the question is the table (the pointer's choice among several
       // named); else the one table a named column belongs to (real data: "GICS Sector" is a column of one table only);
@@ -160,8 +167,20 @@ final class Readers:
         val byName = tables.keys.toVector.sorted.filter(mentioned)
         val byColumn = tables.values.toVector.sortBy(_.name).filter(t => t.columns.exists(mentioned)).map(_.name)
         val pointed = Option.when(ti < names.size)(names(ti)).filter(tables.contains)
-        pointed.filter(byName.contains).orElse(byName.headOption)
+        // "customers with no orders": the table after the negation word is the absent one, not the target
+        val negated = byName.filter(n => lowerQ.matches(s"(?U).*\\b(no|without|без|нет)\\s+${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*"))
+        val targets = if negated.nonEmpty && byName.size > negated.size then byName.filterNot(negated.contains) else byName
+        val c0 = pointed.filter(targets.contains).orElse(targets.headOption)
           .orElse(if byColumn.size == 1 then byColumn.headOption else pointed.filter(byColumn.contains).orElse(pointed).orElse(byColumn.headOption))
+        // an absence read on the wrong side ("Какие клиенты без заказов?" read as orders): the target is the table the
+        // read one's rows point INTO when none points into the read one
+        def into(a: Table, b: Table): Boolean = a.rows.nonEmpty && { val keys = b.rows.map(_(0).text).toSet
+          a.columns.indices.exists(i => a.rows.forall(r => keys(r(i).text))) }
+        c0.map { c =>
+          val negation = lowerQ.matches("(?U).*\\b(no|without|never|без|нет)\\b.*")
+          val others = tables.values.filter(_.name != c)
+          if negation && !others.exists(o => into(o, tables(c))) then others.find(o => into(tables(c), o)).map(_.name).getOrElse(c) else c
+        }
       // how the table was found: named in the question, by a column named there, or read from the model's state
       how = chosen.map { t =>
         val lowerQ = question.toLowerCase
@@ -192,7 +211,13 @@ final class Readers:
         else t.columns.zipWithIndex.collectFirst { case (c, i) if t.rows.forall(r => keys(r(i).text)) => c })
     }.toMap
     def joinTo(o: Table): Option[String] = joinOf(o.name)
-    // the question's words and their runs of up to four (a value of several words): a value is named when it is one
+      // the reverse: another table's column whose every value names a row of this one (its first column) — an absence's
+      // other table ("customers with no orders": orders.customer into customers.name)
+      val reverse: Vector[(Table, String)] = tables.values.toVector.filter(o => o.name != table && o.rows.nonEmpty).flatMap { o =>
+        val keys = t.rows.map(_(0).text).toSet
+        o.columns.zipWithIndex.collectFirst { case (c, i) if o.rows.forall(r => keys(r(i).text)) => (o, c) }
+      }
+      // the question's words and their runs of up to four (a value of several words): a value is named when it is one
     // of them — but never a word of the question itself ("how MANY" is not the city Many, "IN" not the state), and a
     // short code (AK, IN, UA) only as written, in capitals
     val qWords = "(?U)[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*".r.findAllIn(question).map(_.replaceAll("[.'-]+$", "")).toVector
@@ -313,7 +338,11 @@ final class Readers:
         def marginal(p: String => Boolean): Double = shape.classes.zipWithIndex.collect { case (c, i) if p(c) => probs(i) }.sum
         val closure = marginal(_.startsWith("closure")) > 0.5 || word("reach*", "depend*", "lead*", "достиж*", "завис*", "вед*", "доход*")
         val closureTo = (word("reach", "reaches", "lead*", "ведут", "ведёт", "доход*") && !word("reachable", "достижим*"))
-        val fnProbeScores = logSoftmax(fnProbe.scores(fnQ))
+          // ABSENCE (§24): "customers with no orders", "без заказов" — the rows of this table that no row of another names;
+          // needs another table with a column into this one's first (the reverse of a join); the probe where no word says it
+          val absent = reverse.nonEmpty && (word("without", "never", "lacking", "без", "нет", "не встреча*") ||
+            lower.matches("(?U).*\\bno\\b.*") || marginal(_ == "absent") > 0.5)
+          val fnProbeScores = logSoftmax(fnProbe.scores(fnQ))
         val fnByReaders = (fns :+ "-")(fnProbeScores.zipWithIndex.map((s, i) => (if i < fns.size then s + fnAsk(i) else s, i)).maxBy(_._1)._2)
         val topN = word("top", "топ", "three", "five", "ten", "три", "пять", "десять")
         val perEach = word("per", "each", "по кажд*", "кажд*", "в разрезе", "по стат*", "по город*", "по клиент*", "по стран*")
@@ -334,14 +363,21 @@ final class Readers:
         // a number with a comparison word is a condition on a numeric column
         val numberCond = "\\d+(?:\\.\\d+)?".r.findFirstIn(question).filter(_ => word("over", "above", "more than", "greater", "больше", "выше", "свыше", "below", "under", "less than", "меньше", "ниже", "до"))
         val hasWhere = fact.isDefined || numberCond.isDefined || marginal(c => Readers.part(c, 2) != "-") > 0.3
-        val sh = if closure then Vector(if closureTo then "closure-to" else "closure-from")
+        val sh = if absent then Vector("absent") else if closure then Vector(if closureTo then "closure-to" else "closure-from")
           else Vector("rel", fn, if hasWhere then "=" else "-", if hasGroup then "group" else "-", if hasOrder then "order" else "-",
             if hasLimit then "limit" else "-", "-", if hasSelect then "select" else "-")
         (sh, fn, hasGroup, hasOrder, numberCond, timeCol)
       (sh, fn, hasGroup, hasOrder, numberCond, timeCol) = decided
       _ <- Read.note("the form of the answer: " + Readers.form(sh))
       result <-
-        if sh.head == "closure-from" || sh.head == "closure-to" then
+        if sh.head == "absent" then
+          // the other table: the one named after the negation word, else the one the data joins back from
+          val o = reverse.find((o, _) => lower.matches(s"(?U).*\\b(no|without|без|нет|в)\\s+${java.util.regex.Pattern.quote(o.name.toLowerCase)}\\b.*"))
+            .getOrElse(reverse.head)
+          val conds = facts.filter(_._1.name == table).map((_, c, v) => Conjunctive.Cond(table, c, "=", v))
+          pure[Either[String, String], R](Conjunctive.program(tables, table, conds = conds, absent = Some(Conjunctive.Join(o._1.name, t.columns.head, o._2)),
+            select = Vector(t.columns.head)).map(Query.print))
+        else if sh.head == "closure-from" || sh.head == "closure-to" then
           val e = tables.values.find(_.columns.size == 2).getOrElse(t)
           val nodes = e.rows.flatten.map(_.text).distinct.sortBy(-_.length)
           pure[Either[String, String], R](nodes.find(n => lower.contains(n.toLowerCase)).toRight(s"no node named in the question (table $table, shape ${sh.mkString(" ")})").map { c =>
@@ -444,7 +480,7 @@ final class Readers:
   /** the readers measured on held-out pairs, slot by slot: the pointer alone against the pointer with ask — so a
    * change is judged on 200 pairs, not on the bench's 12 questions */
   def measure[R[_]: Has[Read]](pairs: Vector[Pairs.Pair]): Unit ! R =
-    var shapeRight = 0
+    var shapeRight = 0; var tableRight = 0; var tableRu = 0; var tableRuRight = 0; var tableBothRight = 0; var tableAmong = 0
     val right = scala.collection.mutable.Map.empty[String, (Int, Int, Int, Int)].withDefaultValue((0, 0, 0, 0))
     for
       exs <- each(pairs.flatMap(p => slots(p.program).map(sl => (p, sl))))((p, sl) => prompted(p).map(pr => (p, sl, pr)))
@@ -452,6 +488,17 @@ final class Readers:
         val t = p.tables(sl.table)
         for
           ks <- keys(pr).map(_.map(z))
+          last <- Read.states(pr.ids, Vector(pr.ids.length - 1)).map(st => z(st.head))
+          _ =
+            // the table pointer, and in Russian apart (a translated table name is read, never copied)
+            val ru = p.question.exists(c => c >= 'а' && c <= 'я')
+            val ok = pointers("table").predict(last, ks) == pr.indexOfTable(sl.table)
+            if ok then tableRight += 1
+            if ru then { tableRu += 1; if ok then tableRuRight += 1 }
+          names = p.tables.keys.toVector.sorted
+          _ = if names.lift(pointers("table").predict(last, names.map(n => ks(pr.indexOfTable(n))))).contains(sl.table) then tableAmong += 1
+          tb <- tableBoth(pr, last, ks, names)
+          _ = if names(tb.zipWithIndex.maxBy(_._1)._2) == sl.table then tableBothRight += 1
           sq <- query(pr, prefixes.head._2(sl.table)).map(z)
           _ = if shape.predict(sq) == sl.shape then shapeRight += 1
           _ <- each(prefixes.tail) { (name, prefix) =>
@@ -473,7 +520,7 @@ final class Readers:
           }
         yield ()
       }
-    yield println(f"  measured on ${exs.size} held-out pairs: shape ${shapeRight * 100.0 / exs.size}%.1f%%; " +
+    yield println(f"  measured on ${exs.size} held-out pairs: table pointer ${tableRight * 100.0 / exs.size}%.1f%% (ru ${tableRuRight * 100.0 / math.max(tableRu, 1)}%.1f%% of $tableRu) among the tables ${tableAmong * 100.0 / exs.size}%.1f%% with ask ${tableBothRight * 100.0 / exs.size}%.1f%%; shape ${shapeRight * 100.0 / exs.size}%.1f%%; " +
       right.toVector.sortBy(_._1).map((k, v) => f"$k pointer ${v._2 * 100.0 / v._1}%.0f%% ask ${v._3 * 100.0 / v._1}%.0f%% both ${v._4 * 100.0 / v._1}%.0f%% (${v._1})").mkString(", "))
 
   // ---- the readers as bytes (a skill is a file, read on the JVM and in the browser alike): a header, then named
@@ -537,6 +584,7 @@ object Readers:
   def form(sh: Vector[String]): String = sh.head match
     case "closure-from" => "what can be reached from a node (a closure, by Datalog)"
     case "closure-to" => "what reaches a node (a closure, by Datalog)"
+    case "absent" => "the rows no row of another table names (a negation, by Datalog)"
     case _ =>
       val Vector(_, fn, where, group, order, limit, _, _) = sh: @unchecked
       val what = fn match

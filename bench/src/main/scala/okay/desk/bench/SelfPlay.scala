@@ -35,6 +35,11 @@ object SelfPlay:
   /** the program said back as a question, by a template — the round trip's other half */
   def restate(program: String): Option[String] =
     Query.parse(program).toOption.collect {
+      case Query.Logical(rules, _) if rules.contains(" not ") =>
+        val Absent = "(?s).*:-\\s*(\\w+)\\(.*has\\(\\w+\\)\\s*:-\\s*(\\w+)\\(.*".r
+        rules match
+          case Absent(t, o) => s"Which $t have no $o?"
+          case _ => "Which rows have no match?"
       case Query.Logical(_, goal) =>
         val GoalFrom = """^\w+\(\s*"?([^",()]+)"?\s*,\s*[A-Z]\w*\s*\)$""".r; val GoalTo = """^\w+\(\s*[A-Z]\w*\s*,\s*"?([^",()]+)"?\s*\)$""".r
         goal.trim match

@@ -35,3 +35,37 @@ object Logic:
   /** the relations as the model must write them: each table's name and its columns' positions */
   def describe(tables: Map[String, Table]): String =
     tables.values.toVector.sortBy(_.name).map(t => s"  ${t.name}(${t.columns.mkString(", ")})").mkString("\n")
+
+/**
+ * A CONJUNCTIVE QUERY COMPILED TO DATALOG (specs/data.md §24): the rows of a table that join others on keys, meet
+ * conditions, and — what the relational query cannot say — have NO matching row in another table (stratified
+ * negation). The one builder every such program comes from, so a program is well-formed by construction: a rule
+ * `q(selected…) :- target(all its columns as variables), joined(…shared variables…), conditions, not has(key)`,
+ * and `has(key) :- absent(…)` for the negation; the goal `q(…)`.
+ */
+object Conjunctive:
+  final case class Join(table: String, on: String, other: String)
+  final case class Cond(table: String, column: String, op: String, value: String)
+  /** `absent`: rows of `target` with no row of that table whose `other` column equals the target's `on` column */
+  def program(tables: Map[String, Table], target: String, joins: Vector[Join] = Vector.empty, conds: Vector[Cond] = Vector.empty,
+      absent: Option[Join] = None, select: Vector[String] = Vector.empty): Either[String, Query.Logical] =
+    def vars(t: Table): Vector[String] = t.columns.map(c => "V" + t.name.capitalize.filter(_.isLetterOrDigit) + c.capitalize.filter(_.isLetterOrDigit))
+    def atom(t: Table, vs: Vector[String]) = s"${t.name}(${vs.mkString(", ")})"
+    for
+      t <- tables.get(target).toRight(s"no table $target")
+      js <- joins.foldLeft(Right(Vector.empty[(Table, Vector[String])]): Either[String, Vector[(Table, Vector[String])]]) { (acc, j) =>
+        acc.flatMap(got => tables.get(j.table).toRight(s"no table ${j.table}").flatMap { o =>
+          if !t.columns.contains(j.on) then Left(s"no column ${j.on} in $target") else if !o.columns.contains(j.other) then Left(s"no column ${j.other} in ${o.name}")
+          else Right(got :+ (o, vars(o).updated(o.columns.indexOf(j.other), vars(t)(t.columns.indexOf(j.on))))) }) }
+      ab <- absent.fold(Right(None): Either[String, Option[(Table, Vector[String], String)]])(a => tables.get(a.table).toRight(s"no table ${a.table}").flatMap { o =>
+        if !t.columns.contains(a.on) then Left(s"no column ${a.on} in $target") else if !o.columns.contains(a.other) then Left(s"no column ${a.other} in ${o.name}")
+        else Right(Some((o, vars(o), vars(t)(t.columns.indexOf(a.on))))) })
+    yield
+      val all = (t, vars(t)) +: js
+      def varOf(table: String, column: String): Option[String] = all.find(_._1.name == table).flatMap((tb, vs) => tb.columns.indexOf(column) match { case -1 => None; case i => Some(vs(i)) })
+      val cs = conds.flatMap(c => varOf(c.table, c.column).map(v => s"$v ${if c.op == "contains" then "=" else c.op} ${Value.of(c.value).num.map(_ => c.value).getOrElse(Logic.constant(c.value))}"))
+      val selected = (if select.isEmpty then t.columns else select).flatMap(c => varOf(target, c).orElse(all.drop(1).flatMap((tb, _) => varOf(tb.name, c)).headOption))
+      val head = s"q(${selected.mkString(", ")})"
+      val body = all.map((tb, vs) => atom(tb, vs)) ++ cs ++ ab.toVector.map((_, _, key) => s"not has($key)")
+      val hasRule = ab.map((o, vs, _) => s" has(${vs(o.columns.indexOf(absent.get.other))}) :- ${atom(o, vs)}.").getOrElse("")
+      Query.Logical(s"$head :- ${body.mkString(", ")}.$hasRule", head)

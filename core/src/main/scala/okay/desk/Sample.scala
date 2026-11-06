@@ -15,7 +15,7 @@ object Sample:
       |8,eve,310,paid,2026-11-05,Lviv
       |""".stripMargin).toOption.get
   val customers = Table.parse("customers.csv",
-    "name,country,since\nann,UA,2024\nbob,PL,2025\ncid,UA,2023\ndee,UA,2026\neve,DE,2025\n").toOption.get
+    "name,country,since\nann,UA,2024\nbob,PL,2025\ncid,UA,2023\ndee,UA,2026\neve,DE,2025\nfay,DE,2026\n").toOption.get
   val edges = Table.parse("edges.csv",
     "from,to\nweb,checkout\ncheckout,payments\ncheckout,orders-db\npayments,stripe\nsearch,catalog\ncatalog,orders-db\n").toOption.get
   val tables: Map[String, Table] = Map("orders" -> orders, "customers" -> customers, "edges" -> edges)
@@ -46,7 +46,10 @@ object Sample:
     Q("Which services reach orders-db?", "Какие сервисы доходят до orders-db?",
       """{"datalog": "reach(X, Y) :- edges(X, Y). reach(X, Z) :- edges(X, Y), reach(Y, Z).", "goal": "reach(X, \"orders-db\")"}"""),
     Q("The largest unpaid order.", "Самый большой неоплаченный заказ.",
-      """{"from": "orders", "where": [{"column": "status", "op": "=", "value": "unpaid"}], "order": ["-amount"], "limit": 1}"""))
+      """{"from": "orders", "where": [{"column": "status", "op": "=", "value": "unpaid"}], "order": ["-amount"], "limit": 1}"""),
+      Q("Which customers have no orders?", "Какие клиенты без заказов?",
+        Query.print(Conjunctive.program(tables, "customers", absent = Some(Conjunctive.Join("orders", "name", "customer")),
+          select = Vector("name")).toOption.get)))
 
   def run(q: Query): Either[String, Table] = q match
     case r: Query.Relational => Exact.run(tables, r)

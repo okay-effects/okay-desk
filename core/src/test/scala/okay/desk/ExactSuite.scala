@@ -63,3 +63,42 @@ class GrowthSuite extends munit.FunSuite:
     assert(Query.print(q).contains("\"by\":\"year\""))
     val noBy = Query.parse("""{"from": "gdp", "aggregate": [{"fn": "growth", "column": "value"}]}""").toOption.get
     assert(Exact.run(Map("gdp" -> gdp), noBy.asInstanceOf[Query.Relational]).left.exists(_.contains("by")))
+
+/** the conjunctive queries compiled to Datalog: a join with conditions == the relational engine; the negation */
+class ConjunctiveSuite extends munit.FunSuite:
+  val ts = Sample.tables
+  test("a join with two conditions == the relational query; customers with no orders; a comparison"):
+    val q = Conjunctive.program(ts, "orders", Vector(Conjunctive.Join("customers", "customer", "name")),
+      Vector(Conjunctive.Cond("orders", "status", "=", "unpaid"), Conjunctive.Cond("customers", "country", "=", "UA")), select = Vector("id")).toOption.get
+    val got = Logic.run(ts, q).toOption.get.rows.map(_.head.text).toSet
+    val rel = Query.parse(Sample.questions(6).gold).toOption.get.asInstanceOf[Query.Relational]
+    assertEquals(got, Exact.run(ts, rel).toOption.get.rows.map(_.head.text).toSet)
+    val none = Conjunctive.program(ts, "customers", absent = Some(Conjunctive.Join("orders", "name", "customer")), select = Vector("name")).toOption.get
+    assertEquals(Logic.run(ts, none).toOption.get.rows.map(_.head.text).toSet, Set("fay"))
+    val big = Conjunctive.program(ts, "orders", conds = Vector(Conjunctive.Cond("orders", "amount", ">", "100")), select = Vector("id")).toOption.get
+    assertEquals(Logic.run(ts, big).toOption.get.rows.map(_.head.text).toSet, Set("1", "4", "5", "8"))
+
+class AbsentPairsSuite extends munit.FunSuite:
+  test("the generated absent pairs: the slots read the shape and the table, the answer is the keys the first table lacks"):
+    val ps = skill.Pairs.many(7, 400).filter(_.program.contains(" not "))
+    assert(ps.size > 30, s"${ps.size} absent pairs of 400")
+    for p <- ps do
+      val sl = skill.Probes.slots(p.program).get
+      assertEquals(sl.shape, "absent")
+      val l = Query.parse(p.program).toOption.get.asInstanceOf[Query.Logical]
+      val got = Logic.run(p.tables, l).toOption.get.rows.map(_.head.text).toSet
+      val other = p.tables(sl.table); val first = p.tables.values.find(_.name != sl.table).get
+      // the key column: one whose values all name rows of the other (two may, by the shared word pool)
+      val keyCols = first.columns.indices.filter(c => first.rows.forall(r => other.rows.exists(_.head.text == r(c).text)))
+      val expected = keyCols.map(k => other.rows.map(_.head.text).filterNot(first.rows.map(_(k).text).toSet).toSet)
+      assert(expected.contains(got), s"$got not among $expected")
+      assert(got.nonEmpty)
+
+class TranslatedSuite extends munit.FunSuite:
+  test("half of the Russian pairs name the table in Russian; the translated question keeps the gold program"):
+    val ps = skill.Pairs.many(11, 300, Some(true))
+    val ru = ps.filter(p => !p.tables.keys.filter(_ != "edges").exists(n => p.question.contains(n)))
+    assert(ru.size > 90 && ru.size < 210, s"${ru.size} of 300 translated")
+    assertEquals(skill.Pairs.translated("Сколько строк в products?", Seq("products")), "Сколько строк в товарах?")
+    assertEquals(skill.Pairs.translated("Какие people без products?", Seq("products", "people")), "Какие люди без товаров?")
+    assertEquals(skill.Pairs.translated("Сумма qty по city из sales.", Seq("sales")), "Сумма qty по city из продаж.")
