@@ -102,6 +102,9 @@ object Look:
        |body .okay-face > div { display: flex; flex-direction: column; gap: 12px; }
        |body .okay-face > div > .okay-view, body .okay-face > div > .okay-view > .okay-group,
        |body .okay-face > div > nav.okay-actions { display: contents; }
+       |body .okay-face .okay-mark-top { order: -3; }
+       |body .okay-face > div > nav.okay-actions > form:first-child { order: -2; }
+       |body .okay-face .okay-mark-model-note { order: -1; }
        |body .okay-face > div > nav.okay-actions > form { order: 1; }
        |body .okay-face .okay-mark-user, body .okay-face .okay-mark-model, body .okay-face .okay-mark-system,
        |body .okay-face .okay-mark-result { order: 2; }

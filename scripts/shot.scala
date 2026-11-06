@@ -24,9 +24,9 @@ import scala.jdk.CollectionConverters.*
   def body() = p.locator("body").textContent()
   def snap(name: String): Unit = p.screenshot(com.microsoft.playwright.Page.ScreenshotOptions().setPath(Path.of(out).resolveSibling(s"$name.png")).setType(ScreenshotType.PNG))
   p.navigate(url)
-  p.waitForSelector("text=\"Qwen3 0.6B cut + readers (244 MB, no generation)\"")
+  p.waitForSelector("button:text-is('Load the model')")
   try
-    p.click("text=\"Qwen3 0.6B cut + readers (244 MB, no generation)\"")
+    p.click("button:text-is('Load the model')")
     p.waitForFunction("() => /readers on|cannot load/.test(document.body.textContent)")
   catch
     case e: Throwable =>

@@ -116,19 +116,22 @@ object App:
   // ---- the screen
   val filesForm: Form[List[(String, String)]] = Form.one(Field.files("Files, or a whole folder (CSV, TSV, JSON)", accept))
   val urlForm: Form[String] = Form.one(Field.text("The address of a file on the internet (the host must allow cross-origin reads)"))
+  def modelForm(current: String): Form[String] =
+    Form.one(Field.choice[String]("The model", Model.choices.map((k, l) => (l, k))*).initially(current))
   val questionForm: Form[String] = Form.one(Field.longText("Ask about the data: how many orders are unpaid? total by customer? …"))
 
-  // THE ORDER OF THE PAGE: the model first (buttons at the top, one a model, the current one marked), then the data
-  // and the ways to open more, then the conversation, and the question last — a form is drawn where its button is
-  // (okay-faces), so the question's button is the last
+  // THE ORDER OF THE PAGE: the model's form under the top (a choice, a button), the data and the ways to open more,
+  // the conversation, the question last. okay-faces draws every form after the parts, with its button, in the
+  // buttons' order; the page's skin (web/Look) puts the forms where they belong among the parts
   def render(s: State): Screen[Msg] =
+    val models = modelForm(s.modelName)   // one form: the screen finds a button's form by identity
     val head = List(Part.block("top")(Part.block("brand")(Part.text("okay-desk")),
       Part.text("Chat with your data — in the browser, offline. Open files from your machine or the internet; a small model " +
         "in the page reads the question into a program, an exact engine runs it. Numbers come from the engine, never " +
         "from the model. Nothing leaves the browser.")),
-      Part.section("The model")(Part.block("models")(Part.slot("models")), Part.block("small")(Part.text(s.model.getOrElse(
+      Part.block("model-note")(Part.text(s.model.getOrElse(
         if s.phone then "not loaded yet — on a phone the cut model with the readers (244 MB) is the one that fits; the models that generate (0.4–1.7 GB) are for a computer"
-        else "not loaded yet"))))) ++ s.problem.toList.map(Part.problem)
+        else "the model is not loaded yet")))) ++ s.problem.toList.map(Part.problem)
     // the open tables as a tree: each closed, its columns under it; the buttons that close them in one row
     val tables = if s.tables.isEmpty then Vector(Part.block("small")(Part.text("no file open yet")))
       else Vector(Part.tree("", s.tables.values.toVector.sortBy(_.name).map(t => Part.TreeNode(t.name,
@@ -142,9 +145,9 @@ object App:
         e.program.toList.map(p => Part.code("the program", p.split("\n").toList, Set.empty)))*)
     }
     val closes = s.tables.keys.toList.sorted.map(n => Button(s"Close $n")(Msg.Close(n): Msg).at("tables"))
-    val models = Model.choices.map((k, l) => Button(l, if s.modelName == k && s.model.isDefined then Style.Primary else Style.Plain)(Msg.Load(k): Msg).at("models"))
-    Screen[Msg]("okay-desk")((head ++ List(data) ++ log :+ (questionForm: Part))*)(
-      (models ++ closes ++ List(
+    Screen[Msg]("okay-desk")((head ++ List(models: Part, data) ++ log :+ (questionForm: Part))*)(
+      (closes ++ List(
+        Button.submit("Load the model", models, Style.Plain)(Msg.Load(_): Msg),
         Button.submit("Open the files", filesForm, Style.Plain)(Msg.Opened(_): Msg),
         Button.submit("Open the address", urlForm, Style.Plain)(Msg.OpenUrl(_): Msg),
         Button.submit("Ask", questionForm)(Msg.Ask(_): Msg)))*)
