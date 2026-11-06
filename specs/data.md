@@ -488,3 +488,8 @@ ended; and the weights go to the page as safetensors FILES of a few layers each 
 SplitWeights, manifest.json "files"), read one by one as one (`Tensors.Many`) — no join, so the page never holds
 the whole twice (the peak at the load was 514 MB of JS beside the GPU's copy; now ~250). The tables themselves are
 in memory as values (the GDP series, 14,000 rows, a few MB) — not what kills a tab.
+
+The phone's fourth report: "the last visit ended at: reading a question…" — the forward over the prompt. On WebGL2
+the scores of all 16 heads over 400 tokens were a 41 MB texture a layer, made and dropped nineteen times a forward
+(too big for the phone's pool), and the driver freed them late. Now WebGL2's attention runs the heads in groups
+(`headsAtOnce`, 2 on a phone): a group's scores are ~1 MB and live in the pool; exact (the self-test).
