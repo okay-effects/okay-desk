@@ -29,6 +29,8 @@ object Main:
         dom.window.location.href = Examples.link(urls)))
     else
       Engine.status = s => Option(dom.document.getElementById("engine-status")).foreach(_.textContent = s)
+      // the last visit ended somewhere (a phone killed the tab): said, then forgotten
+      Engine.lastStage.foreach { st => Engine.status(s"the last visit ended at: $st"); dom.window.localStorage.setItem("okay-desk.stage", "") }
       // a failure nobody caught is written where the person can read it (a phone shows no console)
       dom.window.addEventListener("error", (e: dom.ErrorEvent) => Engine.status(s"error: ${e.message}"))
       dom.window.addEventListener("unhandledrejection", (e: dom.Event) =>

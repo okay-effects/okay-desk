@@ -4,7 +4,7 @@ import okay.desk.*
 import okay.desk.skill.{OnQwen, Read, Readers as Skill}
 import okay.desk.ui.Model
 import okay.llm.compute.{OnCpu, OnWebGl2, OnWebGpu}
-import okay.llm.qwen.{Qwen3Compute, Qwen3Config, Safetensors, Tokenizer}
+import okay.llm.qwen.{Qwen3Compute, Qwen3Config, Safetensors, Tensors, Tokenizer}
 import okay.scala3.*
 import okay.scala3.std.Async
 import org.scalajs.dom
@@ -30,25 +30,27 @@ object Engine:
       if !r.ok then Future.failed(IllegalStateException(s"$name: HTTP ${r.status}")) else r.arrayBuffer().toFuture
     }
   private def text(ab: ArrayBuffer): String = js.Dynamic.newInstance(js.Dynamic.global.TextDecoder)().decode(ab).asInstanceOf[String]
-  /** the weights: one file, or — where a host caps a file's size (GitHub Pages: 100 MB) — the parts a manifest.json
-   * lists, fetched and joined */
-  private def weights(dir: String): Future[ArrayBuffer] =
+  /** the weights: the files manifest.json lists (a few layers each, `Tensors.Many` reads them as one — a page never
+   * holds the whole of them twice; GitHub Pages caps a file at 100 MB), else the one model.safetensors */
+  private def weights(dir: String): Future[Tensors] =
     dom.fetch(s"$dir/manifest.json").toFuture.flatMap { r =>
-      if !r.ok then fetch(s"$dir/model.safetensors")
+      if !r.ok then fetch(s"$dir/model.safetensors").map(b => new Safetensors(TypedArrayBuffer.wrap(b)))
       else r.text().toFuture.flatMap { t =>
-        val parts = okay.effects.json.Json.fromText(t) match
-          case okay.effects.json.Json.Obj(fs) => fs.collectFirst { case ("parts", okay.effects.json.Json.Arr(xs)) =>
+        val files = okay.effects.json.Json.fromText(t) match
+          case okay.effects.json.Json.Obj(fs) => fs.collectFirst { case ("files", okay.effects.json.Json.Arr(xs)) =>
             xs.collect { case okay.effects.json.Json.Str(s) => s } }.getOrElse(Vector.empty)
           case _ => Vector.empty
-        parts.zipWithIndex.foldLeft(Future.successful(Vector.empty[ArrayBuffer])) { (acc, p) => acc.flatMap { got =>
-          status(s"the weights: part ${p._2 + 1} of ${parts.size}…"); fetch(s"$dir/${p._1}").map(got :+ _) } }
-          .map { bufs =>
-            val all = new Int8Array(bufs.map(_.byteLength).sum); var at = 0
-            for b <- bufs do { all.set(new Int8Array(b), at); at += b.byteLength }
-            all.buffer
-          }
+        files.zipWithIndex.foldLeft(Future.successful(Vector.empty[Tensors])) { (acc, f) => acc.flatMap { got =>
+          stage(s"the weights: file ${f._2 + 1} of ${files.size}…")
+          fetch(s"$dir/${f._1}").map(b => got :+ (new Safetensors(TypedArrayBuffer.wrap(b)): Tensors)) } }
+          .map(parts => Tensors.Many(parts))
       }
     }
+  /** THE STAGE, KEPT (local storage): a phone that kills the tab reloads it with no word — the next visit says where
+   * the last one ended */
+  def stage(s: String): Unit = { status(s); dom.window.localStorage.setItem("okay-desk.stage", s) }
+  def lastStage: Option[String] = Option(dom.window.localStorage.getItem("okay-desk.stage")).filter(_.nonEmpty)
+  def idle(): Unit = { status(""); dom.window.localStorage.setItem("okay-desk.stage", "") }
 
   /** the readers: the model's files from `dir` (config.json, tokenizer.json, the weights, readers.skill), the device
    * chosen — WebGPU, else WebGL2, else the CPU */
@@ -65,15 +67,15 @@ object Engine:
       c = device.fold(_ => OnCpu(), identity)
       // the weights last, read straight from the fetched buffer (no copy) onto the device, and not kept: a phone's
       // tab has no room for a second copy of 244 MB
-      (model, mb) <- weights(dir).map { bytes =>
-        status(s"the weights to ${c.api}…")
-        (Qwen3Compute(c, new Safetensors(TypedArrayBuffer.wrap(bytes)), config, headOnCpu = phone && c.api != "WebGPU"), bytes.byteLength / 1048576) }
+      model <- weights(dir).map { st =>
+        stage(s"the weights to ${c.api}…")
+        Qwen3Compute(c, st, config, headOnCpu = phone && c.api != "WebGPU") }
     yield
       on = OnQwen(model, tok, layer)
-      status("")
+      idle()
       skill = Skill(); skill.load(new Int8Array(skillBytes).toArray)
       engine = null
-      Right(s"the cut model (${config.layers} layers, $mb MB) and the readers on ${c.api}" +
+      Right(s"the cut model (${config.layers} layers) and the readers on ${c.api}" +
         (if phone && c.api != "WebGPU" then ", the head on the CPU" else "") + device.fold(why => s" ($why)", _ => "")))
       .recover { case t => Left(s"cannot load the readers: ${t.getMessage}") }
 
@@ -114,7 +116,8 @@ object Engine:
     handle(p, Handler.general[Model, Rest, A, A](a => pure(a))([X] => (op: Model[X], k: X => A ! Rest) =>
       val f: Future[X] = op match
         case Model.Load(name) => if name == "readers" then loadReaders("model", 19) else loadWebLlm(name)
-        case Model.Program(tables, question, retry) => program(tables, question, retry)
-          .recover { case t => Left(s"the model failed: $t") }
+        case Model.Program(tables, question, retry) =>
+          stage("reading a question…")
+          program(tables, question, retry).map { r => idle(); r }.recover { case t => idle(); Left(s"the model failed: $t") }
         case Model.Summary(question, q, result) => summary(question, q, result).recover { case _ => None }
       Async.fromFuture[X, Rest](f).flatMap(k)))

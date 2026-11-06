@@ -481,3 +481,10 @@ and draw and said with the bytes held; the scales and biases go up as half float
 phone the pool is 24 MB and THE HEAD STAYS ON THE CPU (the embedding's 78 MB not sent; the logits from the last
 row read back, 150M multiplies in JS — an ask costs more, a question 1.2–3 s on an M4 as a phone, `PHONE=1
 scripts/page.sh`). GPU memory on a phone: ~165 MB of words, ~19 MB of halves, the pool, the cache.
+
+The phone's third report (2026-11-06): the tab reloaded again with no word. Two answers: the page keeps its stage in
+local storage ("the weights: file 3 of 5…", "reading a question…") and the next visit says where the last one
+ended; and the weights go to the page as safetensors FILES of a few layers each (`Safetensors.split`,
+SplitWeights, manifest.json "files"), read one by one as one (`Tensors.Many`) — no join, so the page never holds
+the whole twice (the peak at the load was 514 MB of JS beside the GPU's copy; now ~250). The tables themselves are
+in memory as values (the GDP series, 14,000 rows, a few MB) — not what kills a tab.

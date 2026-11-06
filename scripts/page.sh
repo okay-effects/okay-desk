@@ -9,7 +9,8 @@ sbt -batch web/fullLinkJS > /dev/null
 web=web/target/web; mkdir -p $web/model
 cp web/page/index.html $web/ && cp web/target/scala-3.3.8/okay-desk-web-opt/main.js $web/
 cp web/page/examples.html $web/ && cp -r web/page/sample $web/
-for f in config.json tokenizer.json model.safetensors; do cp "$MODEL_DIR/$f" $web/model/; done
+for f in config.json tokenizer.json; do cp "$MODEL_DIR/$f" $web/model/; done
+sbt -batch "bench/runMain okay.desk.bench.SplitWeights $MODEL_DIR $PWD/$web/model" > /dev/null
 cp "$SKILL" $web/model/readers.skill
 jwebserver -d "$PWD/$web" -p 8734 -o none > /dev/null 2>&1 &
 server=$!

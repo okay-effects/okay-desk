@@ -20,9 +20,8 @@ sed -i "" "s#src=\"main.js\"#src=\"main.js?v=$v\"#" "$out/index.html" "$out/exam
 rm -rf "$out/sample" && cp -r web/page/sample "$out/"
 mkdir -p "$out/model"
 cp "$MODEL_DIR/config.json" "$MODEL_DIR/tokenizer.json" "$out/model/" && cp "$SKILL" "$out/model/readers.skill"
-split -b 90m -a 1 "$MODEL_DIR/model.safetensors" "$out/model/weights."
-parts=$(ls "$out/model" | grep '^weights\.' | sort | sed 's/.*/"&"/' | paste -sd, -)
-printf '{"parts": [%s]}\n' "$parts" > "$out/model/manifest.json"
+# the weights as safetensors files of a few layers each (manifest.json lists them): read one by one as one
+sbt -batch "bench/runMain okay.desk.bench.SplitWeights $MODEL_DIR $out/model" > /dev/null
 touch "$out/.nojekyll"
 git -C "$out" add -A
 git -C "$out" commit -q -m "the page, from $(git rev-parse --short HEAD)" || echo "nothing new"
