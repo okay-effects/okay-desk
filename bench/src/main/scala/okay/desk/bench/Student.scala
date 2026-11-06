@@ -133,6 +133,9 @@ object Distill:
       finally
         st.close()
         student.hook = null
+    val dir = Path.of(sys.props("user.home"), ".cache", "okay-desk", "student")
+    Files.createDirectories(dir)
+    val out = dir.resolve(s"lora-${studentRepo.split('/').last}.safetensors")
     val t0 = System.nanoTime()
     var window = Vector.empty[Float]
     for (p, k) <- pairs.zipWithIndex do
@@ -147,10 +150,22 @@ object Distill:
       if (k + 1) % 100 == 0 then
         println(f"step ${k + 1}: z-MSE ${window.sum / window.size}%.4f (${(System.nanoTime() - t0) / 1e9}%.0f s)")
         window = Vector.empty
-    val dir = Path.of(sys.props("user.home"), ".cache", "okay-desk", "student")
-    Files.createDirectories(dir)
-    val out = dir.resolve(s"lora-${studentRepo.split('/').last}.safetensors")
+      // a checkpoint every 500 steps: a run killed at 5,300 of 6,000 kept nothing
+      if (k + 1) % 500 == 0 then lora.save(out.toString)
     lora.save(out.toString)
     println(s"saved $out (DESK_ADAPTER=$dir)")
     keep.close()
     lora.close()
+
+object Merge:
+  /** the student and its adapter as one model: `local/<student>-m<bits>` (mlx-scala's LoraMerge, every linear layer
+   * quantized again at `bits`). `sbt "bench/runMain okay.desk.bench.Merge local/…-p12 4"` */
+  def main(args: Array[String]): Unit =
+    val (repo, bits) = (args(0), args.lift(1).map(_.toInt).getOrElse(4))
+    val src = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
+    val adapter = Path.of(sys.props("user.home"), ".cache", "okay-desk", "student",
+      s"lora-${repo.split('/').last}.safetensors")
+    val name = s"$repo-m$bits"
+    val dst = Models.hubCache.resolve("models--" + name.replace("/", "--")).resolve("snapshots").resolve("main")
+    mlx.llm.LoraMerge.qwen3(src, adapter, dst, bits)
+    println(f"$name: ${Files.size(dst.resolve("model.safetensors")) / 1048576.0}%.0f MB at $dst")
