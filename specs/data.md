@@ -588,3 +588,20 @@ student 120). The teacher's skill file unchanged: **12/12 en, 6/12 ru**, the sam
 phone (WebGL2, the head on the CPU). A language is its block (and, by the map, nothing else yet: the components the
 map called Russian's were not, once the bus was trained back); the knowledge is the data on the disk and the skill
 file; all three plug into the same contract.
+
+## 23. Understanding, in principle (the operator's question, 2026-11-06, late)
+
+The phone asked "Slowest grow GDP?" and got the fastest. The readers were never asked: the direction was a rule,
+"-" always, and ascending did not exist in the assembler. The specific fix: the direction read as the rest is —
+the words where they are exact (slowest, smallest, least, наименьший, медленнее… ascending; fastest, largest… descending),
+else the model asked at the order's prefix (`"order": ["` — "-" or the column's name next). Then "grew" and
+"shrank" among growth's words, a number a value for a numeric column only, a time in the question the condition's
+column, a column named by its plural or singular form. Live on the GDP series: slowest and fastest growth both ways,
+in English and Russian; the five smallest values in 2023; the laws unchanged (cut 12/9, core 12/6).
+
+The principle behind it: every hand-written rule is a hole in the training pairs — a phrasing the pairs lack is
+"not understood" because a rule decides for the model. Understanding grows by moving decisions from rules into
+READERS (a direction is a predicate on the bus like the shape) and by widening the pairs with the phrasings in both
+languages; the words stay as EXACT FACTS only where the data itself decides (a value, a column, a time). The next
+reader to train: the direction; the next pairs: growth and direction phrasings; the next measure: those phrasings
+in the held-out set, so a gap is a number, not a report from a phone.
