@@ -265,7 +265,14 @@ final class Readers:
           if vs.nonEmpty && vs.size <= 30 then ask(pr, valuePrefix(table, col, o) + "\"", vs).map(a => Some(vs(a.zipWithIndex.maxBy(_._1)._2)))
           else pure[Option[String], R](None))(c => pure(Some(c)))
       yield v
-    def number: Option[Int] = "\\d+".r.findFirstIn(question).map(_.toInt)
+    // A TIME WRITTEN IN THE QUESTION ("in 2020", "за 2023"): a number that is a value of the table's time column is a
+    // condition on it — and not the limit's number
+    val timeColumn = t.columns.find(c => c.toLowerCase.matches("(?U).*\\b(year|date|day|month|quarter|week|time|год|дата|день|месяц)\\b.*"))
+    val timeValues: Vector[String] = timeColumn.toVector.flatMap { c =>
+      val vs = t.rows.map(_(t.columns.indexOf(c)).text).toSet
+      "\\d{4}(?:-\\d\\d(?:-\\d\\d)?)?".r.findAllIn(question).toVector.distinct.filter(vs)
+    }
+    def number: Option[Int] = "\\d+".r.findAllIn(question).toVector.filterNot(timeValues.contains).headOption.map(_.toInt)
       .orElse(numberWords.collectFirst { case (w, n) if lower.matches(s"(?U).*\\b$w\\b.*") => n })
     for
       // the shape by two readers: the probe, and the model asked which section comes first at `{"from": T, "`
@@ -370,6 +377,8 @@ final class Readers:
             val conds = Vector.newBuilder[String]
             first.foreach(conds += _)
             for (_, c, v) <- facts.drop(1) if !whereCol.contains(c) do conds += s"""{"column": ${q(c)}, "op": "=", "value": ${q(v)}}"""
+            for c <- timeColumn if !whereCol.contains(c); v <- timeValues do
+              conds += s"""{"column": ${q(c)}, "op": "=", "value": ${if v.forall(_.isDigit) then v else q(v)}}"""
             val cs = conds.result()
             if cs.nonEmpty then parts += s""""where": [${cs.mkString(", ")}]"""
             if group == "group" then groupCol.foreach(c => parts += s""""group": [${q(c)}]""")
