@@ -373,6 +373,20 @@ final class Readers:
                     .orElse(numericCols.filterNot(_ == "id").headOption).orElse(numericCols.headOption) })
                 .fold(column("where"))(c => pure(Some(c)))
             // the first condition's op and value
+            // THE ORDER'S DIRECTION (the phone asked "slowest grow GDP?" and got the fastest: "-" was written always): the
+            // words decide where they are exact — ascending (smallest, slowest, lowest, least, cheapest, earliest, ascending,
+            // наимен*, медленн*, самы* мал*/низк*/дешёв*, по возраст*), descending (largest, fastest…) — else the model is
+            // asked at the order's prefix: "-" or the column's name next
+            ascending <-
+              val asc = word("smallest", "slowest", "lowest", "least", "fewest", "cheapest", "earliest", "ascending", "bottom", "наимен*",
+                "медленн*", "меньше всего", "самы* мал*", "самы* низк*", "самы* дешев*", "самы* медленн*", "по возраст*", "худш*", "worst")
+              val desc = word("largest", "fastest", "highest", "most", "biggest", "greatest", "top", "descending", "latest", "best", "наибольш*",
+                "быстрее", "больше всего", "самы* больш*", "самы* высок*", "самы* быстр*", "по убыван*", "лучш*", "топ")
+              if asc && !desc then pure[Boolean, R](true)
+              else if desc then pure[Boolean, R](false)
+              else if !hasOrder then pure[Boolean, R](false)
+              else ask(pr, "```json\n{\"from\": \"" + table + "\", \"order\": [\"", Vector("-", orderCol.orElse(aggCol).getOrElse("x")))
+                .map(scores => scores(1) > scores(0))
             first <- whereCol.fold(pure[Option[String], R](None)) { c =>
               val opP: String ! R =
                 if whereOp == "empty" then pure("empty")
@@ -414,7 +428,7 @@ final class Readers:
               c.foreach(col => parts += s""""aggregate": [{"fn": ${q(fn)}, "column": ${q(col)}, "as": ${q(if col == "*" then "n" else fn)}$by}]""")
             if order == "order" then
               val c = if fn != "-" && fn != "count" && group == "group" then Some(fn) else orderCol
-              c.foreach(col => parts += s""""order": [${q("-" + col)}]""")
+              c.foreach(col => parts += s""""order": [${q((if ascending then "" else "-") + col)}]""")
             if limit == "limit" then parts += s""""limit": ${number.getOrElse(if fn == "growth" then 10 else 1)}"""
             if select == "select" then orderCol.foreach(c => parts += s""""select": ["id", ${q(c)}]""")
             val built = parts.result()
