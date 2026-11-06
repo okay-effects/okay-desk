@@ -473,3 +473,11 @@ limit's number. A condition with no value is no condition. Live: Ukraine in 2020
 2023; growth per country — Georgia first, its series beginning near zero (the measure is the whole series' growth;
 "recent" growth would need a window, not yet said). The phone (an older iPhone, WebGL2) loads the model and
 answers — the first report from it came with the earlier program, before this landed.
+
+The phone's second report (2026-11-06): "Argument 1 ('shader') to shaderSource must be an instance of WebGLShader" —
+`createShader` gave null: WebGL2 had LOST ITS CONTEXT during the weights' upload (iOS takes the GPU's memory back
+silently at a few hundred MB), and the first shader is compiled after. Now: the loss is asked for after every upload
+and draw and said with the bytes held; the scales and biases go up as half floats (RGBA16F, half the memory); on a
+phone the pool is 24 MB and THE HEAD STAYS ON THE CPU (the embedding's 78 MB not sent; the logits from the last
+row read back, 150M multiplies in JS — an ask costs more, a question 1.2–3 s on an M4 as a phone, `PHONE=1
+scripts/page.sh`). GPU memory on a phone: ~165 MB of words, ~19 MB of halves, the pool, the cache.

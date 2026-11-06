@@ -1,6 +1,6 @@
 #!/bin/sh
 # THE PAGE'S SELF-TEST: the page linked, served with the cut model's files and the readers' skill from the caches,
-# run in Chromium by scripts/page.scala (`GL=1` for WebGL2)
+# run in Chromium by scripts/page.scala (`GL=1` for WebGL2, `PHONE=1` as a phone: WebGL2, the CPU head)
 set -e
 cd "$(dirname "$0")/.."
 MODEL_DIR=${MODEL_DIR:-$HOME/.cache/huggingface/hub/models--local--Qwen3-0.6B-4bit-cut19/snapshots/main}

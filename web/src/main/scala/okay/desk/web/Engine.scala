@@ -52,26 +52,29 @@ object Engine:
 
   /** the readers: the model's files from `dir` (config.json, tokenizer.json, the weights, readers.skill), the device
    * chosen — WebGPU, else WebGL2, else the CPU */
+  /** `phone`: a small screen — WebGL2 keeps a small pool of textures and the head stays on the CPU (the embedding's
+   * 78 MB not sent: a phone's browser takes the GPU's memory back at a few hundred MB) */
+  var phone = false
   def loadReaders(dir: String, layer: Int): Future[Either[String, String]] =
     (for
       config <- fetch(s"$dir/config.json").map(text).map(Qwen3Config.parse)
       tok <- fetch(s"$dir/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
       skillBytes <- fetch(s"$dir/readers.skill")
       gpu <- OnWebGpu.create()
-      device = gpu.left.flatMap(why => OnWebGl2.create().left.map(more => s"$why; $more"))
+      device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 24L * 1048576 else 96L * 1048576).left.map(more => s"$why; $more"))
       c = device.fold(_ => OnCpu(), identity)
       // the weights last, read straight from the fetched buffer (no copy) onto the device, and not kept: a phone's
       // tab has no room for a second copy of 244 MB
       (model, mb) <- weights(dir).map { bytes =>
         status(s"the weights to ${c.api}…")
-        (Qwen3Compute(c, new Safetensors(TypedArrayBuffer.wrap(bytes)), config), bytes.byteLength / 1048576) }
+        (Qwen3Compute(c, new Safetensors(TypedArrayBuffer.wrap(bytes)), config, headOnCpu = phone && c.api != "WebGPU"), bytes.byteLength / 1048576) }
     yield
       on = OnQwen(model, tok, layer)
       status("")
       skill = Skill(); skill.load(new Int8Array(skillBytes).toArray)
       engine = null
       Right(s"the cut model (${config.layers} layers, $mb MB) and the readers on ${c.api}" +
-        device.fold(why => s" ($why)", _ => "")))
+        (if phone && c.api != "WebGPU" then ", the head on the CPU" else "") + device.fold(why => s" ($why)", _ => "")))
       .recover { case t => Left(s"cannot load the readers: ${t.getMessage}") }
 
   /** a model that generates: WebLLM's engine, cached by the browser after the first load */

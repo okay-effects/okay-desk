@@ -34,6 +34,7 @@ object Main:
       dom.window.addEventListener("unhandledrejection", (e: dom.Event) =>
         Engine.status("error: " + e.asInstanceOf[js.Dynamic].reason.toString))
       val phone = dom.window.innerWidth < 700 || dom.window.navigator.asInstanceOf[js.Dynamic].maxTouchPoints.asInstanceOf[Int] > 1
+      Engine.phone = phone
       val _ = Async.start(Dom.run(root, Look.skin, follow = true)(InThePage.fetching(Engine.model(
         App.main[Row](search.getAll("open").toList, phone)))))
       if search.has("selftest") then selftest()
