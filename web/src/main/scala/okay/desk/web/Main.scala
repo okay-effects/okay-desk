@@ -93,6 +93,19 @@ object Look:
        |body .okay-face .okay-mark-example { padding: 8px 12px; border-radius: 12px; margin: 8px 0;
        |  background: color-mix(in srgb, var(--okay-surface) 94%, var(--okay-accent) 6%); }
        |body .okay-face pre, body .okay-face .okay-mark-code { overflow: auto; font-size: .85rem; }
+       |body .okay-face .okay-mark-tables .okay-mark-slot .okay-group, body .okay-face .okay-mark-models .okay-mark-slot .okay-group {
+       |  display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+       |body .okay-face textarea[id^="f-ask"] { min-height: 5.5em; }
+       |/* THE ORDER OF THE PAGE (okay-faces draws every form after the parts, with its button): the page is one flex
+       |   column, the view's groups and the actions' bar dissolved into it, so the forms of the files and the address
+       |   stand before the conversation and the question's form after it */
+       |body .okay-face > div { display: flex; flex-direction: column; gap: 12px; }
+       |body .okay-face > div > .okay-view, body .okay-face > div > .okay-view > .okay-group,
+       |body .okay-face > div > nav.okay-actions { display: contents; }
+       |body .okay-face > div > nav.okay-actions > form { order: 1; }
+       |body .okay-face .okay-mark-user, body .okay-face .okay-mark-model, body .okay-face .okay-mark-system,
+       |body .okay-face .okay-mark-result { order: 2; }
+       |body .okay-face > div > nav.okay-actions > form:last-child { order: 3; }
        |""".stripMargin
   val skin: Skin =
     val calm = Skin.calm(accent = "#2b5bd7", deep = "#1e2a5a")
