@@ -575,3 +575,16 @@ The models offered: **the student by default** (`readers-small`: §21, 12 layers
 114 MB fetched for English and Russian with the vocabulary blocks of §20), **the cut for comparison** (`readers`: 19
 layers, `model/`), then the models that generate. The same skill file for both. The page's self-test (`?selftest`,
 `&model=readers` for the cut) on WebGPU: the student 11/12 en, 7/12 ru; the cut 12/12, 9/12 — the JVM's numbers.
+
+## 22. The core on the page (2026-11-06, late)
+
+`model-core`, the page's default: cut19 with the map's FREE and RU sets removed (13 components: attention 1, 2, 4,
+9, 10, 12, 16, 18; MLP 3, 4, 11, 15, 16 — okay-inlay specs/core.md §11), the contract distilled back with no adapter
+on the removed projections (mlx-scala `Lora.except`), merged at 4 bits. The files leave the removed components out
+(SplitWeights: a component is gone when its words and biases are zero — a merge re-quantizes zeros to scales −1e-7),
+and okay-llm's forward skips what a layer has not (SkipSuite: absent == silenced, exactly). The page for English and
+Russian: 108 MB of layers + 37 MB of the vocabulary's blocks + 3 MB of readers = 146 MB (the cut 199, the 12-layer
+student 120). The teacher's skill file unchanged: **12/12 en, 6/12 ru**, the same on the JVM and in the page as a
+phone (WebGL2, the head on the CPU). A language is its block (and, by the map, nothing else yet: the components the
+map called Russian's were not, once the bus was trained back); the knowledge is the data on the disk and the skill
+file; all three plug into the same contract.
