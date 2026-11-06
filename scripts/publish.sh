@@ -13,7 +13,8 @@ out=/tmp/okay-desk-pages
 # and the branch grew past what GitHub Pages builds ("Page build failed" with no reason, 2026-11-06)
 git worktree prune
 rm -rf "$out"
-git branch -D gh-pages-next 2>/dev/null; git worktree add -q --orphan -b gh-pages-next "$out"
+git branch -D gh-pages-next >/dev/null 2>&1 || true
+git worktree add -q --orphan -b gh-pages-next "$out"
 cp web/page/index.html "$out/" && cp web/target/scala-3.3.8/okay-desk-web-opt/main.js "$out/"
 # the script's address carries the build's hash: a browser that cached the page gets the new script without a hard reload
 v=$(md5 -q "$out/main.js" | cut -c1-8)
