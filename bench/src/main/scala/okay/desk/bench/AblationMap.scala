@@ -12,7 +12,8 @@ object AblationMap:
   def main(args: Array[String]): Unit =
     val repo = args.headOption.getOrElse("local/Qwen3-0.6B-4bit-cut19"); val layer = args.lift(1).map(_.toInt).getOrElse(19)
     val from = args.lift(2).map(_.toInt).getOrElse(0); val until = args.lift(3).map(_.toInt).getOrElse(18)
-    val out = java.nio.file.Path.of("bench", "ablation.txt")
+    // (a forked run's working directory is bench/)
+    val out = if java.nio.file.Files.isDirectory(java.nio.file.Path.of("bench")) then java.nio.file.Path.of("bench", "ablation.txt") else java.nio.file.Path.of("ablation.txt")
     def note(line: String): Unit =
       println(line); java.nio.file.Files.writeString(out, line + "\n", java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
     val golds = Sample.questions.map(q => Sample.run(Query.parse(q.gold).toOption.get).toOption.get)

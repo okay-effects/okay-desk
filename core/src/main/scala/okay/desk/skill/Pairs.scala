@@ -125,9 +125,10 @@ object Pairs:
         Pair(base ++ extra, question, program)
 
   /** pairs whose gold programs run (a check on the generator itself) */
-  def many(seed: Long, n: Int): Vector[Pair] =
+  /** `lang`: the pairs in one language alone — None both, Some(false) English, Some(true) Russian */
+  def many(seed: Long, n: Int, lang: Option[Boolean] = None): Vector[Pair] =
     val rnd = new scala.util.Random(seed)
-    Iterator.continually(one(rnd, rnd.nextBoolean())).filter { p =>
+    Iterator.continually(one(rnd, lang.getOrElse(rnd.nextBoolean()))).filter { p =>
       Query.parse(p.program).toOption.exists {
         case r: Query.Relational => Exact.run(p.tables, r).isRight
         case l: Query.Logical => Logic.run(p.tables, l).isRight

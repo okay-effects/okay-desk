@@ -1,3 +1,8 @@
 # 2026-11-06 12:31 local/Qwen3-0.6B-4bit-cut19: a component silenced, the readers retrained, the bench
 
 
+# 2026-11-06T13:17 local/Qwen3-0.6B-4bit-cut19, layers 0..18: a component silenced, the readers retrained (600 pairs), the sample
+local/Qwen3-0.6B-4bit-cut19-noattn0            readers | en: 6/12 | ru: 3/12  (388 s)
+local/Qwen3-0.6B-4bit-cut19-nomlp0             readers | en: 10/12 | ru: 6/12  (383 s)
+local/Qwen3-0.6B-4bit-cut19-noattn1            readers | en: 12/12 | ru: 9/12  (379 s)
+local/Qwen3-0.6B-4bit-cut19-nomlp1             readers | en: 7/12 | ru: 4/12  (383 s)

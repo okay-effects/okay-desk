@@ -493,7 +493,6 @@ The phone's fourth report: "the last visit ended at: reading a question…" — 
 the scores of all 16 heads over 400 tokens were a 41 MB texture a layer, made and dropped nineteen times a forward
 (too big for the phone's pool), and the driver freed them late. Now WebGL2's attention runs the heads in groups
 (`headsAtOnce`, 2 on a phone): a group's scores are ~1 MB and live in the pool; exact (the self-test).
-
 ## 19. Two screens, the disk (2026-11-06)
 
 THE CHAT: the model (its form; while it loads, its progress in place — `Model.Begin` starts it, `Model.Progress`
@@ -517,3 +516,38 @@ fetches another block when a token of it appears (a Chinese word fetched cjk, 17
 Law (okay-llm VocabSuite): all blocks together == the whole embedding exactly; English and Russian alone: the same
 states, the logits of the loaded tokens the same, the rest −∞. The page: 12/12 and 9/12 unchanged; a page for
 English and Russian is ~205 MB instead of 244.
+
+## 21. A smaller model on the same contract (2026-11-06, branch student)
+
+The operator's direction: a model built on the principles — understanding kept, knowledge outside, skills as
+modules. The contract between a model and a skill is the state the readers read (the residual after layer 19 of
+cut19); a new model that gives that state serves the SAME skill file, unchanged. Two steps, each measured by the
+bench with the teacher's readers (`readers-Qwen3-0.6B-4bit-cut19-19.skill`), never retrained:
+
+1. **The vocabulary** (`Vocab`, `VocabCorpus`, the law `VocabSuite`): the tokens met in English and Russian prose
+   (43 topics written by the local 35B in both languages; the okay-* READMEs and specs), the desk's prompts and
+   programs, every single character of the languages and all 256 bytes, the merge closure (BPE reaches a token only
+   through its merge) — 152k → 38k tokens, the embedding's rows taken whole. **244 → 181 MB.** The law: 64 prompts
+   (held-out pairs and the bench's questions) encode to the same tokens renumbered, the states at layer 19 equal,
+   difference 0.0; the teacher's skill on it: **12/12 en, 9/12 ru — the teacher's own**. The price: held-out prose
+   (4 topics never seen) — 13% of English and 5.5% of Russian distinct words split otherwise (+11% and +2.5%
+   tokens). Readers retrained on it gave 8/12 ru: a retraining's spread, not the model (the states are equal).
+2. **The student** (`LayerInfluence`, `Prune`, `Distill`, `Merge`): each layer's influence on the desk's prompts
+   (1 − cos of its input and output) is flat, 0.056–0.126 — none free; the seven least (11–15, 17, 18) dropped,
+   layers 0–10 and 16 kept (12 of 19), then LoRA (rank 64, every projection) trained toward the teacher's state at
+   layer 19, the squared distance in the teacher's spread per dimension (z-MSE), over every position of a prompt and
+   its program: 5,000 steps, 24 minutes, z-MSE 0.42 → 0.042. Then merged into the weights at 4 bits.
+
+| model, the teacher's skill file unchanged | size | en | ru |
+|---|---|---|---|
+| cut19 (the teacher) | 244 MB | 12/12 | 9/12 |
+| + the vocabulary | 181 MB | 12/12 | 9/12 |
+| 12 layers, not trained | 128 MB | 6/12 | 2/12 |
+| 12 layers + the distilled adapter (rank 32, 2,000 steps) | 128 + 35 MB | 10/12 | 5/12 |
+| 12 layers + the distilled adapter (rank 64, 5,000 steps) | 128 + 69 MB | 11/12 | 8/12 |
+| **merged at 4 bits** | **122 MB** | **11/12** | **7/12** |
+| merged at 8 bits | 231 MB | 11/12 | 8/12 |
+
+Half the teacher's size, the same skill file, one English and two Russian questions lost. Lessons: the merge at 4
+bits costs one question (8 bits keep it, at twice the size); distillation brings 6 → 11 and 2 → 8 (the layers alone
+are not enough); a run killed silently at 5,300 of 6,000 steps kept nothing — `Distill` writes a checkpoint every 500.

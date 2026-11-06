@@ -1,8 +1,6 @@
 package okay.desk.bench
 
-import mlx.{Arr, Dtype, Scope}
-import mlx.Mlx.*
-import mlx.llm.{Chat, Model, Models, Qwen3}
+import mlx.llm.{Chat, Model, Models}
 import okay.desk.*
 import okay.desk.skill.*
 
@@ -17,39 +15,30 @@ import okay.desk.skill.*
 object LayerProbes:
   import okay.desk.skill.Probes.*
 
-  /** the states after each of `layers` at the given positions: layer → position → vector */
-  def states(model: Qwen3, ids: Array[Int], layers: Seq[Int], at: Vector[Int]): Map[Int, Vector[Array[Float]]] =
-    val got = scala.collection.mutable.Map.empty[Int, Vector[Array[Float]]]
-    model.hook = new Qwen3.Hook:
-      def after(i: Int, h: Arr)(using Scope): Arr =
-        if layers.contains(i + 1) then
-          val d = h.dim(2); val all = astype(h, Dtype.Float32).toFloats.map(v => if v.isNaN || v.isInfinite then 0f else v)
-          got(i + 1) = at.map(p => all.slice(p * d, (p + 1) * d))
-        h
-    val st = model.newState(); val s = new Scope
-    try { model.logits(ints(ids, 1, ids.length)(using s), st)(using s).eval(); got.toMap }
-    finally { s.close(); st.close(); model.hook = null }
-
   def main(args: Array[String]): Unit =
     val repo = args.headOption.getOrElse("mlx-community/Qwen3-0.6B-4bit")
     val layers = args.lift(1).map(_.split(",").map(_.toInt).toSeq).getOrElse(Seq(8, 12, 16, 20, 24))
     val dir = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
-    val chat = Chat.load(dir); val model = Model.load(dir, mapped = true).asInstanceOf[Qwen3]
-    val train = Pairs.many(42, 600); val test = Pairs.many(43, 200)
-    println(s"$repo: ${train.size} train, ${test.size} test pairs; layers ${layers.mkString(",")}")
+    val chat = Chat.load(dir); val model = Model.load(dir, mapped = true)
+    val reading = MlxReading(chat, model, layers.head)
+    // ACROSS LANGUAGES (okay-inlay specs/core.md §9, step 1): DESK_TRAIN_LANG=en and DESK_TEST_LANG=ru train the readers on
+    // one language alone and read the other — where the readability holds, the bus is meaning, not language
+    def lang(name: String): Option[Boolean] = scala.sys.env.get(name).map(_ == "ru")
+    val train = Pairs.many(42, scala.sys.env.getOrElse("DESK_PAIRS", "600").toInt, lang("DESK_TRAIN_LANG")); val test = Pairs.many(43, 200, lang("DESK_TEST_LANG"))
+    println(s"$repo: ${train.size} train (${scala.sys.env.getOrElse("DESK_TRAIN_LANG", "both")}), ${test.size} test (${scala.sys.env.getOrElse("DESK_TEST_LANG", "both")}) pairs; layers ${layers.mkString(",")}")
     // every example: its slots, the schema names' states, and the query state per slot READ WHERE THE MODEL
     // DECIDES: after a forced prefix of the program up to that slot ("…, \"where\": [{\"column\": \"") — the last
     // token of the question alone does not hold which column is meant (the first run: the pointers at the "none" rate)
     final case class Ex(slots: Slots, names: Vector[String], q: Map[(String, Int), Array[Float]], keys: Map[Int, Vector[Array[Float]]], pr: Prompted)
     def examples(ps: Vector[Pairs.Pair]): Vector[Ex] = ps.flatMap { p =>
       slots(p.program).map { sl =>
-        val pr = Read.run(prompted[Read](p), MlxReading(chat, model, layers.head))
-        val base = states(model, pr.ids, layers, (pr.ids.length - 1) +: pr.names.map(_._2))
+        val pr = Read.run(prompted[Read](p), reading)
+        val base = reading.statesAt(pr.ids, layers, (pr.ids.length - 1) +: pr.names.map(_._2))
         val q = scala.collection.mutable.Map.empty[(String, Int), Array[Float]]
         for l <- layers do q(("last", l)) = base(l).head
         for (name, prefix) <- prefixes do
           val ids = pr.ids ++ chat.tokenizer.encode(prefix(sl.table))
-          val st = states(model, ids, layers, Vector(ids.length - 1))
+          val st = reading.statesAt(ids, layers, Vector(ids.length - 1))
           for l <- layers do q((name, l)) = st(l).head
         Ex(sl, pr.names.map(_._1), q.toMap, base.map((l, v) => l -> v.tail), pr)
       }
