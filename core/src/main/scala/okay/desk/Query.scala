@@ -13,7 +13,9 @@ enum Cond:
   case Has(column: String, text: String)                // contains, ignoring case
   case Empty(column: String, is: Boolean)
 
-final case class Agg(fn: String, column: String, as: String)  // count sum avg min max; count's column may be "*"
+/** count sum avg min max (count's column may be "*"); growth and change — the last value against the first in the
+ * order of `by` (a time column) within each group: growth as a fraction of the first, change as a difference */
+final case class Agg(fn: String, column: String, as: String, by: Option[String] = None)
 final case class Order(column: String, desc: Boolean)
 final case class Join(table: String, on: Vector[(String, String)])
 
@@ -67,7 +69,7 @@ object Query:
           val group = arr(o, "group").collect { case Json.Str(s) => s }
           val aggs = arr(o, "aggregate").collect { case a: Json.Obj =>
             val fn = str(a, "fn").getOrElse("count"); val col = str(a, "column").getOrElse("*")
-            Agg(fn, col, str(a, "as").getOrElse(if col == "*" then fn else s"${fn}_$col")) }
+            Agg(fn, col, str(a, "as").getOrElse(if col == "*" then fn else s"${fn}_$col"), str(a, "by")) }
           val select = arr(o, "select").collect { case Json.Str(s) => s }
           val order = arr(o, "order").collect {
             case Json.Str(s) => Order(s.stripPrefix("-"), s.startsWith("-"))
@@ -91,8 +93,8 @@ object Query:
         case Cond.Empty(c, is) => Json.obj("column" -> Json.Str(c), "op" -> Json.Str(if is then "empty" else "not empty"))
       })
       if group.nonEmpty then parts += "group" -> Json.Arr(group.map(Json.Str.apply))
-      if aggs.nonEmpty then parts += "aggregate" -> Json.Arr(aggs.map(a => Json.obj("fn" -> Json.Str(a.fn),
-        "column" -> Json.Str(a.column), "as" -> Json.Str(a.as))))
+      if aggs.nonEmpty then parts += "aggregate" -> Json.Arr(aggs.map(a => Json.obj((Vector("fn" -> Json.Str(a.fn),
+        "column" -> Json.Str(a.column), "as" -> Json.Str(a.as)) ++ a.by.map(b => "by" -> Json.Str(b)))*)))
       if select.nonEmpty then parts += "select" -> Json.Arr(select.map(Json.Str.apply))
       if order.nonEmpty then parts += "order" -> Json.Arr(order.map(o => Json.Str((if o.desc then "-" else "") + o.column)))
       limit.foreach(l => parts += "limit" -> Json.Num(BigDecimal(l)))

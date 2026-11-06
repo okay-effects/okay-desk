@@ -32,14 +32,16 @@ object Exact:
       case Cond.Cmp(c, _, _) => c
       case Cond.Has(c, _) => c
       case Cond.Empty(c, _) => c
-    } ++ q.group ++ q.aggs.map(_.column).filter(_ != "*") ++ q.order.map(_.column).filterNot(c => q.aggs.exists(_.as == c)) ++
+    } ++ q.group ++ q.aggs.map(_.column).filter(_ != "*") ++ q.aggs.flatMap(_.by) ++ q.order.map(_.column).filterNot(c => q.aggs.exists(_.as == c)) ++
       q.select.filterNot(c => q.aggs.exists(_.as == c))
     val missing = named.filterNot(c => t.column(c).isDefined).distinct
     val badOps = q.where.collect { case Cond.Cmp(_, op, _) if !Set("=", "!=", "<", "<=", ">", ">=").contains(op) => op }
-    val badFns = q.aggs.map(_.fn).filterNot(Set("count", "sum", "avg", "min", "max").contains)
+    val badFns = q.aggs.map(_.fn).filterNot(Set("count", "sum", "avg", "min", "max", "growth", "change").contains)
+    val noBy = q.aggs.filter(a => (a.fn == "growth" || a.fn == "change") && a.by.isEmpty).map(_.fn)
     if missing.nonEmpty then Left(s"no column ${missing.mkString(", ")} in ${t.name}; its columns: ${t.columns.mkString(", ")}")
     else if badOps.nonEmpty then Left(s"unknown op ${badOps.mkString(", ")}: use = != < <= > >= contains empty")
-    else if badFns.nonEmpty then Left(s"unknown aggregate ${badFns.mkString(", ")}: use count sum avg min max")
+    else if badFns.nonEmpty then Left(s"unknown aggregate ${badFns.mkString(", ")}: use count sum avg min max growth change")
+    else if noBy.nonEmpty then Left(s"${noBy.mkString(", ")} needs \"by\": the column that orders the values in time")
     else Right(())
 
   private def holds(t: Table, r: Vector[Value], c: Cond): Boolean = c match
@@ -88,6 +90,14 @@ object Exact:
           case "sum" => Value.Num(nums.sum)
           case "avg" => if nums.isEmpty then Value.Empty else Value.Num(nums.sum / nums.size)
           case "min" => vals.filter(_ != Value.Empty).minOption.getOrElse(Value.Empty)
+          case "growth" | "change" =>
+            // the rows in the order of `by`, the first and the last values that are numbers
+            val bi = t.column(a.by.get).get; val ci = t.column(a.column).get
+            val series = rs.sortBy(_(bi))(using summon[Ordering[Value]]).flatMap(_(ci).num)
+            if series.size < 2 then Value.Empty
+            else if a.fn == "change" then Value.Num(series.last - series.head)
+            else if series.head == 0 then Value.Empty
+            else Value.Num((series.last - series.head) / series.head.abs)
           case _ => vals.filter(_ != Value.Empty).maxOption.getOrElse(Value.Empty)
       }
     })

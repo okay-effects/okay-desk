@@ -40,7 +40,8 @@ object Prompt:
        |
        |A relational query has: "from" (a table), optional "join" {"table", "on": [["this column", "other column"]]},
        |"where" (a list of {"column", "op", "value"}; op: = != < <= > >= contains empty "not empty"),
-       |"group" (columns), "aggregate" (a list of {"fn", "column", "as"}; fn: count sum avg min max; column "*" for count),
+       |"group" (columns), "aggregate" (a list of {"fn", "column", "as"}; fn: count sum avg min max; column "*" for count;
+       |growth or change with "by": the time column — the last value against the first within each group),
        |"select" (columns to show), "order" (columns; "-c" descending), "limit" (a number).
        |A datalog query has "datalog" (rules) and "goal" (an atom); the relations are the tables with their columns in order:
        |${Logic.describe(tables)}

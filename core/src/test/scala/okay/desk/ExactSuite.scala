@@ -49,3 +49,17 @@ class ExactSuite extends munit.FunSuite:
     assert(Prompt.faithful("There are 3 paid orders.", r))
     assert(!Prompt.faithful("There are 4 paid orders.", r))
     assert(Prompt.faithful("Exactly 3.0 of them.", r))
+
+/** growth and change: the last value against the first in the order of the time column, within each group */
+class GrowthSuite extends munit.FunSuite:
+  val gdp = Table.parse("gdp.csv", "country,year,value\nA,2021,100\nA,2020,80\nB,2020,50\nB,2021,40\nC,2020,10\n").toOption.get
+  test("growth per country, the fastest first; change as a difference; one point gives nothing"):
+    val q = Query.parse("""{"from": "gdp", "group": ["country"], "aggregate": [{"fn": "growth", "column": "value", "by": "year", "as": "growth"}], "order": ["-growth"]}""").toOption.get
+    val r = Exact.run(Map("gdp" -> gdp), q.asInstanceOf[Query.Relational]).toOption.get
+    assertEquals(r.rows.map(_.map(_.text)), Vector(Vector("A", "0.25"), Vector("B", "-0.2"), Vector("C", "")))
+    val c = Query.parse("""{"from": "gdp", "group": ["country"], "aggregate": [{"fn": "change", "column": "value", "by": "year", "as": "d"}]}""").toOption.get
+    assertEquals(Exact.run(Map("gdp" -> gdp), c.asInstanceOf[Query.Relational]).toOption.get.rows.map(_.map(_.text)),
+      Vector(Vector("A", "20"), Vector("B", "-10"), Vector("C", "")))
+    assert(Query.print(q).contains("\"by\":\"year\""))
+    val noBy = Query.parse("""{"from": "gdp", "aggregate": [{"fn": "growth", "column": "value"}]}""").toOption.get
+    assert(Exact.run(Map("gdp" -> gdp), noBy.asInstanceOf[Query.Relational]).left.exists(_.contains("by")))

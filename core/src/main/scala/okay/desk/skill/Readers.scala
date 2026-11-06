@@ -284,15 +284,19 @@ final class Readers:
         val fnByReaders = (fns :+ "-")(fnProbeScores.zipWithIndex.map((s, i) => (if i < fns.size then s + fnAsk(i) else s, i)).maxBy(_._1)._2)
         val topN = word("top", "топ", "three", "five", "ten", "три", "пять", "десять")
         val perEach = word("per", "each", "по кажд*", "кажд*", "в разрезе", "по стат*", "по город*", "по клиент*", "по стран*")
-        val fn = if word("how many", "number of", "count", "сколько", "число", "посчитай") then "count"
+        // GROWTH: a change in time within an entity — needs a time column (year, date, day, month) in the table
+        val timeCol = t.columns.find(c => c.toLowerCase.matches("(?U).*\\b(year|date|day|month|quarter|week|time|год|дата|день|месяц)\\b.*"))
+        val growth = timeCol.isDefined && word("grow*", "growth", "increase*", "rose", "rise", "fastest", "decline*", "fell", "рост*", "раст*", "растёт", "растут", "вырос*", "быстрее", "упал*", "снижа*")
+        val fn = if growth then "growth"
+          else if word("how many", "number of", "count", "сколько", "число", "посчитай") then "count"
           else if word("average", "mean", "средн*") then "avg"
           else if topN && !perEach then "-"
           else if word("total", "sum of", "сумм*", "итого") then "sum"
           else if word("largest", "highest", "maximum", "самый больш*", "наибольш*", "максим*") && !perEach then "-"
           else fnByReaders
-        val hasGroup = perEach || word("by") && fn != "-" || (fn != "-" && fn != "count" && marginal(c => Readers.part(c, 3) == "group") > 0.5)
-        val hasOrder = word("largest", "smallest", "highest", "lowest", "descending", "first", "top", "самы*", "наибольш*", "по убыван*", "по возраст*", "топ") || marginal(c => Readers.part(c, 4) == "order") > 0.6
-        val hasLimit = topN || (word("largest", "smallest", "highest", "самый", "наибольш*") && fn == "-" && !hasGroup) || marginal(c => Readers.part(c, 5) == "limit") > 0.6
+        val hasGroup = fn == "growth" || perEach || word("by") && fn != "-" || (fn != "-" && fn != "count" && marginal(c => Readers.part(c, 3) == "group") > 0.5)
+        val hasOrder = fn == "growth" || word("largest", "smallest", "highest", "lowest", "descending", "first", "top", "самы*", "наибольш*", "по убыван*", "по возраст*", "топ") || marginal(c => Readers.part(c, 4) == "order") > 0.6
+        val hasLimit = fn == "growth" || topN || (word("largest", "smallest", "highest", "самый", "наибольш*") && fn == "-" && !hasGroup) || marginal(c => Readers.part(c, 5) == "limit") > 0.6
         val hasSelect = marginal(c => Readers.part(c, 7) == "select") > 0.5
         // a number with a comparison word is a condition on a numeric column
         val numberCond = "\\d+(?:\\.\\d+)?".r.findFirstIn(question).filter(_ => word("over", "above", "more than", "greater", "больше", "выше", "свыше", "below", "under", "less than", "меньше", "ниже", "до"))
@@ -300,8 +304,8 @@ final class Readers:
         val sh = if closure then Vector(if closureTo then "closure-to" else "closure-from")
           else Vector("rel", fn, if hasWhere then "=" else "-", if hasGroup then "group" else "-", if hasOrder then "order" else "-",
             if hasLimit then "limit" else "-", "-", if hasSelect then "select" else "-")
-        (sh, fn, hasGroup, hasOrder, numberCond)
-      (sh, fn, hasGroup, hasOrder, numberCond) = decided
+        (sh, fn, hasGroup, hasOrder, numberCond, timeCol)
+      (sh, fn, hasGroup, hasOrder, numberCond, timeCol) = decided
       result <-
         if sh.head == "closure-from" || sh.head == "closure-to" then
           val e = tables.values.find(_.columns.size == 2).getOrElse(t)
@@ -317,9 +321,19 @@ final class Readers:
           // the columns in the order that disambiguates them: the aggregate's (numeric) and the order's first, then the group's
           // (text), then the condition's (the fact's column, or the numeric one of a number condition)
           for
-            aggCol <- if fn != "-" && fn != "count" then column("agg") else pure[Option[String], R](None)
+            aggCol <-
+              if fn == "growth" then
+                // the measure: a numeric column named in the question, else the first that is not the time
+                val nums = t.columns.filter(c => !timeCol.contains(c) && t.column(c).exists(i => t.rows.exists(_(i).num.isDefined) && t.rows.forall(r => r(i) == Value.Empty || r(i).num.isDefined)))
+                pure[Option[String], R](nums.find(c => named.exists(_._2 == c)).orElse(nums.find(_.toLowerCase != "id")))
+              else if fn != "-" && fn != "count" then column("agg") else pure[Option[String], R](None)
             orderCol <- if hasOrder && !(fn != "-" && fn != "count" && hasGroup) then column("order") else pure[Option[String], R](None)
-            groupCol <- if hasGroup then column("group") else pure[Option[String], R](None)
+            groupCol <-
+              if fn == "growth" then
+                // the entity: a text column named in the question, else the first that is not a code or a key
+                val texts = t.columns.filter(c => !timeCol.contains(c) && !t.column(c).exists(i => t.rows.forall(r => r(i) == Value.Empty || r(i).num.isDefined)))
+                pure[Option[String], R](texts.find(c => named.exists(_._2 == c)).orElse(texts.find(c => !c.toLowerCase.matches(".*(code|id|key)$"))).orElse(texts.headOption))
+              else if hasGroup then column("group") else pure[Option[String], R](None)
             whereCol <- if whereOp == "-" then pure[Option[String], R](None) else
               fact.map(_._2).map { c => used += c; c }
                 // a number condition: the numeric column whose values' range holds the number (not the key "id" by accident)
@@ -344,9 +358,9 @@ final class Readers:
               for
                 o <- opP
                 v <- fact.filter(_._2 == c).map(_._3).orElse(numberCond).fold(constant(c, o))(v => pure(Some(v)))
-              yield
-                val value = v.getOrElse("")
-                Some(s"""{"column": ${q(c)}, "op": ${q(o)}, "value": ${if value.matches("-?\\d+(\\.\\d+)?") && o != "=" then value else q(value)}}""")
+              yield v.filter(_.nonEmpty).map(value =>
+                // (a condition with no value is no condition: an empty one answered nothing and said nothing)
+                s"""{"column": ${q(c)}, "op": ${q(o)}, "value": ${if value.matches("-?\\d+(\\.\\d+)?") && o != "=" then value else q(value)}}""")
             }
           yield
             val parts = Vector.newBuilder[String]
@@ -361,11 +375,12 @@ final class Readers:
             if group == "group" then groupCol.foreach(c => parts += s""""group": [${q(c)}]""")
             if fn != "-" then
               val c = if fn == "count" then Some("*") else aggCol
-              c.foreach(col => parts += s""""aggregate": [{"fn": ${q(fn)}, "column": ${q(col)}, "as": ${q(if col == "*" then "n" else fn)}}]""")
+              val by = if fn == "growth" then timeCol.map(b => s""", "by": ${q(b)}""").getOrElse("") else ""
+              c.foreach(col => parts += s""""aggregate": [{"fn": ${q(fn)}, "column": ${q(col)}, "as": ${q(if col == "*" then "n" else fn)}$by}]""")
             if order == "order" then
               val c = if fn != "-" && fn != "count" && group == "group" then Some(fn) else orderCol
               c.foreach(col => parts += s""""order": [${q("-" + col)}]""")
-            if limit == "limit" then parts += s""""limit": ${number.getOrElse(1)}"""
+            if limit == "limit" then parts += s""""limit": ${number.getOrElse(if fn == "growth" then 10 else 1)}"""
             if select == "select" then orderCol.foreach(c => parts += s""""select": ["id", ${q(c)}]""")
             val built = parts.result()
             val withJoin = joinNow.fold(built)((o, c) => built.take(joinSlot) ++ Vector(s""""join": {"table": ${q(o.name)}, "on": [[${q(c)}, ${q(o.columns.head)}]]}""") ++ built.drop(joinSlot))
