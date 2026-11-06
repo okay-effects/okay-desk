@@ -63,7 +63,7 @@ object Engine:
       tok <- fetch(s"$dir/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
       skillBytes <- fetch(s"$dir/readers.skill")
       gpu <- OnWebGpu.create()
-      device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 24L * 1048576 else 96L * 1048576).left.map(more => s"$why; $more"))
+      device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 24L * 1048576 else 96L * 1048576, headsAtOnce = if phone then 2 else 16).left.map(more => s"$why; $more"))
       c = device.fold(_ => OnCpu(), identity)
       // the weights last, read straight from the fetched buffer (no copy) onto the device, and not kept: a phone's
       // tab has no room for a second copy of 244 MB
