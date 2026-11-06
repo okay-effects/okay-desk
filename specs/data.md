@@ -551,3 +551,27 @@ bench with the teacher's readers (`readers-Qwen3-0.6B-4bit-cut19-19.skill`), nev
 Half the teacher's size, the same skill file, one English and two Russian questions lost. Lessons: the merge at 4
 bits costs one question (8 bits keep it, at twice the size); distillation brings 6 → 11 and 2 → 8 (the layers alone
 are not enough); a run killed silently at 5,300 of 6,000 steps kept nothing — `Distill` writes a checkpoint every 500.
+## 22. The steps shown while a question is read; the student the default (2026-11-06)
+
+A question used to show "reading the question…" once and nothing until the answer — up to 12 s on WebGL2. Now the
+readers SAY their steps: `Read.Note` (a step said; nothing on the JVM), from `Readers.program` — the model reads the
+question and the tables (N tokens), the table (named in the question, by a column it names, or read from the state),
+the form of the answer (`Readers.form`: "a sum, per group"), each column (named or read, the candidates' count while
+choosing), the condition (its column, op, value), the program assembled. `Model.Ask` begins a question, `Model.Thought`
+answers a moment later with the steps so far (the last with its seconds) or the program — as `Begin` / `Progress` for
+the loading; `App.think` shows them where the answer will be (no question form meanwhile); a retry of a model that
+generates goes the same way ("the model is fixing the program: …"). Laws: `ThinkingSuite` (the steps on the screen,
+done ones marked; a model thinking two moments gives two working screens, then the answer).
+
+The page: WebGL2 reads its results back synchronously, so a question's forwards ran without a turn of the event loop —
+nothing drawn, no timer fired until the answer. Now a forward (`States`, `Logits`) waits a turn first, a new step
+answers the waiting `Thought` at once, and on WebGL2 or the CPU a step waits for two frames (drawn before the forward
+it announces). A turn before EVERY op cost 2.6 → 5.5 s a question (the encodings are many, nested zero timeouts are
+clamped to 4 ms): turns before the forwards only — 2.3 / 1.8 s on WebGL2 (cut), 2.0 / 1.3 s (student), 1.2 / 0.6 s on
+WebGPU (student). `scripts/thinking.scala` drives the page and prints every state of the steps block as the page wrote
+it (a MutationObserver, timed), and a screenshot in the middle.
+
+The models offered: **the student by default** (`readers-small`: §21, 12 layers, `model-small/`, the skill's layer 12,
+114 MB fetched for English and Russian with the vocabulary blocks of §20), **the cut for comparison** (`readers`: 19
+layers, `model/`), then the models that generate. The same skill file for both. The page's self-test (`?selftest`,
+`&model=readers` for the cut) on WebGPU: the student 11/12 en, 7/12 ru; the cut 12/12, 9/12 — the JVM's numbers.

@@ -35,6 +35,7 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     case Read.Encode(text) => Future.successful(tok.encode(text))
     case Read.Decode(ids) => Future.successful(tok.decode(ids))
     case Read.Prompt(system, user) => Future.successful(tok.encode(OnQwen.template(system, user)))
+    case Read.Note(_) => Future.unit
   def handler: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => answer[X](op)
   /** `c.api` of the device it runs on */
   def api: String = model.c.api

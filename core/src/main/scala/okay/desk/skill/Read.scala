@@ -18,6 +18,8 @@ enum Read[X]:
   case Encode(text: String) extends Read[Array[Int]]
   case Decode(ids: Seq[Int]) extends Read[String]
   case Prompt(system: String, user: String) extends Read[Array[Int]]
+  /** a step said: what the skill decided, or is deciding now — the page shows it while the question is read */
+  case Note(words: String) extends Read[Unit]
 
 object Read:
   /** the residual after the skill's layer at positions `at` of `ids`: one vector each */
@@ -30,6 +32,8 @@ object Read:
   /** the chat prompt for a system text and a user text, thinking off */
   def prompt[R[_]](system: String, user: String)(using In[Read, R]): Array[Int] ! R =
     perform[Read](Prompt(system, user))
+  /** a step said (shown on the page; nothing on the JVM) */
+  def note[R[_]](words: String)(using In[Read, R]): Unit ! R = perform[Read](Note(words))
 
   /** the programs of `f` over `xs`, one after another, their values */
   def each[A, B, R[_]](xs: Vector[A])(f: A => B ! R): Vector[B] ! R =
@@ -42,7 +46,8 @@ object Read:
       case Logits(ids) => r.logits(ids)
       case Encode(text) => r.encode(text)
       case Decode(ids) => r.decode(ids)
-      case Prompt(system, user) => r.prompt(system, user))
+      case Prompt(system, user) => r.prompt(system, user)
+      case Note(_) => ())
   /** a program of `Read` alone, run on a `Reading` */
   def run[A](p: A ! Read, r: Reading): A = okay.scala3.run(handle(p, sync[Pure, A](r)))
 

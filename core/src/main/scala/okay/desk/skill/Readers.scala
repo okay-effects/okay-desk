@@ -146,6 +146,7 @@ final class Readers:
   def program[R[_]: Has[Read]](tables: Map[String, Table], question: String): Either[String, String] ! R =
     for
       pr <- prompted(Pairs.Pair(tables, question, ""))
+      _ <- Read.note(s"the model reads the question and the tables' description (${pr.ids.length} tokens)…")
       names = pr.names.map(_._1)
       ks <- keys(pr).map(_.map(z))
       last <- Read.states(pr.ids, Vector(pr.ids.length - 1)).map(st => z(st.head))
@@ -161,7 +162,18 @@ final class Readers:
         val pointed = Option.when(ti < names.size)(names(ti)).filter(tables.contains)
         pointed.filter(byName.contains).orElse(byName.headOption)
           .orElse(if byColumn.size == 1 then byColumn.headOption else pointed.filter(byColumn.contains).orElse(pointed).orElse(byColumn.headOption))
+      // how the table was found: named in the question, by a column named there, or read from the model's state
+      how = chosen.map { t =>
+        val lowerQ = question.toLowerCase
+        def mentioned(n: String) = n.length >= 3 &&
+          lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*")
+        if mentioned(t) then "named in the question"
+        else if tables(t).columns.exists(mentioned) then "it has a column the question names"
+        else "read from the model's state"
+      }
+      _ <- Read.note(chosen.fold("no table found for the question")(t => s"the table: $t (${how.get})"))
       result <- chosen.fold(pure[Either[String, String], R](Left("no table read")))(t => assemble(tables, question, pr, ks, t))
+      _ <- Read.note(result.fold(why => s"no program: $why", _ => "the program assembled — the exact engine runs it"))
     yield result
 
   /** the program for the table read: the shape as decisions, the columns, the condition's op and value */
@@ -240,11 +252,20 @@ final class Readers:
             case (None, Some((_, ct))) => ct
             case _ => cands.head._2
       }(c => pure(c))
-      chosenP.map { chosen =>
+      val role = slot match
+        case "agg" => "the column to aggregate"
+        case "order" => "the column to order by"
+        case "group" => "the column to group by"
+        case _ => "the condition's column"
+      for
+        _ <- if exact.nonEmpty then pure[Unit, R](()) else Read.note(s"choosing $role among ${pool.size max 1}…")
+        chosen <- chosenP
+        _ <- Read.note(s"$role: $chosen (${if exact.headOption.contains(chosen) then "named in the question"
+          else "read from the model's state"})")
+      yield
         used += chosen
         if !t.columns.contains(chosen) then joinNow = joinNow.orElse(joinable.find(_._1.columns.contains(chosen)))
         Some(chosen)
-      }
     /** the value: from the read start among the question's tokens, the longest value of the column (or a number or
      * a date) that begins there; else by exact match anywhere in the question */
     def constant(col: String, o: String): Option[String] ! R =
@@ -275,6 +296,7 @@ final class Readers:
     def number: Option[Int] = "\\d+".r.findAllIn(question).toVector.filterNot(timeValues.contains).headOption.map(_.toInt)
       .orElse(numberWords.collectFirst { case (w, n) if lower.matches(s"(?U).*\\b$w\\b.*") => n })
     for
+      _ <- Read.note("deciding the form of the answer: a count, a sum, a list, groups, an order…")
       // the shape by two readers: the probe, and the model asked which section comes first at `{"from": T, "`
       shapeQ <- query(pr, prefixes.head._2(table)).map(z)
       probeScores = logSoftmax(shape.scores(shapeQ))
@@ -313,6 +335,7 @@ final class Readers:
             if hasLimit then "limit" else "-", "-", if hasSelect then "select" else "-")
         (sh, fn, hasGroup, hasOrder, numberCond, timeCol)
       (sh, fn, hasGroup, hasOrder, numberCond, timeCol) = decided
+      _ <- Read.note("the form of the answer: " + Readers.form(sh))
       result <-
         if sh.head == "closure-from" || sh.head == "closure-to" then
           val e = tables.values.find(_.columns.size == 2).getOrElse(t)
@@ -363,8 +386,11 @@ final class Readers:
                     val ps = logSoftmax(op.scores(oq))
                     ops(ps.zip(as).map((a, b) => a + b).zipWithIndex.maxBy(_._1)._2)
               for
+                _ <- Read.note(s"reading the condition on $c: the comparison and the value…")
                 o <- opP
                 v <- fact.filter(_._2 == c).map(_._3).orElse(numberCond).fold(constant(c, o))(v => pure(Some(v)))
+                _ <- Read.note(v.filter(_.nonEmpty).fold(s"no value for the condition on $c: no condition")(value =>
+                  s"the condition: $c $o $value"))
               yield v.filter(_.nonEmpty).map(value =>
                 // (a condition with no value is no condition: an empty one answered nothing and said nothing)
                 s"""{"column": ${q(c)}, "op": ${q(o)}, "value": ${if value.matches("-?\\d+(\\.\\d+)?") && o != "=" then value else q(value)}}""")
@@ -487,6 +513,23 @@ object Readers:
     "есть", "чем")
   /** a part of a compound shape class; "-" where the class has none (a closure) */
   def part(shape: String, i: Int): String = shape.split(" ").lift(i).getOrElse("-")
+
+  /** a shape in words, for the page's steps: "a count, with a condition, per group" */
+  def form(sh: Vector[String]): String = sh.head match
+    case "closure-from" => "what can be reached from a node (a closure, by Datalog)"
+    case "closure-to" => "what reaches a node (a closure, by Datalog)"
+    case _ =>
+      val Vector(_, fn, where, group, order, limit, _, _) = sh: @unchecked
+      val what = fn match
+        case "count" => "a count"
+        case "sum" => "a sum"
+        case "avg" => "an average"
+        case "min" => "a minimum"
+        case "max" => "a maximum"
+        case "growth" => "the growth over time"
+        case _ => "a list of rows"
+      (Vector(what) ++ Option.when(where != "-")("with a condition") ++ Option.when(group == "group")("per group") ++
+        Option.when(order == "order")("ordered") ++ Option.when(limit == "limit")("the top ones")).mkString(", ")
 
   /** the readers run in place on a `Reading` — the JVM's face, the bench's */
   final class On(val readers: Readers, reading: Reading):

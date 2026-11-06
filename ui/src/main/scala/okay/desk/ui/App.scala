@@ -16,9 +16,10 @@ import okay.http.{Fetch, Response}
 object App:
   /** a line of the conversation: who, what; a result's program and its note */
   final case class Entry(role: String, text: String, program: Option[String] = None, note: Option[String] = None)
-  /** `phone`: a small screen — the cut model (244 MB) is what fits; the models that generate are a computer's */
+  /** `phone`: a small screen — the student with the readers (122 MB) is what fits; the models that generate are a
+   * computer's */
   final case class State(place: String = "chat", tables: Map[String, Data] = Map.empty, log: Vector[Entry] = Vector.empty,
-    model: Option[String] = None, modelName: String = "readers", problem: Option[String] = None, phone: Boolean = false)
+    model: Option[String] = None, modelName: String = Model.default, problem: Option[String] = None, phone: Boolean = false)
 
   enum Msg:
     case Go(place: String)
@@ -107,10 +108,22 @@ object App:
         else
           val asked = cleared.copy(log = cleared.log :+ Entry("user", q))
           for
-            _ <- working[R]("okay-desk")(Part.info(if s.modelName == "readers" then "reading the question…" else "the model is writing the program…"))
-            answered <- Model.program[R](s.tables, q)
+            answered <- think[R](asked, q)
             result <- answer[R](asked, q, answered, retried = false)
           yield result
+
+  /** THE QUESTION THOUGHT ABOUT, ITS STEPS SHOWN: the program asked for, then followed — each moment the steps so far
+   * (what is decided: the table, the form of the answer, the columns, the condition; the last the one being decided
+   * now, with its seconds) in place of the answer, until the program comes */
+  def think[R[_]](s: State, question: String, retry: Option[(String, String)] = None)(
+      using In[Ui, R], In[Model, R]): Either[String, String] ! R =
+    def follow: Either[String, String] ! R = Model.thought[R].flatMap {
+      case Left(steps) =>
+        perform[Ui](Ui.Working(Screen[Nothing]("okay-desk", render(s, thinking = Some(steps)).parts, Nil)))
+          .flatMap(_ => follow)
+      case Right(answered) => pure(answered)
+    }
+    Model.ask[R](s.tables, question, retry).flatMap(_ => follow)
 
   /** the program run by the exact engine — or, where a model generates, asked once more with what failed */
   def answer[R[_]](s: State, question: String, answered: Either[String, String], retried: Boolean)(
@@ -123,15 +136,15 @@ object App:
           case q: Query.Logical => Weights.either(s.tables, q).map((r, by) => (q: Query, r.copy(name = by)))
         }
         ran match
-          case Left(problem) if !retried && s.modelName != "readers" =>
+          case Left(problem) if !retried && !Model.reads(s.modelName) =>
+            val told = s.copy(log = s.log :+ Entry("system", s"the program failed: $problem — asked to fix it"))
             for
-              _ <- working[R]("okay-desk")(Part.info(s"the program failed: $problem — asking the model to fix it"))
-              again <- Model.program[R](s.tables, question, Some((json, problem)))
-              next <- answer[R](s.copy(log = s.log :+ Entry("system", s"the program failed: $problem — asked to fix it")), question, again, retried = true)
+              again <- think[R](told, question, Some((json, problem)))
+              next <- answer[R](told, question, again, retried = true)
             yield next
           case Left(problem) => pure(s.copy(log = s.log :+ Entry("system", s"the program failed: $problem\n$json")))
           case Right((q, result)) =>
-            val note = if s.modelName == "readers" then "read from the model's states by the readers — not generated"
+            val note = if Model.reads(s.modelName) then "read from the model's states by the readers — not generated"
               else if result.name == "weights" then "computed by the transformer compiled from the closure program (okay-inlay), in this page"
               else "computed by the exact engine in this page"
             val shown = s.copy(log = s.log :+ Entry("result", result.render(50), Some(Query.print(q)), Some(note)))
@@ -154,16 +167,22 @@ object App:
         "in the page reads the question into a program, an exact engine runs it. Numbers come from the engine, never " +
         "from the model. Nothing leaves the browser."))) ++ s.problem.toList.map(Part.problem)
 
-  /** the screen of the place; `loading`: the model's progress in place of its form */
-  def render(s: State, loading: Option[String] = None): Screen[Msg] =
-    if s.place == "data" then data(s) else chat(s, loading)
+  /** the screen of the place; `loading`: the model's progress in place of its form; `thinking`: a question's steps so
+   * far in place of its answer */
+  def render(s: State, loading: Option[String] = None, thinking: Option[Vector[String]] = None): Screen[Msg] =
+    if s.place == "data" then data(s) else chat(s, loading, thinking)
+
+  /** a question's steps: those decided marked done, the last the one going on */
+  def steps(lines: Vector[String]): Part =
+    Part.block("thinking")((Part.block("small")(Part.text("thinking — what is decided so far:")) +:
+      lines.zipWithIndex.map((l, i) => if i < lines.size - 1 then Part.text(s"✓ $l") else Part.info(s"⋯ $l")))*)
 
   /** THE CHAT: the model (its form, or its progress), the way to the data, the conversation, the question */
-  def chat(s: State, loading: Option[String]): Screen[Msg] =
+  def chat(s: State, loading: Option[String], thinking: Option[Vector[String]] = None): Screen[Msg] =
     val models = modelForm(s.modelName)
     val modelPart: Part = loading.fold(models: Part)(words => Part.block("loading")(Part.info(words)))
     val note = Part.block("model-note")(Part.text(s.model.getOrElse(
-      if s.phone then "not loaded yet — on a phone the cut model with the readers (244 MB) is the one that fits; the models that generate (0.4–1.7 GB) are for a computer"
+      if s.phone then "not loaded yet — on a phone the student with the readers (122 MB) is the one that fits; the models that generate (0.4–1.7 GB) are for a computer"
       else "the model is not loaded yet")))
     val dataNote = Part.block("data-note")(Part.text(
       if s.tables.isEmpty then "no data open yet" else s"the data: ${s.tables.keys.toList.sorted.mkString(", ")}"), Part.slot("data"))
@@ -172,10 +191,14 @@ object App:
         e.note.toList.map(n => Part.block("small")(Part.text(n))) ++
         e.program.toList.map(p => Part.code("the program", p.split("\n").toList, Set.empty)))*)
     }
-    Screen[Msg]("okay-desk")((top(s) ++ List(modelPart, note, dataNote) ++ log :+ (questionForm: Part))*)(
+    // while a question is thought about: its steps where the answer will be, no question form
+    val end: List[Part] = thinking.fold(List(questionForm: Part))(lines => List(steps(lines)))
+    Screen[Msg]("okay-desk")((top(s) ++ List(modelPart, note, dataNote) ++ log ++ end)*)(
       (List(Button(if s.tables.isEmpty then "Data: open files" else s"Data: ${s.tables.size} open")(Msg.Go("data"): Msg).at("data")) ++
-        (if loading.isDefined then Nil else List(Button.submit("Load the model", models, Style.Plain)(Msg.Load(_): Msg))) :+
-        Button.submit("Ask", questionForm)(Msg.Ask(_): Msg))*)
+        // (while loading, no other load; while thinking, no question form and no other question)
+        (if loading.isDefined || thinking.isDefined then Nil
+         else List(Button.submit("Load the model", models, Style.Plain)(Msg.Load(_): Msg))) ++
+        (if thinking.isDefined then Nil else List(Button.submit("Ask", questionForm)(Msg.Ask(_): Msg))))*)
 
   /** THE DATA: the tables open, files or a folder, an address, the examples */
   def data(s: State): Screen[Msg] =

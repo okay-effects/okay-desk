@@ -126,7 +126,7 @@ object Engine:
       idle()
       skill = Skill(); skill.load(new Int8Array(skillBytes).toArray)
       engine = null
-      Right(s"the cut model (${config.layers} layers) and the readers on ${c.api}" +
+      Right(s"${if dir == "model" then "the cut model" else "the student"} (${config.layers} layers) and the readers on ${c.api}" +
         (if phone && c.api != "WebGPU" then ", the head on the CPU" else "") + device.fold(why => s" ($why)", _ => "")))
       .recover { case t => Left(s"cannot load the readers: ${t.getMessage}") }
 
@@ -168,7 +168,7 @@ object Engine:
   private def begin(name: String): Unit =
     progressWords = s"loading ${Model.choices.toMap.getOrElse(name, name)}…"
     status = s => { progressWords = s; dom.window.localStorage.setItem("okay-desk.stage", s) }   // (not `stage`: it calls `status`)
-    loading = Some(if name == "readers" then loadReaders("model", 19) else loadWebLlm(name))
+    loading = Some(Model.readers.get(name).fold(loadWebLlm(name))((dir, layer) => loadReaders(dir, layer)))
   private def progress(): Future[Either[String, Either[String, String]]] =
     val p = scala.concurrent.Promise[Either[String, Either[String, String]]]()
     js.timers.setTimeout(250) {
@@ -177,6 +177,68 @@ object Engine:
         case Some(_) => p.success(Left(progressWords))
         case None => p.success(Right(Left("no loading begun")))
     }
+    p.future
+
+  // A QUESTION FOLLOWED: begun in the background, its steps kept as the readers say them (`Read.Note`); `Thought`
+  // answers a moment later with the steps so far — the last with its seconds — or the program
+  private var thinking: Option[Future[Either[String, String]]] = None
+  private var said = Vector.empty[String]
+  private var since = 0.0
+  private def ask(tables: Map[String, Table], question: String, retry: Option[(String, String)]): Unit =
+    since = js.Date.now()
+    said = Vector(
+      if skill != null then "the question goes to the model in the page…"
+      else if retry.isDefined then s"the model is fixing the program (${retry.get._2})…"
+      else "the model is writing the program…")
+    stage("reading a question…")
+    // each op after a turn of the browser's event loop: WebGL2 reads its results back synchronously, and a question's
+    // forwards run one after another — without a turn between them the page is not drawn and no timer fires until
+    // the answer (the steps never seen); a turn costs a few ms of a forward's hundreds
+    def afterATurn[X](f: => Future[X]): Future[X] =
+      val turn = scala.concurrent.Promise[Unit]()
+      js.timers.setTimeout(0)(turn.success(()))
+      turn.future.flatMap(_ => f)
+    // a step said: shown at once (the waiting `Thought` answered now, not at its next tick); where a forward blocks the
+    // page (WebGL2, the CPU) the next op waits for the page to be drawn — two frames — or the step would show only
+    // after the forward it announces
+    def drawn(): Future[Unit] =
+      val p = scala.concurrent.Promise[Unit]()
+      dom.window.requestAnimationFrame(_ => dom.window.requestAnimationFrame(_ => p.success(())))
+      p.future
+    val noting: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => op match
+      case Read.Note(words) =>
+        said :+= words
+        wake()
+        (if on.api == "WebGPU" then afterATurn(Future.unit) else drawn()).asInstanceOf[Future[X]]
+      // a turn before a forward only: the encodings are many and cheap, and a browser clamps nested zero timeouts to
+      // 4 ms — a turn before each made a question 2.6 → 5.5 s
+      case op @ (_: Read.States | _: Read.Logits) => afterATurn(on.handler(op))
+      case other => on.handler(other)
+    val f =
+      if skill != null then Read.future(skill.program[Async + Read](tables, question), noting)
+      else program(tables, question, retry)
+    shown = 0
+    thinking = Some(f.map { r => idle(); r }.recover { case t => idle(); Left(s"the model failed: $t") })
+    // the answer shown as soon as it is there
+    thinking.foreach(_.onComplete(_ => js.timers.setTimeout(0)(wake())))
+  // the `Thought` waiting for its tick, and how many steps the page has seen
+  private var waiting: Option[scala.concurrent.Promise[Either[Vector[String], Either[String, String]]]] = None
+  private var shown = 0
+  private def now(): Either[Vector[String], Either[String, String]] = thinking match
+    case Some(f) if f.isCompleted => thinking = None; Right(f.value.get.toOption.getOrElse(Left("the question failed")))
+    case Some(_) =>
+      shown = said.size
+      val secs = (js.Date.now() - since) / 1000
+      Left(said.init :+ f"${said.last} — ${secs}%.1f s")
+    case None => Right(Left("no question asked"))
+  /** a new step: the waiting `Thought` answered now */
+  private def wake(): Unit = waiting.foreach { p => waiting = None; p.trySuccess(now()) }
+  private def thought(): Future[Either[Vector[String], Either[String, String]]] =
+    val p = scala.concurrent.Promise[Either[Vector[String], Either[String, String]]]()
+    if said.size > shown then p.success(now())
+    else
+      waiting = Some(p)
+      js.timers.setTimeout(250)(if waiting.contains(p) then { waiting = None; p.trySuccess(now()) })
     p.future
 
   /** `Model` answered here, each by its future */
@@ -188,6 +250,8 @@ object Engine:
         case Model.Program(tables, question, retry) =>
           stage("reading a question…")
           program(tables, question, retry).map { r => idle(); r }.recover { case t => idle(); Left(s"the model failed: $t") }
+        case Model.Ask(tables, question, retry) => ask(tables, question, retry); Future.unit
+        case Model.Thought() => thought()
         case Model.Summary(question, q, result) => summary(question, q, result).recover { case _ => None }
       Async.fromFuture[X, Rest](f).flatMap(k)))
 

@@ -62,3 +62,43 @@ class AppSuite extends munit.FunSuite:
     assert(t.contains("load the model first"), t)
     val missing = text(play(List("sample/nothing.csv")))
     assert(missing.contains("not read"), missing)
+
+/** A QUESTION THOUGHT ABOUT, ITS STEPS SHOWN: the steps on the screen (the decided marked done, the last going on, no
+ * question form meanwhile), and a model that thinks for two moments before its program: two working screens, then
+ * the answer */
+class ThinkingSuite extends munit.FunSuite:
+  type Row[X] = (Ui + Model)[X]
+  def words(s: Screen[?]): List[String] =
+    def walk(ps: List[Part]): List[String] = ps.flatMap {
+      case Part.Text(t) => List(t)
+      case Part.Notice(_, t) => List(t)
+      case Part.Block(_, title, inner) => title.toList ++ walk(inner)
+      case _ => Nil
+    }
+    walk(s.parts)
+
+  test("the steps on the screen while a question is thought about"):
+    val s = App.State(tables = okay.desk.Sample.tables, model = Some("readers"))
+    val w = words(App.render(s, thinking = Some(Vector("the table: orders (named in the question)",
+      "the form of the answer: a count, with a condition", "choosing the condition's column among 4…"))))
+    assert(w.contains("✓ the table: orders (named in the question)"), w.toString)
+    assert(w.contains("✓ the form of the answer: a count, with a condition"), w.toString)
+    assert(w.contains("⋯ choosing the condition's column among 4…"), w.toString)
+    assert(!App.render(s, thinking = Some(Vector("x"))).parts.contains(App.questionForm),
+      "the question form shown while thinking")
+
+  test("a model that thinks two moments: two working screens, then the answer"):
+    var moments = 0
+    val gold = okay.desk.Sample.questions.head
+    val s = App.State(tables = okay.desk.Sample.tables, model = Some("readers"))
+    val p = App.think[Row](s, gold.en)
+    val answered = handle(p, Handler.Tail[Model, Ui, Either[String, String], Either[String, String]](a => pure(a),
+      [X] => (op: Model[X]) => op match
+        case Model.Ask(_, _, _) => ()
+        case Model.Thought() =>
+          moments += 1
+          if moments <= 2 then Left(Vector(s"step $moments")) else Right(Right(gold.gold))
+        case _ => sys.error(s"not asked here: $op")))
+    val played = Play(steps(answered))
+    assertEquals(played.result, Some(Right(gold.gold)))
+    assertEquals(played.seen, List("okay-desk", "okay-desk"))

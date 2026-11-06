@@ -5,6 +5,8 @@ set -e
 cd "$(dirname "$0")/.."
 MODEL_DIR=${MODEL_DIR:-$HOME/.cache/huggingface/hub/models--local--Qwen3-0.6B-4bit-cut19/snapshots/main}
 SKILL=${SKILL:-$HOME/.cache/okay-desk/readers-Qwen3-0.6B-4bit-cut19-19.skill}
+# the student (§21), the default model: 12 layers distilled toward the cut's layer-19 state, the same skill file
+SMALL_DIR=${SMALL_DIR:-$HOME/.cache/huggingface/hub/models--local--Qwen3-0.6B-4bit-cut19-vocab-p12-m4/snapshots/main}
 sbt -batch web/fullLinkJS > /dev/null
 web=web/target/web; mkdir -p $web/model
 cp web/page/index.html $web/ && cp web/target/scala-3.3.8/okay-desk-web-opt/main.js $web/
@@ -12,6 +14,9 @@ cp -r web/page/sample $web/
 for f in config.json tokenizer.json; do cp "$MODEL_DIR/$f" $web/model/; done
 sbt -batch "bench/runMain okay.desk.bench.SplitWeights $MODEL_DIR $PWD/$web/model" > /dev/null
 cp "$SKILL" $web/model/readers.skill
+mkdir -p $web/model-small && cp "$SMALL_DIR/config.json" "$SMALL_DIR/tokenizer.json" $web/model-small/
+sbt -batch "bench/runMain okay.desk.bench.SplitWeights $SMALL_DIR $PWD/$web/model-small" > /dev/null
+cp "$SKILL" $web/model-small/readers.skill
 jwebserver -d "$PWD/$web" -p 8734 -o none > /dev/null 2>&1 &
 server=$!
 trap 'kill $server' EXIT

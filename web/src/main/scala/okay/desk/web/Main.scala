@@ -50,7 +50,11 @@ object Main:
     val ts = Sample.tables
     val golds = Sample.questions.map(q => Sample.run(Query.parse(q.gold).toOption.get).toOption.get)
     val t0 = now()
-    Engine.loadReaders("model", 19).flatMap {
+    // `?selftest&model=readers`: the cut; else the default (the student)
+    val chosen = Option(new dom.URLSearchParams(dom.window.location.search).get("model")).filter(Model.reads)
+      .getOrElse(Model.default)
+    val (dir, layer) = Model.readers(chosen)
+    Engine.loadReaders(dir, layer).flatMap {
       case Left(why) => Future.successful(Left(why))
       case Right(what) =>
         say(s"$what (${((now() - t0) / 1000).toInt} s)")
@@ -112,6 +116,9 @@ object Look:
        |body .okay-face .okay-mark-user, body .okay-face .okay-mark-model, body .okay-face .okay-mark-system,
        |body .okay-face .okay-mark-result { order: 2; }
        |body .okay-face > div > nav.okay-actions > form:has([id^="f-ask"]) { order: 3; }
+       |/* a question's steps where its answer will be: after the conversation, in the question form's place */
+       |body .okay-face .okay-mark-thinking { order: 3; padding: 8px 12px; border-radius: 12px; margin: 4px 0;
+       |  border: 1px dashed rgba(127, 127, 127, .45); }
        |/* the data screen: the back button, the tables, the forms of the files and the address, then the examples */
        |body .okay-face .okay-group:has(.okay-mark-example) { order: 2; }
        |""".stripMargin

@@ -18,5 +18,8 @@ Chat with your data in the browser, offline (README, specs/data.md). Scala 3, li
   cache-first. Drivers (Playwright, scala-cli): `scripts/page.sh` (the self-test; `PHONE=1` as a phone),
   `scripts/shot.scala` (the page driven as a person would, a screenshot) — buttons by exact text
   (`button:text-is`), since `text=Ask` matches a label first; a slot's button by `text="…"`.
+- Two models read by the readers (§22): `readers-small` (the student, `model-small/`, layer 12) the default, `readers`
+  (the cut, `model/`, layer 19) for comparison — `Model.readers`. A question's steps: `Read.Note` from the readers,
+  `Model.Ask` / `Model.Thought` polled as the loading; `scripts/thinking.scala` watches them in the page.
 - The rule: the model writes programs, handlers compute; a number the engine did not produce is never shown.
 - Commits: plain messages, no attribution trailers.
