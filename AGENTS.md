@@ -13,7 +13,10 @@ Chat with your data in the browser, offline (README, specs/data.md). Scala 3, li
   (`InThePage.fetching`), `Model` by `Engine` (the readers on okay-llm's forward: WebGPU, else WebGL2, else the CPU;
   WebLLM through `window.webllm` for the models that generate); `Examples` the examples' screen (examples.html);
   `?selftest` the sample through the readers; `Look` the skin's marks. `web/page/main.js` is built, not committed.
-- Drivers (Playwright, scala-cli): `scripts/page.sh` (the self-test), `scripts/shot.scala` (the page driven as a
-  person would, a screenshot) — buttons by exact text (`button:text-is`), since `text=Ask` matches a label first.
+- Two screens (§19): the chat (model, Data button, conversation, question) and the data (tables, files, address,
+  examples with Open buttons); `Disk` keeps every file opened (Cache API) and the model's files are fetched
+  cache-first. Drivers (Playwright, scala-cli): `scripts/page.sh` (the self-test; `PHONE=1` as a phone),
+  `scripts/shot.scala` (the page driven as a person would, a screenshot) — buttons by exact text
+  (`button:text-is`), since `text=Ask` matches a label first; a slot's button by `text="…"`.
 - The rule: the model writes programs, handlers compute; a number the engine did not produce is never shown.
 - Commits: plain messages, no attribution trailers.

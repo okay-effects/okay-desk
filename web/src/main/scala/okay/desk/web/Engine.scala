@@ -25,9 +25,24 @@ object Engine:
   var engine: js.Dynamic = null
   var status: String => Unit = _ => ()
 
+  /** THE DISK'S CACHE (the browser's Cache API: its storage on disk): a file of the model fetched once and kept, so the
+   * next visit reads it from the device; a quota refused is no failure — the file is fetched again next time */
+  private def caches: js.Dynamic = js.Dynamic.global.caches
+  private def cache(name: String): Future[Option[js.Dynamic]] =
+    if js.isUndefined(caches) then Future.successful(None)
+    else caches.open(name).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map(Some(_)).recover { case _ => None }
   private def fetch(name: String): Future[ArrayBuffer] =
-    dom.fetch(name).toFuture.flatMap { r =>
-      if !r.ok then Future.failed(IllegalStateException(s"$name: HTTP ${r.status}")) else r.arrayBuffer().toFuture
+    cache("okay-desk-model").flatMap { c =>
+      val hit = c.fold(Future.successful(null: js.Dynamic))(cc => cc.`match`(name).asInstanceOf[js.Promise[js.Dynamic]].toFuture)
+      hit.flatMap { r =>
+        if r != null && !js.isUndefined(r) then r.arrayBuffer().asInstanceOf[js.Promise[ArrayBuffer]].toFuture
+        else dom.fetch(name).toFuture.flatMap { r =>
+          if !r.ok then Future.failed(IllegalStateException(s"$name: HTTP ${r.status}"))
+          else
+            val kept = c.fold(Future.unit)(cc => cc.put(name, r.clone()).asInstanceOf[js.Promise[Unit]].toFuture.recover { case _ => () })
+            kept.flatMap(_ => r.arrayBuffer().toFuture)
+        }
+      }
     }
   private def text(ab: ArrayBuffer): String = js.Dynamic.newInstance(js.Dynamic.global.TextDecoder)().decode(ab).asInstanceOf[String]
   /** the weights: the files manifest.json lists (a few layers each, `Tensors.Many` reads them as one — a page never
@@ -111,13 +126,57 @@ object Engine:
     else complete(Vector("user" -> Prompt.summarize(question, q, result)), 200)
       .map(s => Some(s.replaceAll("(?s)<think>.*?</think>", "").trim))
 
+  // THE LOADING, FOLLOWED: begun in the background, its words kept as it goes; `Progress` answers a moment later
+  private var loading: Option[Future[Either[String, String]]] = None
+  private var progressWords = ""
+  private def begin(name: String): Unit =
+    progressWords = s"loading ${Model.choices.toMap.getOrElse(name, name)}…"
+    status = s => { progressWords = s; dom.window.localStorage.setItem("okay-desk.stage", s) }   // (not `stage`: it calls `status`)
+    loading = Some(if name == "readers" then loadReaders("model", 19) else loadWebLlm(name))
+  private def progress(): Future[Either[String, Either[String, String]]] =
+    val p = scala.concurrent.Promise[Either[String, Either[String, String]]]()
+    js.timers.setTimeout(250) {
+      loading match
+        case Some(f) if f.isCompleted => loading = None; p.success(Right(f.value.get.toOption.getOrElse(Left("the loading failed"))))
+        case Some(_) => p.success(Left(progressWords))
+        case None => p.success(Right(Left("no loading begun")))
+    }
+    p.future
+
   /** `Model` answered here, each by its future */
   def model[R[_], Rest[_], A](p: A ! R)(using Split[Model, R, Rest], In[Async, Rest]): A ! Rest =
     handle(p, Handler.general[Model, Rest, A, A](a => pure(a))([X] => (op: Model[X], k: X => A ! Rest) =>
       val f: Future[X] = op match
-        case Model.Load(name) => if name == "readers" then loadReaders("model", 19) else loadWebLlm(name)
+        case Model.Begin(name) => begin(name); Future.unit
+        case Model.Progress() => progress()
         case Model.Program(tables, question, retry) =>
           stage("reading a question…")
           program(tables, question, retry).map { r => idle(); r }.recover { case t => idle(); Left(s"the model failed: $t") }
         case Model.Summary(question, q, result) => summary(question, q, result).recover { case _ => None }
       Async.fromFuture[X, Rest](f).flatMap(k)))
+
+/** THE DISK: `Disk` by the browser's Cache API — every file opened kept under `data/<name>` (its text a response),
+ * the names in local storage; the tables are there again at the next visit */
+object OnDisk:
+  import okay.desk.ui.Disk
+  private def caches: js.Dynamic = js.Dynamic.global.caches
+  private val index = "okay-desk.files"
+  private def names: List[String] = Option(dom.window.localStorage.getItem(index)).filter(_.nonEmpty).map(_.split("\n").toList).getOrElse(Nil)
+  private def setNames(ns: List[String]): Unit = dom.window.localStorage.setItem(index, ns.mkString("\n"))
+  private def withCache[A](f: js.Dynamic => Future[A], orElse: => A): Future[A] =
+    if js.isUndefined(caches) then Future.successful(orElse)
+    else caches.open("okay-desk-data").asInstanceOf[js.Promise[js.Dynamic]].toFuture.flatMap(f).recover { case _ => orElse }
+  def answer[X](op: Disk[X]): Future[X] = op match
+    case Disk.Put(name, text) =>
+      withCache(c => c.put(s"data/$name", js.Dynamic.newInstance(js.Dynamic.global.Response)(text)).asInstanceOf[js.Promise[Unit]].toFuture
+        .map(_ => setNames((names :+ name).distinct)), ())
+    case Disk.Get(name) =>
+      withCache(c => c.`match`(s"data/$name").asInstanceOf[js.Promise[js.Dynamic]].toFuture.flatMap { r =>
+        if r == null || js.isUndefined(r) then Future.successful(None) else r.text().asInstanceOf[js.Promise[String]].toFuture.map(Some(_)) }, None)
+    case Disk.Names() => Future.successful(names)
+    case Disk.Remove(name) =>
+      setNames(names.filterNot(_ == name))
+      withCache(c => c.delete(s"data/$name").asInstanceOf[js.Promise[Boolean]].toFuture.map(_ => ()), ())
+  def disk[R[_], Rest[_], A](p: A ! R)(using Split[Disk, R, Rest], In[Async, Rest]): A ! Rest =
+    handle(p, Handler.general[Disk, Rest, A, A](a => pure(a))([X] => (op: Disk[X], k: X => A ! Rest) =>
+      Async.fromFuture[X, Rest](answer(op)).flatMap(k)))

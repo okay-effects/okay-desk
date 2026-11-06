@@ -11,8 +11,11 @@ import okay.desk.Table as Data
  * it by futures on its device; a test by a table of answers. The program never sees weights, engines or devices.
  */
 enum Model[X]:
-  /** the model loaded: a description of what runs, or why not */
-  case Load(name: String) extends Model[Either[String, String]]
+  /** the model's loading begun; `Progress` tells how it goes */
+  case Begin(name: String) extends Model[Unit]
+  /** a moment later: `Left(words)` while it loads (the file being fetched, the weights going to the device), or
+   * `Right` of the end — a description of what runs, or why not */
+  case Progress() extends Model[Either[String, Either[String, String]]]
   /** the program for a question: `Right(json)`, or `Left(words)` — what the model said instead, or why not */
   case Program(tables: Map[String, Data], question: String, retry: Option[(String, String)])
     extends Model[Either[String, String]]
@@ -20,7 +23,8 @@ enum Model[X]:
   case Summary(question: String, query: Query, result: Data) extends Model[Option[String]]
 
 object Model:
-  def load[R[_]](name: String)(using In[Model, R]): Either[String, String] ! R = perform[Model](Load(name))
+  def begin[R[_]](name: String)(using In[Model, R]): Unit ! R = perform[Model](Begin(name))
+  def progress[R[_]](using In[Model, R]): Either[String, Either[String, String]] ! R = perform[Model](Progress())
   def program[R[_]](tables: Map[String, Data], question: String, retry: Option[(String, String)] = None)(
       using In[Model, R]): Either[String, String] ! R = perform[Model](Program(tables, question, retry))
   def summary[R[_]](question: String, query: Query, result: Data)(using In[Model, R]): Option[String] ! R =
@@ -37,6 +41,7 @@ object Model:
   def answeredBy[R[_], Rest[_], A](load: String => Either[String, String],
       program: (Map[String, Data], String) => Either[String, String])(p: A ! R)(using Split[Model, R, Rest]): A ! Rest =
     handle(p, Handler.Tail[Model, Rest, A, A](a => pure(a), [X] => (asked: Model[X]) => asked match
-      case Load(name) => load(name)
+      case Begin(_) => ()
+      case Progress() => Right(load(""))
       case Program(tables, question, _) => program(tables, question)
       case Summary(_, _, _) => None))

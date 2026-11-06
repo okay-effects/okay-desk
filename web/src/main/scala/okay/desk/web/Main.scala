@@ -4,7 +4,7 @@ import okay.business.dom.Dom
 import okay.business.faces.Skin
 import okay.business.scala3.*
 import okay.business.web.InThePage
-import okay.desk.ui.{App, Model}
+import okay.desk.ui.{App, Disk, Model}
 import okay.http.Fetch
 import okay.scala3.std.Async
 import org.scalajs.dom
@@ -20,14 +20,11 @@ import scala.scalajs.js
  * examples' screen instead.
  */
 object Main:
-  type Row[X] = (Async + Ui + Fetch + Model)[X]
+  type Row[X] = (Async + Ui + Fetch + Disk + Model)[X]
   def main(args: Array[String]): Unit =
     val root = Option(dom.document.getElementById("app")).getOrElse(dom.document.body)
     val search = new dom.URLSearchParams(dom.window.location.search)
-    if dom.document.getElementById("examples") != null then
-      val _ = Async.start(Dom.run(root, Look.skin)(Examples.program[Async + Ui]).map(urls =>
-        dom.window.location.href = Examples.link(urls)))
-    else
+    locally:
       Engine.status = s => Option(dom.document.getElementById("engine-status")).foreach(_.textContent = s)
       // the last visit ended somewhere (a phone killed the tab): said, then forgotten
       Engine.lastStage.foreach { st => Engine.status(s"the last visit ended at: $st"); dom.window.localStorage.setItem("okay-desk.stage", "") }
@@ -37,8 +34,8 @@ object Main:
         Engine.status("error: " + e.asInstanceOf[js.Dynamic].reason.toString))
       val phone = dom.window.innerWidth < 700 || dom.window.navigator.asInstanceOf[js.Dynamic].maxTouchPoints.asInstanceOf[Int] > 1
       Engine.phone = phone
-      val _ = Async.start(Dom.run(root, Look.skin, follow = true)(InThePage.fetching(Engine.model(
-        App.main[Row](search.getAll("open").toList, phone)))))
+      val _ = Async.start(Dom.run(root, Look.skin, follow = true)(InThePage.fetching(OnDisk.disk(Engine.model(
+        App.main[Row](search.getAll("open").toList, phone))))))
       if search.has("selftest") then selftest()
 
   /** THE PAGE'S SELF-TEST (`?selftest`): the readers loaded on the page's device, the sample's questions in both
@@ -106,12 +103,17 @@ object Look:
        |body .okay-face > div > .okay-view, body .okay-face > div > .okay-view > .okay-group,
        |body .okay-face > div > nav.okay-actions { display: contents; }
        |body .okay-face .okay-mark-top { order: -3; }
-       |body .okay-face > div > nav.okay-actions > form:first-child { order: -2; }
-       |body .okay-face .okay-mark-model-note { order: -1; }
+       |body .okay-face > div > nav.okay-actions > form:has(#f-the-model) { order: -2; }
+       |body .okay-face .okay-mark-loading { order: -2; }
+       |body .okay-face .okay-mark-model-note, body .okay-face .okay-mark-data-note { order: -1; }
+       |body .okay-face .okay-mark-data-note .okay-mark-slot .okay-group, body .okay-face .okay-mark-back .okay-mark-slot .okay-group { display: flex; gap: 6px; margin: 6px 0; }
+       |body .okay-face .okay-mark-example .okay-mark-slot { float: right; }
        |body .okay-face > div > nav.okay-actions > form { order: 1; }
        |body .okay-face .okay-mark-user, body .okay-face .okay-mark-model, body .okay-face .okay-mark-system,
        |body .okay-face .okay-mark-result { order: 2; }
-       |body .okay-face > div > nav.okay-actions > form:last-child { order: 3; }
+       |body .okay-face > div > nav.okay-actions > form:has([id^="f-ask"]) { order: 3; }
+       |/* the data screen: the back button, the tables, the forms of the files and the address, then the examples */
+       |body .okay-face .okay-group:has(.okay-mark-example) { order: 2; }
        |""".stripMargin
   val skin: Skin =
     val calm = Skin.calm(accent = "#2b5bd7", deep = "#1e2a5a")

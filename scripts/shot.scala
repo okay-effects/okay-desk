@@ -31,12 +31,17 @@ import scala.jdk.CollectionConverters.*
   catch
     case e: Throwable =>
       snap("stuck"); println("stuck at loading: " + body().take(400)); throw e
-  println("model: " + (if body().contains("readers on") then "loaded" else "FAILED"))
+  println("model: " + (if body().contains("readers on") then "loaded" else "FAILED: " + p.locator(".okay-view").textContent().replaceAll("\\s+", " ").take(700)))
+  // THE DATA SCREEN: the files chosen and opened, back to the chat
+  p.click("text=\"Data: open files\"")
+  p.waitForSelector("input[type=file]")
   p.locator("input[type=file]:not([webkitdirectory])").setInputFiles(Seq("orders.csv", "customers.csv", "edges.csv").map(f => Path.of(sample, f)).toArray)
   p.waitForFunction("() => /==> /.test(document.querySelector('textarea').value)")
   p.click("button:text-is('Open the files')")
-  p.waitForFunction("() => /opened edges.csv/.test(document.body.textContent)")
-  println("files: opened " + p.locator(".okay-mark-table").count() + " tables")
+  p.waitForFunction("() => /opened edges.csv/.test(document.body.textContent) || document.querySelectorAll('.okay-mark-tree-node, .okay-mark-tree-node-open').length >= 3")
+  println("files: " + p.locator("text=\"← Back to the chat\"").count() + " back button; tables in the tree: " + p.evaluate("() => document.body.textContent.match(/\\w+: \\d+ rows, \\d+ columns/g)"))
+  p.click("text=\"← Back to the chat\"")
+  p.waitForSelector("textarea[id^=f-ask]")
   for q <- Seq("How many orders are unpaid?", "Total amount per country.") do
     val before = p.locator(".okay-mark-result").count()
     p.fill("textarea[id^=f-ask]", q); p.click("button:text-is('Ask')")
@@ -47,9 +52,12 @@ import scala.jdk.CollectionConverters.*
         println("marks: " + p.evaluate("() => Array.from(document.querySelectorAll('[class*=okay-mark-]')).map(e => e.className).join(' ')"))
         throw e
     println(s"Q: $q → " + p.locator(".okay-mark-result").last().textContent().take(160).replace("\n", " ⏎ "))
+  p.click("text=\"Data: 3 open\"")
   p.click("text=\"Close edges\"")
-  p.waitForFunction("() => /closed edges/.test(document.body.textContent)")
-  println("after a close: " + p.locator(".okay-mark-table").count() + " tables")
+  p.waitForFunction("() => !/Close edges/.test(document.body.textContent)")
+  p.click("text=\"← Back to the chat\"")
+  p.waitForSelector("textarea[id^=f-ask]")
+  println("after a close: " + p.locator("text=\"Data: 2 open\"").count() + " (Data: 2 open)")
   p.screenshot(com.microsoft.playwright.Page.ScreenshotOptions().setPath(Path.of(out)).setType(ScreenshotType.PNG).setFullPage(sys.env.contains("FULL")))
   browser.close(); pw.close()
   println(s"written $out")

@@ -8,7 +8,7 @@ SKILL=${SKILL:-$HOME/.cache/okay-desk/readers-Qwen3-0.6B-4bit-cut19-19.skill}
 sbt -batch web/fullLinkJS > /dev/null
 web=web/target/web; mkdir -p $web/model
 cp web/page/index.html $web/ && cp web/target/scala-3.3.8/okay-desk-web-opt/main.js $web/
-cp web/page/examples.html $web/ && cp -r web/page/sample $web/
+cp -r web/page/sample $web/
 for f in config.json tokenizer.json; do cp "$MODEL_DIR/$f" $web/model/; done
 sbt -batch "bench/runMain okay.desk.bench.SplitWeights $MODEL_DIR $PWD/$web/model" > /dev/null
 cp "$SKILL" $web/model/readers.skill

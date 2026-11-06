@@ -493,3 +493,14 @@ The phone's fourth report: "the last visit ended at: reading a question…" — 
 the scores of all 16 heads over 400 tokens were a 41 MB texture a layer, made and dropped nineteen times a forward
 (too big for the phone's pool), and the driver freed them late. Now WebGL2's attention runs the heads in groups
 (`headsAtOnce`, 2 on a phone): a group's scores are ~1 MB and live in the pool; exact (the self-test).
+
+## 19. Two screens, the disk (2026-11-06)
+
+THE CHAT: the model (its form; while it loads, its progress in place — `Model.Begin` starts it, `Model.Progress`
+answers a moment later with the words so far or the end, the program showing a working screen each time), the
+button to the data ("Data: 3 open"), the conversation, the question. THE DATA: the tables (a tree, a Close each),
+files or a folder, an address, the examples of open data each with an Open button — one program, two screens of one
+state, so the model stays loaded across them (the examples page is gone; `?open=` links still work). THE DISK
+(`Disk`: put, get, names, remove): every file opened is kept by the browser's Cache API under its name, the names
+in local storage, and the tables are there again at the next visit; the model's files are fetched cache-first from
+the same storage, so the second load reads 244 MB from the device. A quota refused is no failure.
