@@ -271,6 +271,7 @@ final class Readers:
     def constant(col: String, o: String): Option[String] ! R =
       val owner = if t.columns.contains(col) then t else joinNow.map(_._1).orElse(tables.values.find(_.columns.contains(col))).getOrElse(t)
       val vs = owner.rows.map(_(owner.columns.indexOf(col)).text).distinct.filter(_.nonEmpty).sortBy(-_.length)
+      val numericCol = owner.column(col).exists(i => owner.rows.exists(_(i).num.isDefined) && owner.rows.forall(r => r(i) == Value.Empty || r(i).num.isDefined))
       for
         qs <- questionStates(pr).map(_.map(z))
         vq <- query(pr, valuePrefix(table, col, o)).map(z)
@@ -278,9 +279,10 @@ final class Readers:
         from = if start < pr.qChars.size then pr.qChars(start) else 0
         rest = question.drop(from)
         copied = vs.find(v => rest.toLowerCase.startsWith(v.toLowerCase))
-          .orElse("^\\s*(\\d{4}-\\d\\d-\\d\\d|\\d+(?:\\.\\d+)?)".r.findFirstMatchIn(rest).map(_.group(1)))
+          .orElse("^\\s*(\\d{4}-\\d\\d-\\d\\d|\\d+(?:\\.\\d+)?)".r.findFirstMatchIn(rest).map(_.group(1)).filter(v => numericCol || v.contains("-")))
           .orElse(vs.find(inQuestion))
-          .orElse("\\d{4}-\\d\\d-\\d\\d|\\d+(?:\\.\\d+)?".r.findAllIn(question).toVector.lastOption)
+          // (a number in the question is a value for a NUMERIC column only: "the five smallest values in 2023" had put 2023 into Country Name)
+          .orElse("\\d{4}-\\d\\d-\\d\\d|\\d+(?:\\.\\d+)?".r.findAllIn(question).toVector.lastOption.filter(v => numericCol || v.contains("-")))
         // nothing copied (a translated value, "не оплачено"): the model asked over the column's values
         v <- copied.fold(
           if vs.nonEmpty && vs.size <= 30 then ask(pr, valuePrefix(table, col, o) + "\"", vs).map(a => Some(vs(a.zipWithIndex.maxBy(_._1)._2)))
@@ -315,7 +317,7 @@ final class Readers:
         val perEach = word("per", "each", "по кажд*", "кажд*", "в разрезе", "по стат*", "по город*", "по клиент*", "по стран*")
         // GROWTH: a change in time within an entity — needs a time column (year, date, day, month) in the table
         val timeCol = t.columns.find(c => c.toLowerCase.matches("(?U).*\\b(year|date|day|month|quarter|week|time|год|дата|день|месяц)\\b.*"))
-        val growth = timeCol.isDefined && word("grow*", "growth", "increase*", "rose", "rise", "fastest", "decline*", "fell", "рост*", "раст*", "растёт", "растут", "вырос*", "быстрее", "упал*", "снижа*")
+        val growth = timeCol.isDefined && word("grow*", "grew", "growth", "increase*", "rose", "rise", "fastest", "slowest", "decline*", "fell", "shrank", "shrink*", "рост*", "раст*", "растёт", "растут", "вырос*", "быстрее", "упал*", "снижа*")
         val fn = if growth then "growth"
           else if word("how many", "number of", "count", "сколько", "число", "посчитай") then "count"
           else if word("average", "mean", "средн*") then "avg"
@@ -371,6 +373,7 @@ final class Readers:
                   val numericCols = t.columns.filterNot(used).filter(c => t.column(c).exists(i => t.rows.exists(_(i).num.isDefined) && t.rows.forall(r => r(i) == Value.Empty || r(i).num.isDefined)))
                   numericCols.find(c => named.exists(_._2 == c)).orElse(numericCols.find { c => val vs = t.rows.flatMap(_(t.column(c).get).num); vs.nonEmpty && vs.min <= x && x <= vs.max })
                     .orElse(numericCols.filterNot(_ == "id").headOption).orElse(numericCols.headOption) })
+                .orElse(if timeValues.nonEmpty then timeColumn else None)
                 .fold(column("where"))(c => pure(Some(c)))
             // the first condition's op and value
             // THE ORDER'S DIRECTION (the phone asked "slowest grow GDP?" and got the fastest: "-" was written always): the
