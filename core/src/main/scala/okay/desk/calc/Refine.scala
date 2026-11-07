@@ -141,7 +141,17 @@ object Fill:
           if targets.size == 2 then one(ctx.schema.links.filter(l => targets.contains(l.from) && targets.contains(l.to)).map(_.from).distinct)
           else if targets.nonEmpty then one(targets) else one(byColumnOne)
         case Ty.ColumnT(_, Role.Group, _, _) =>
-          if ctx.has("group") then one(cs.filter(c => c != "none" && !used(c) && (named(c) || ruColumn(c) || namedByWord(c))))
+          // a growth question ("where does GDP grow fastest") grows per entity: the text column named, else the first that
+          // is not a code or a key — the one column a time series is of
+          val growthHere = ctx.has("growth") && ctx.schema.cols.exists(c => c.kind == Kind.Time)
+          // ("where … fastest" asks per entity; "how did X grow" asks the whole series)
+          if growthHere && !ctx.has("group") then
+            val texts = cs.filter(c => c != "none" && !used(c))
+            if !ctx.has("pace") then Vector(("none", 0.0))
+            else one(texts.filter(c => named(c) || ruColumn(c) || namedByWord(c))) match
+              case Vector() => texts.find(c => !c.toLowerCase.matches(".*(code|id|key)$")).map(c => Vector((c, 0.0))).getOrElse(Vector.empty)
+              case named1 => named1
+          else if ctx.has("group") then one(cs.filter(c => c != "none" && !used(c) && (named(c) || ruColumn(c) || namedByWord(c))))
           else Vector(("none", 0.0))
         case Ty.ColumnT(ts, Role.Where, optional, _) =>
           // a value of a column written in the question names the column; "none" when no value and no column is written
@@ -200,13 +210,14 @@ object Fill:
           else
             val vs = ctx.schema.tables(t).column(c).toVector.flatMap(i => ctx.schema.tables(t).rows.map(_(i).text).distinct)
             one(vs.filter(v => v.length >= 2 && (grams(v.toLowerCase) || ruValue(v))).sortBy(-_.length).take(1))
-        case Ty.FnT(_) =>
+        case Ty.FnT(_, _) =>
           // ("сумма" is also the Russian name of a column called amount: then the word says nothing about the function)
           // (a sum word that is also a column's name in a language — "сумма" for amount — says nothing about the function)
           val sumIsColumn = ctx.schema.cols.exists(c => ctx.columnForms(c.name).exists(f => ctx.languages.exists(_.list("sum").exists(w => f.startsWith(w.stripSuffix("*")))))) && !ctx.has("sumPhrases")
           // ("count" is also a column's name in the pairs: then the word alone says nothing about the function)
           val countIsColumn = ctx.schema.cols.exists(_.name == "count")
-          if ctx.has("count") || ctx.has("countWord") && !countIsColumn then Vector(("count", 0.0))
+          if ctx.has("growth") && cs.contains("growth") then Vector(("growth", 0.0))
+          else if ctx.has("count") || ctx.has("countWord") && !countIsColumn then Vector(("count", 0.0))
           else if ctx.has("avg") then Vector(("avg", 0.0))
           else if ctx.has("sum") && !(sumIsColumn && !ctx.languages.exists(l => l.code == "en" && ctx.word(l.list("sum")*))) then Vector(("sum", 0.0))
           else if (limitNumber.isDefined || limitOne) && !grouped && !ctx.has("group") then Vector(("none", 0.0))
@@ -226,7 +237,7 @@ object Fill:
             else if ctx.has("max") && !ctx.has("min") then Vector(("max", 0.0))
             else Vector.empty
         case Ty.OrderT(_, agg, _) =>
-          val ordered = ctx.has("size") || ctx.has("desc") || ctx.has("asc") || ctx.has("ordered") || ctx.has("top")
+          val ordered = ctx.has("size") || ctx.has("desc") || ctx.has("asc") || ctx.has("ordered") || ctx.has("top") || ctx.has("pace")
           // with an aggregate and no group there is nothing to order; a size word is the function's when it is min/max
           val explicit = ctx.has("desc") || ctx.has("asc") || ctx.has("ordered") || ctx.has("top")
           val sizeIsFn = fnChosen.exists(f => f == "min" || f == "max")
@@ -305,7 +316,7 @@ object Render:
         case Ty.OpT(_) => start + s""", "where": [{"column": "${args.lastOption.flatMap(leaf).getOrElse("")}", "op": """"
         case Ty.ValueT(_, c) => start + s""", "where": [{"column": "$c", "op": "${args.lastOption.collect { case Con(_, _, Vector(Leaf(_, op))) => op }.getOrElse("=")}", "value": """"
         case Ty.ColumnT(_, Role.Group, _, _) => start + ", \"group\": [\""
-        case Ty.FnT(_) => start + ", \"aggregate\": [{\"fn\": \""
+        case Ty.FnT(_, _) => start + ", \"aggregate\": [{\"fn\": \""
         case Ty.ColumnT(_, Role.Agg, _, _) => start + s""", "aggregate": [{"fn": "${args.lift(6).flatMap(leaf).getOrElse("sum")}", "column": """"
         case Ty.OrderT(_, _, _) => start + ", \"order\": [\""
         case Ty.DirT => start + ", \"order\": [\""
@@ -318,7 +329,7 @@ object Render:
     case Ty.KindT => if c == "rows" then "from" else "datalog"
     case Ty.LinkT(_) => if c == "none" then "}" else c.split("->").last
     case Ty.ColumnT(_, _, _, _) if c == "none" => "]"
-    case Ty.FnT(_) if c == "none" => "]"
+    case Ty.FnT(_, _) if c == "none" => "]"
     case Ty.OrderT(_, _, _) if c == "none" => "]"
     case Ty.LimitT(_) if c == "none" => "}"
     case Ty.DirT => if c == "desc" then "-" else term match { case Con(_, _, args) => args.lift(8).flatMap(leaf).getOrElse("x"); case _ => "x" }

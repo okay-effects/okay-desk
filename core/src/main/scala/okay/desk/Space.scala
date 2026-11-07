@@ -58,7 +58,8 @@ object Space:
     case Program.Rel(from, link, where, group, agg, order, limit) =>
       Right(Query.Relational(from, link.map(l => Join(l.to, Vector((l.column, tables(l.to).columns.head)))),
         where.map((c, op, v) => Cond.Cmp(c.name, op, v)), group.map(_.name).toVector,
-        agg.map((fn, c) => Agg(fn, c.map(_.name).getOrElse("*"), if fn == "count" then "n" else fn)).toVector, Vector.empty,
+        agg.map((fn, c) => Agg(fn, c.map(_.name).getOrElse("*"), if fn == "count" then "n" else fn,
+          by = Option.when(fn == "growth" || fn == "change")(tables(from).columns.find(c => kindOf(tables(from), c) == Kind.Time).getOrElse("")))).toVector, Vector.empty,
         order.map((c, desc) => Order(c, desc)).toVector, limit))
     case Program.Absent(target, link, where) =>
       Conjunctive.program(tables, target, conds = where.map((c, op, v) => Conjunctive.Cond(c.table, c.name, op, v.text)),
@@ -87,7 +88,8 @@ object Space:
         (for (a, i) <- ownConds.zipWithIndex; b <- ownConds.drop(i + 1) if a._1 != b._1 yield Vector(a, b)) ++
         (for a <- ownConds; b <- conds(other) yield Vector(a, b))).iterator
       group <- None +: (own ++ other).filter(c => c.kind == Kind.Text && !where.exists(_._1 == c)).map(Some(_))
-      agg <- None +: Some(("count", None)) +: (for fn <- Vector("sum", "avg", "min", "max"); c <- own.filter(_.kind == Kind.Num) yield Some((fn, Some(c))))
+      // (growth over the time column, when the table has one: the last value against the first, per group or whole)
+      agg <- None +: Some(("count", None)) +: (for fn <- Vector("sum", "avg", "min", "max") ++ (if own.exists(_.kind == Kind.Time) then Vector("growth") else Vector.empty); c <- own.filter(_.kind == Kind.Num) yield Some((fn, Some(c))))
       if agg.isDefined || group.isEmpty // a group without an aggregate says nothing
       orderCols = (if agg.exists(_._1 != "count") then agg.map(a => a._1).toVector else Vector.empty) ++
         (if agg.isEmpty then own.filter(c => c.kind == Kind.Num || c.kind == Kind.Time).map(_.name) else if agg.exists(_._1 == "count") then Vector("n") else Vector.empty)
@@ -152,7 +154,7 @@ object Space:
       val agg = rnd.nextInt(100) match
         case r if r < 40 => None
         case r if r < 65 || nums.isEmpty => Some(("count", None))
-        case _ => Some((pick(Vector("sum", "avg", "min", "max")), Some(pick(nums))))
+        case _ => Some((pick(Vector("sum", "avg", "min", "max") ++ (if own.exists(_.kind == Kind.Time) then Vector("growth") else Vector.empty)), Some(pick(nums))))
       val texts = (own ++ other).filter(c => c.kind == Kind.Text && !where.exists(_._1 == c))
       val group = if agg.isDefined && texts.nonEmpty && rnd.nextInt(10) < 5 then Some(pick(texts)) else None
       val orderCols = agg match

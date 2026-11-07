@@ -1,7 +1,7 @@
 package okay.desk.calc
 
 import okay.desk.*
-import okay.desk.Space.{Col, Link, Program, Schema}
+import okay.desk.Space.{Col, Kind, Link, Program, Schema}
 import Term.*
 
 /**
@@ -72,7 +72,7 @@ object Den:
           Con(Ty.ColumnT(Vector(from), Role.Where, optional = true, except = upTo(own)), cc.name, Vector(Leaf(Ty.OpT(cc.kind), op), Leaf(Ty.ValueT(cc.table, cc.name), v.text))) },
         condOf(other, oth),
         Leaf(Ty.ColumnT(from +: other, Role.Group, optional = true, except = where.map(_._1.name)), group.map(_.name).getOrElse("none")),
-        Leaf(Ty.FnT(required = group.isDefined), fn),
+        Leaf(Ty.FnT(required = group.isDefined, timed = s.of(from).exists(_.kind == Kind.Time)), fn),
         Leaf(Ty.ColumnT(Vector(from), Role.Agg, optional = fn == "none" || fn == "count"), agg.flatMap(_._2).map(_.name).getOrElse("none")),
         order.fold(Leaf(Ty.OrderT(from, Option.when(fn != "none")(fn), group.isDefined), "none"))((by, desc) =>
           Con(Ty.OrderT(from, Option.when(fn != "none")(fn), group.isDefined), by, Vector(Leaf(Ty.DirT, if desc then "desc" else "asc")))),

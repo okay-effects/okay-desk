@@ -170,15 +170,28 @@
    "kto"
   ],
   "outside": [
-   "rósł",
-   "rosł*",
-   "wzrost*",
-   "wzrast*",
-   "szybciej",
-   "wolniej",
    "udział*",
    "porówna*",
    "procent*"
+  ],
+  "growth": [
+   "rósł",
+   "rosła",
+   "rosły",
+   "rośnie",
+   "rosnie",
+   "wzrost",
+   "wzrosła",
+   "wzrósł",
+   "urósł"
+  ],
+  "pace": [
+   "szybciej",
+   "wolniej",
+   "najszybciej",
+   "najwolniej",
+   "najszybsz*",
+   "najwolniejsz*"
   ]
  },
  "numbers": {
@@ -616,6 +629,10 @@
   "onlyFirst": [
    "tylko pierwszy",
    "tylko pierwsza"
+  ],
+  "growth": [
+   "Jak rósł {C.nom} {T.gen}",
+   "Wzrost {C.gen} dla {T.gen}"
   ]
  }
 }

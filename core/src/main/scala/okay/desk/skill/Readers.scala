@@ -869,7 +869,7 @@ final class Readers:
               val ls = if scores.isEmpty then Array.empty[Float] else logSoftmax(scores)
               val some = math.log(math.max(1e-9, 1 - pNone))
               cands.zip(ls).map((tc, l) => (tc._2, some + l.toDouble)) ++ (if cs.contains("none") then Vector(("none", math.log(math.max(1e-9, pNone)))) else Vector.empty)
-          case Ty.FnT(_) =>
+          case Ty.FnT(_, _) =>
             query(pr, fnPrefix(table)).map(z).map { fq =>
               val ps = logSoftmax(fnProbe.scores(fq)); val classes = fns :+ "-"
               cs.flatMap(c => classes.indexOf(if c == "none" then "-" else c) match { case -1 => None; case i => Some((c, ps(i).toDouble)) }) }

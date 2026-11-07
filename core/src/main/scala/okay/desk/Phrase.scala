@@ -110,11 +110,13 @@ object Phrase:
               case "sum" => pick(s"Сумма $col по ${table(from, Case.Dat)}", s"Итого $col для ${table(from, Case.Gen)}", s"Суммарный ${column(c, Case.Nom)} ${table(from, Case.Gen)}")
               case "avg" => pick(s"Средний ${column(c, Case.Nom)} ${table(from, Case.Gen)}", s"Средняя величина $col по ${table(from, Case.Dat)}")
               case "min" => pick(s"Наименьший ${column(c, Case.Nom)} среди ${table(from, Case.Gen)}", s"Минимум $col по ${table(from, Case.Dat)}")
+              case "growth" => pick(s"Как рос ${column(c, Case.Nom)} ${table(from, Case.Gen)}", s"Рост $col по ${table(from, Case.Dat)}")
               case _ => pick(s"Наибольший ${column(c, Case.Nom)} среди ${table(from, Case.Gen)}", s"Максимум $col по ${table(from, Case.Dat)}")
             else fn match
               case "sum" => pick(s"Total ${c.name} of $from", s"Sum of ${c.name} for $from", s"${c.name} summed over $from")
               case "avg" => pick(s"Average ${c.name} of $from", s"Mean ${c.name} for $from")
               case "min" => pick(s"The smallest ${c.name} among $from", s"Minimum ${c.name} of $from")
+              case "growth" => pick(s"How did ${c.name} grow in $from", s"Growth of ${c.name} in $from")
               case _ => pick(s"The largest ${c.name} among $from", s"Maximum ${c.name} of $from")
           case (None, Some((c, desc)), Some(1)) =>
             val col = s.of(from).find(_.name == c).map(column(_, Case.Nom)).getOrElse(c)

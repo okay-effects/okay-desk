@@ -80,7 +80,8 @@ object Language:
         "absent" -> Vector("without", "never", "lacking", "no"), "negation" -> Vector("no", "without"), "into" -> Vector("in"),
         "closure" -> Vector("reach*", "depend*", "lead*"), "closureFrom" -> Vector("depend*", "reachable", "where does"),
         "closureTo" -> Vector("reach*", "lead*"),
-        "outside" -> Vector("grow*", "grew", "growth", "fastest", "slowest", "faster", "slower", "share", "compare*", "ratio", "percent*")),
+        "growth" -> Vector("grow*", "grew", "growth"), "pace" -> Vector("fastest", "slowest", "faster", "slower"),
+        "outside" -> Vector("share", "compare*", "ratio", "percent*")),
       numbers = Map("one" -> "1", "three" -> "3", "five" -> "5", "ten" -> "10"),
       tables = Map.empty, columns = Map.empty, values = Map.empty, stemDrop = 1, pieces = Map.empty)
 
@@ -103,7 +104,8 @@ object Language:
         "absent" -> Vector("без", "нет", "не встреча*"), "negation" -> Vector("без", "нет"), "into" -> Vector("в"),
         "closure" -> Vector("достиж*", "достиг*", "завис*", "вед*", "доход*"), "closureFrom" -> Vector("завис*", "достижим*", "куда"),
         "closureTo" -> Vector("ведут", "ведёт", "доход*", "достига*", "кто"),
-        "outside" -> Vector("рос", "росл*", "рост*", "раст*", "быстрее", "медленнее", "дол*", "сравни*", "процент*"),
+        "growth" -> Vector("рос", "росл*", "рост*", "раст*", "выраст*", "вырос*"), "pace" -> Vector("быстрее", "медленнее", "быстр*", "медленн*"),
+        "outside" -> Vector("дол*", "сравни*", "процент*"),
         "sumPhrases" -> Vector("сумма заказов", "сумма продаж", "итого")),
       numbers = Map("один" -> "1", "одна" -> "1", "три" -> "3", "пять" -> "5", "десять" -> "10"),
       tables = okay.desk.Phrase.Russian.tables.map((k, v) => k -> t(v._1, v._2, v._3, v._4)),

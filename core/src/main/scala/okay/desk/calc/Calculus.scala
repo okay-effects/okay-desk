@@ -24,7 +24,7 @@ enum Ty:
   case OpT(kind: Kind)
   case ValueT(table: String, column: String)
   /** an aggregate function; required when a group was chosen (a group without an aggregate says nothing) */
-  case FnT(required: Boolean)
+  case FnT(required: Boolean, timed: Boolean = false)
   /** an order: none, or by what, in a direction */
   case OrderT(table: String, aggregate: Option[String], grouped: Boolean)
   case DirT
@@ -107,7 +107,7 @@ final class Grammar(val schema: Schema) extends Rules:
     case Ty.OpT(Kind.Num) => Vector("<", ">")
     case Ty.OpT(_) => Vector("=")
     case Ty.ValueT(t, c) => schema.of(t).find(_.name == c).toVector.flatMap(schema.values).map(_.text)
-    case Ty.FnT(required) => (if required then Vector.empty else Vector("none")) ++ Vector("count", "sum", "avg", "min", "max")
+    case Ty.FnT(required, timed) => (if required then Vector.empty else Vector("none")) ++ Vector("count", "sum", "avg", "min", "max") ++ (if timed then Vector("growth") else Vector.empty)
     case Ty.OrderT(_, Some(_), false) => Vector("none")
     case Ty.OrderT(t, agg, _) => "none" +: (agg match
       case Some("count") => Vector("n")
@@ -153,7 +153,7 @@ final class Grammar(val schema: Schema) extends Rules:
           case 5 =>
             val used = args.slice(2, 5).collect { case Con(_, c, _) => c }
             t.map(x => Ty.ColumnT(x +: other.toVector, Role.Group, optional = true, except = used))
-          case 6 => Some(Ty.FnT(required = leaf(5).exists(_ != "none")))
+          case 6 => Some(Ty.FnT(required = leaf(5).exists(_ != "none"), timed = t.exists(x => schema.of(x).exists(_.kind == Kind.Time))))
           case 7 => t.flatMap(x => leaf(6).map(fn => Ty.ColumnT(Vector(x), Role.Agg, optional = fn == "none" || fn == "count")))
           case 8 => t.flatMap(x => leaf(6).map(fn => Ty.OrderT(x, Option.when(fn != "none")(fn), grouped = leaf(5).exists(_ != "none"))))
           case 9 => Some(Ty.LimitT(ordered = args.lift(8).exists { case Leaf(_, "none") => false; case _ => true }))
