@@ -28,3 +28,14 @@ class AnswersSuite extends munit.FunSuite:
     println(s"  answers: $sentences sentences over 13 results × 2 languages, all grounded and read back")
     val (_, r) = Den.run(s, Den.term(s, suite.gold(1))).toOption.get
     println("  e.g. " + Strategy.every(new Answers(suite.gold(1), r, ru = false), Answers.context(s)).map(new Answers(suite.gold(1), r, ru = false).text).mkString(" | "))
+
+/** the page's construction (from the query) agrees with the calculus' (from the point) on every gold result */
+class OfQuerySuite extends munit.FunSuite:
+  val s = Space.Schema(Sample.tables)
+  val suite = new CalculusSuite
+  test("Answer.ofQuery(query, result) == Answer.of(point, result) for the 13 gold, both languages"):
+    for (p, q) <- suite.gold.zip(Sample.questions) do
+      val (query, r) = Den.run(s, Den.term(s, p)).toOption.get
+      val a = Answer.of(p, r); val b = Answer.ofQuery(query, r)
+      assertEquals(b, a, q.en)
+      for ru <- Vector(false, true) do assert(Answer.readBack(Answer.text(b, ru), b), Answer.text(b, ru))

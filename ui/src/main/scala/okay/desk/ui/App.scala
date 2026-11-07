@@ -156,10 +156,15 @@ object App:
               else if result.name == "weights" then "computed by the transformer compiled from the closure program (okay-inlay), in this page"
               else "computed by the exact engine in this page"
             val shown = s.copy(log = s.log :+ Entry("result", result.render(50), Some(Query.print(q)), Some(note)))
+            // THE ANSWER IN WORDS (specs/calculus.md §10, §14): a model that generates summarizes (kept only when faithful);
+            // else the answer grammar says the result — its facts are cells of the result by construction
+            val ru = question.exists(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я')
+            val said = okay.desk.calc.Answer.text(okay.desk.calc.Answer.ofQuery(q, result), ru)
+            val sentence = Entry("model", said, None, Some(if ru then "сказано по результату грамматикой ответов: каждое число — его ячейка" else "said from the result by the answer grammar: every number is a cell of it"))
             Model.summary[R](question, q, result).map {
               case Some(words) if Prompt.faithful(words, result) => shown.copy(log = shown.log :+ Entry("model", words))
-              case Some(_) => shown.copy(log = shown.log :+ Entry("system", "the model's summary stated a number not in the result and was dropped"))
-              case None => shown
+              case Some(_) => shown.copy(log = shown.log :+ Entry("system", "the model's summary stated a number not in the result and was dropped") :+ sentence)
+              case None => shown.copy(log = shown.log :+ sentence)
             }
 
   // ---- the screens

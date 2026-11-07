@@ -95,3 +95,30 @@ object Answer:
     val counts = a match { case A.Rows(n, _, _) => Set(n.toString); case _ => Set.empty[String] }
     fs.forall(f => sentence.contains(f.text)) &&
       "-?\\d+(?:\\.\\d+)?".r.findAllIn(sentence).forall(n => fs.exists(f => f.text == n || f.text.contains(n)) || counts(n))
+
+  /** the answer term of a QUERY's result (the page has the query, not the point): the shape by the query's parts */
+  def ofQuery(q: Query, r: Table): A =
+    if r.rows.isEmpty then A.Nothing
+    else q match
+      case Query.Logical(rules, goal) =>
+        if rules.contains(" not ") then
+          val target = "^\\w+\\(.*?\\)\\s*:-\\s*(\\w+)\\(".r.findFirstMatchIn(rules).map(_.group(1)).getOrElse("rows")
+          val other = "has\\(\\w+\\)\\s*:-\\s*(\\w+)\\(".r.findFirstMatchIn(rules).map(_.group(1)).getOrElse("others")
+          A.Missing(target, other, r.rows.indices.map(i => cell(r, i, r.columns.head)).toVector)
+        else
+          // the goal's arguments: the constant is the node, its place says the direction (reach(node, X) forward)
+          val args = goal.trim.dropWhile(_ != '(').drop(1).reverse.dropWhile(_ != ')').drop(1).reverse.split(",").map(_.trim.stripPrefix("\"").stripSuffix("\"")).toVector
+          val variable = (a: String) => a.matches("[A-Z]\\w*")
+          val forward = args.headOption.exists(a => !variable(a))
+          val node = args.find(a => !variable(a)).getOrElse("")
+          A.Reach(node, forward, r.rows.indices.map(i => cell(r, i, r.columns.head)).toVector)
+      case Query.Relational(_, _, _, group, aggs, _, order, limit) =>
+        (aggs.headOption, group.headOption) match
+          case (Some(a), None) if a.fn == "count" => A.Count(cell(r, 0, a.as))
+          case (Some(a), None) => A.Scalar(a.fn, a.column, cell(r, 0, a.as))
+          case (Some(a), Some(g)) => A.Groups(g, a.as, r.rows.indices.map(i => (cell(r, i, g), cell(r, i, a.as))).toVector)
+          case _ if limit.contains(1) && order.nonEmpty =>
+            val by = order.head.column.stripPrefix("-")
+            val key = r.columns.filterNot(_ == by).headOption.getOrElse(r.columns.head)
+            A.Top(Vector(cell(r, 0, key)), r.column(by).map(_ => cell(r, 0, by)), order.head.desc)
+          case _ => A.Rows(r.rows.size, r.rows.indices.take(3).map(i => r.columns.take(3).map(c => cell(r, i, c))).toVector, r.columns.take(3))

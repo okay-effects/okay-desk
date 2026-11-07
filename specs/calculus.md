@@ -281,3 +281,16 @@ the sample 13/13 en, 13/13 ru; held-out 100: the data alone 55% whole / 44% open
 among items": a column named `count` — fixed: the word alone no longer names the function when a column is called
 count), data + the model's tokens 65% whole, order 91%, limit 94%, group 91%, agg 86%, where 78%. OnMlx frees an
 op's intermediates at once (the bench of a hundred questions was killed at 137 before).
+
+## 14. The answer in words on the page, and the calculus on real data (2026-11-07)
+
+**Words on the page.** After the result's table the page now says it: a model that generates still summarizes
+(kept only when faithful, as before); the readers' mode, which generates nothing, gets the answer grammar's
+sentence — `Answer.ofQuery(query, result)` (the page holds the query, not the point; the law `OfQuerySuite`: it
+equals `Answer.of(point, result)` on every gold, and reads back) said by `Answer.text` in the question's language.
+Its note on the page: "said from the result by the answer grammar: every number is a cell of it". The app's law
+(`AppSuite`): "How many orders are unpaid?" answers "4 rows." beside the table.
+
+**Real data.** `RealRefine` (bench): the calculus — the data first, the model's tokens next, no trained reader —
+on the sibling agent's hand-written GDP questions (RealBench, data.md §28), by the page's program on MLX
+(`DESK_DEVICE=mlx`). The outcomes as RealBench counts them (right / refused / wrong). Numbers below as they come.

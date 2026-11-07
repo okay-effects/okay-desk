@@ -51,6 +51,7 @@ class AppSuite extends munit.FunSuite:
     val t = text(p)
     assert(t.contains("the data: customers, orders"), t)
     assert(t.contains("readers loaded"), t)
+    assert(t.contains("4 rows.") || t.contains("4 записей"), s"the answer in words: $t")
     assert(t.contains("n\n-\n4") && t.contains("not generated"), t)
     assertEquals(disk.keys.toList.sorted, List("customers.csv", "orders.csv"))
 
