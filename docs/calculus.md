@@ -106,8 +106,8 @@ The benches need a model (`DESK_DEVICE=mlx|cpu`, `DESK_SOURCE=readers`, `DESK_WO
 | the readers alone, for reference | 57% | 16/3/0 — 12/3/4 | 63% / 25% / 16% |
 
 Two things the numbers say. On data, the data alone never errs. On people's wording it does — "сколько денег"
-is a sum, the rule says a count — thirty times in 242; that is the exact rules' limit, a number per language,
-and the next thing to fix is the rules' silence there, not their cleverness.
+is a sum, the rule says a count — thirty times in 242; that is the exact rules' limit, a number per
+language, and the next thing to fix is the rules' silence there, not their cleverness.
 
 ## 8. How to use it
 
