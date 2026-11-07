@@ -226,3 +226,26 @@ one — keep the one on the standard effects; `Compute`'s ops are Qwen3's (`head
 architecture as DATA (q/k norms or not, the activation, the rope, tied embeddings, biases) over a smaller set of
 ops gives Llama, Gemma, Qwen2.5 on the same four handlers; training stays on MLX (autograd) — the boundary is
 inference hardware-neutral, training not yet.
+
+## 12. The levels as rows and programs, not monads (the operator's question, 2026-11-07)
+
+"Which free monad at level 0 — a new one?" None is new. In okay every program `A ! R` is already the free
+structure over the operations of its row `R` (the kernel: a program is data, a handler interprets it), so a level
+is not a monad of its own but a SIGNATURE (a row) and a PROGRAM over it:
+
+- **Level 0**: the row `{Among}` — okay-scala's standard `Choose` — and the program `Choice.program`: among the
+  enabled moves, in a chooser's order, until terminal. `Level0.scala`'s trait `Choice` (enabled, step) is the
+  coalgebraic presentation of the same thing, a transition system; the program is the algebraic one. Its
+  handlers are the strategies, and a handler of a free monad is an algebra: `Choose.first` (the Maybe algebra —
+  the first way) gives the run; `Choose.all` (the List algebra — every way) gives every run.
+- **Level 1**: the row `{Among, Weigh}` and the program over words: `next` gives the enabled letters, `Weigh`
+  orders them. One new operation; the row is still free, as every row is.
+- **Level 2**: the same row, the program parameterized by the typed grammar (`next` derived from the types).
+- **Level 3**: not a new program — the image of level 2's program under the `all` algebra: every way the choices
+  can go = every closed term = the space. "Under all" means handled by `Choose.all`.
+
+The law (`Level0Suite`): `Choose.first` of the level-0 program with the oracle's order is the run of the
+transition system; `Choose.all` of it over the small schema gives 3655 complete words that denote exactly the
+3652 points of `Space.enumerate` (three words are spellings of the same point). So the space is reached from the
+choice calculus alone, with no typed grammar in the statement — the typed grammar is what makes `next` say the
+right letters.

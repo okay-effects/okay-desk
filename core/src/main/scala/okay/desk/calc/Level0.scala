@@ -48,3 +48,16 @@ object Choice:
   def replay[S, M, R[_]](moves: Vector[M], position: S => Int): Chooser[S, M, R] = new Chooser[S, M, R]:
     def apply(s: S, en: Vector[M]): Vector[(M, Double)] ! R =
       pure(moves.lift(position(s)).map(x => Vector((x, 0.0))).getOrElse(Vector.empty))
+
+  /** THE SAME CALCULUS AS A PROGRAM over okay-scala's own `Choose` (specs/calculus.md §12): level 0 is not a monad
+   * of its own — it is the row with one operation, `Among`, and this program over it: among the enabled moves, in
+   * the order a chooser gives, until terminal. Its handlers are the strategies: `Choose.first` of it is `run`
+   * (greedy), `Choose.all` of it is every run (the space, at the levels above). The trait `Choice` above is the
+   * coalgebraic presentation of the same thing — a transition system; this is the algebraic one. */
+  def program[S, M, R[_]: Has[okay.scala3.std.Choose]](c: Choice[S, M], order: (S, Vector[M]) => Vector[M], s0: S, bound: Int = 64): S ! R =
+    def loop(s: S, n: Int): S ! R =
+      val en = c.enabled(s)
+      if en.isEmpty then pure(s)
+      else if n >= bound then okay.scala3.std.Choose.none
+      else okay.scala3.std.Choose.among[M, R](order(s, en).toList).flatMap(m => loop(c.step(s, m), n + 1))
+    loop(s0, 0)

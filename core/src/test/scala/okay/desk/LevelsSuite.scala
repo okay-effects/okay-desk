@@ -62,3 +62,26 @@ class LevelsSuite extends munit.FunSuite:
     println(s"  level 3: ${points.size} points phrased twice: the data alone closes $closed of ${points.size * 2} to the point; contradictions ${contradicted.size}")
     contradicted.take(40).foreach(c => println(s"    $c"))
     assertEquals(contradicted.size, 0)
+
+/** LEVEL 0 AS A PROGRAM over okay's `Choose` (specs/calculus.md §12): `first` of it is the run, `all` of it is every
+ * run — the space of the small schema, 3652 complete words, from the choice calculus alone */
+class Level0Suite extends munit.FunSuite:
+  import okay.scala3.std.Choose
+  val small = Space.Schema(Map("orders" -> Sample.orders))
+  val gs = new Grammar(small)
+  val c = Word.choice(Encode.next(gs, exact = false))
+  type S = (Encode.Ctx, Word.Letters)
+
+  test("first of the program with the oracle's order == the run"):
+    for p <- { val rnd = new scala.util.Random(3); Vector.fill(40)(Space.random(rnd, small)) } do
+      val w = Encode.word(Den.term(small, p))
+      val order = (s: S, en: Vector[String]) => w.lift(s._2.size).filter(en.contains).toVector
+      val byRun = run(Choice.run(c, Choice.replay[S, String, Pure](w, _._2.size), ((small, ""), Vector.empty)))
+      val byProgram: Option[S] = run(Choose.first(Choice.program[S, String, Choose](c, order, ((small, ""), Vector.empty))))
+      assertEquals(byProgram.map(_._2), Some(byRun.last._2), s"$p")
+
+  test("all of the program == the space: 3652 complete words over orders"):
+    val every: List[S] = run(Choose.all(Choice.program[S, String, Choose](c, (_, en) => en, ((small, ""), Vector.empty))))
+    val points = every.flatMap(s => Den.program(small, Encode.tree(gs, s._2)).toOption).toSet
+    assertEquals(points, Space.enumerate(small).toSet)
+    println(s"  level 0 under all: ${every.size} words, ${points.size} points")
