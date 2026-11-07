@@ -200,7 +200,9 @@ object Engine:
   /** THE MARGIN (Okay!Chat's second gate, specs/pilot.md §2): two candidates closer than this in log-probability are
    * a question, not a choice — `?margin=<nats>` in the address; the sources that write (the data, the person) give
    * one candidate and are never gated */
-  private val margin: Double = "margin=([0-9.]+)".r.findFirstMatchIn(dom.window.location.search).map(_.group(1).toDouble).getOrElse(0.0)
+  // (ln 3 by default: measured 2026-11-07 — the sample 13/13 13/13 and the GDP 19 unchanged at 0, ln 1.5, ln 2, ln 3;
+  // "Show the first 5" a question at ln 3, a whole table at less)
+  private val margin: Double = "margin=([0-9.]+)".r.findFirstMatchIn(dom.window.location.search).map(_.group(1).toDouble).getOrElse(math.log(3))
   // THE DIALOGUE (specs/pilot.md §3.2): the hole the last reading stopped at with its options, and the person's answers
   // to this question so far — a choice answers the pending hole; the reading runs again with the answers as its first
   // source and refines the same term; a different question starts afresh
@@ -216,7 +218,7 @@ object Engine:
    * constructors, one line, `|` between) — `Clarified.readings` reads them back for the buttons */
   private def asked(ty: Ty, cs: Vector[String], languages: Vector[Language]): String =
     val lang = languages.headOption.getOrElse(Language.En.language)
-    s"ask: ${Dialogue.question(ty, cs, lang)}\n${cs.mkString(" | ")}"
+    if cs.isEmpty then Dialogue.question(ty, cs, lang) else s"ask: ${Dialogue.question(ty, cs, lang)}\n${cs.mkString(" | ")}"
   private def readByCalculus(tables: Map[String, Table], question: String, words: Words, languages: Vector[Language],
       answers: Vector[(Ty, String)]): (Either[String, String] ! (Async + Read)) =
     val s = okay.desk.Space.Schema(tables); val g = new Grammar(s)

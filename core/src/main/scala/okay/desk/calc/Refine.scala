@@ -248,7 +248,14 @@ object Fill:
             case None =>
               // (a column a condition already uses is not the order's: "в 2023 году" is the condition, the order is the measure)
               // (a column a condition already uses — "в 2023 году" — is not the order's unless the order is written: by size words alone the order is the measure)
-              val namedCols = cs.filter(c => c != "none" && (explicit || !used(c)) && (named(c) || ruColumn(c)))
+              // (and a TIME column named beside a size word — "in which year was it the highest" — is the answer, not the
+              // order; unless the size word is the column's own: "the biggest day", "найвищий день")
+              def time(c: String) = ctx.schema.cols.exists(x => x.name == c && x.kind == Kind.Time)
+              def sizeOf(c: String): Boolean =
+                val forms = (c.toLowerCase +: ctx.columnForms(c).map(_.toLowerCase)).distinct
+                ctx.languages.flatMap(_.list("size")).exists(sw => forms.exists(f =>
+                  q.matches(s"(?U).*\\b${sw.stripSuffix("*")}\\w*(\\s+\\w+)?\\s+${java.util.regex.Pattern.quote(f)}\\b.*")))
+              val namedCols = cs.filter(c => c != "none" && (explicit || !used(c) && !(ctx.has("size") && time(c) && !sizeOf(c))) && (named(c) || ruColumn(c)))
               // "the largest X" with no column named: a size word orders by the one numeric column
               val numeric = cs.filter(c => c != "none" && !used(c) && ctx.schema.cols.exists(x => x.name == c && x.kind == Kind.Num))
               if namedCols.nonEmpty then one(namedCols)

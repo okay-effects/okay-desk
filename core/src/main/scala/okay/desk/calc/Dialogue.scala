@@ -29,6 +29,8 @@ object Dialogue:
 
   /** the candidates offered for an open hole: the best two or three the sources weighed, else the grammar's (a few) */
   def offered(g: Rules, ty: Ty, dist: Dist, limit: Int = 12): Vector[String] =
+    // a source's REFUSAL (the question asks what the grammar lacks: a comparison, a share): nothing to offer
+    if dist.exists(_._1 == Fill.refuse) then return Vector.empty
     val weighed = dist.filter(_._1 != Fill.refuse).sortBy(-_._2).map(_._1)
     val cs = if weighed.size >= 2 then weighed.take(3) else g.constructors(ty).take(limit)
     cs.distinct
@@ -67,6 +69,9 @@ object Dialogue:
       case Ty.DirectionT => "direction"
       case _ => "word"
     val names = candidates.map(c => name(ty, c, lang))
+    if candidates.isEmpty then return lang.pieces.get("ask:outside").flatMap(_.headOption).getOrElse(
+      if lang.code == "ru" then "Это просит сравнить или посчитать долю — такого я не считаю; спросите сами числа и сравните их."
+      else "This asks for a comparison or a share, which I do not compute; ask for the figures and compare them.")
     val piece = lang.pieces.get(s"ask:$kind").flatMap(_.headOption)
       .orElse(builtInAsk(lang.code).get(kind)).getOrElse(builtInAsk("en")(kind))
     piece.replace("{column}", ty match { case Ty.ValueT(_, c) => c; case _ => "" }).replace("{options}", names.mkString(" / "))
