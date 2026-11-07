@@ -32,3 +32,13 @@ class PageRowSuite extends munit.FunSuite:
       val p = Strategy.greedyIn[R](g, Context(s, text, Term.Hole(Ty.Program)), fill)
       Read.future(p, fake).map((steps, term) => assert(term.isDefined || steps.nonEmpty, text))
     }).map(_ => ())
+
+  /** THE DATA'S REGULAR EXPRESSIONS ON SCALA.JS: every sample question and the English/Russian phrasings that use each
+   * rule run through the exact fill in JS too — a flag expression JS rejects ("(?U)(?s)") was found on the live page */
+  test("the exact fill on every sample question, and on the phrasings of each rule, runs through on this platform"):
+    val extra = Vector("In which year was the GDP of Poland the highest?", "The largest of the orders", "Maximum since of customers.",
+      "Where does amount grow fastest?", "Покажи первые 5", "Which 5 orders grew fastest?", "no, by city", "спасибо")
+    for q <- Sample.questions.flatMap(q => Vector(q.en, q.ru)) ++ extra do
+      val (steps, term) = Strategy.greedy(g, Context(s, q, Term.Hole(Ty.Program)), Fill.exact[Pure])
+      assert(term.isDefined || steps.nonEmpty, q)
+      Dialogue.Act.of(q, Vector(Language.En.language, Language.Ru.language))
