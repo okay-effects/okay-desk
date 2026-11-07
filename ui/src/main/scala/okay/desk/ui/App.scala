@@ -92,25 +92,33 @@ object App:
           Disk.names[R].flatMap(ns => ns.filter(n => n.stripSuffix(".csv").stripSuffix(".tsv").stripSuffix(".json").stripSuffix(".jsonl").stripSuffix(".ndjson") == name)
             .foldLeft(pure[Unit, R](()))((acc, f) => acc.flatMap(_ => Disk.remove[R](f)))))
           .map(_ => cleared.copy(tables = cleared.tables - name, log = cleared.log :+ Entry("system", s"closed $name")))
-      case Msg.Load(name) =>
-        // the loading begun; its progress shown on this screen until it ends
-        def follow(st: State): State ! R = Model.progress[R].flatMap {
-          case Left(words) => perform[Ui](Ui.Working(Screen[Nothing]("okay-desk", render(st, loading = Some(words)).parts, Nil))).flatMap(_ => follow(st))
-          case Right(Right(what)) => pure(st.copy(model = Some(what), modelName = name))
-          case Right(Left(why)) => pure(st.copy(problem = Some(why)))
-        }
-        Model.begin[R](name).flatMap(_ => follow(cleared.copy(modelName = name)))
+      case Msg.Load(name) => load[R](cleared, name)
       case Msg.Ask(question) =>
         val q = question.trim
-        if s.model.isEmpty then pure(cleared.copy(problem = Some("load the model first")))
-        else if s.tables.isEmpty then pure(cleared.copy(problem = Some("open a file first — the Data button")))
+        if s.tables.isEmpty then pure(cleared.copy(problem = Some("open a file first — the Data button")))
         else if q.isEmpty then pure(cleared)
         else
-          val asked = cleared.copy(log = cleared.log :+ Entry("user", q))
-          for
-            answered <- think[R](asked, q)
-            result <- answer[R](asked, q, answered, retried = false)
-          yield result
+          // THE MODEL LOADED BY THE FIRST QUESTION (the operator, from the phone): the one chosen in the form, the
+          // page's default else — its progress shown, then the question goes on; a loading that fails is the answer
+          val ready: State ! R = if s.model.isDefined then pure(cleared) else load[R](cleared, s.modelName)
+          ready.flatMap { st =>
+            if st.model.isEmpty then pure(st)
+            else
+              val asked = st.copy(log = st.log :+ Entry("user", q))
+              for
+                answered <- think[R](asked, q)
+                result <- answer[R](asked, q, answered, retried = false)
+              yield result
+          }
+
+  /** the model loaded: the loading begun, its progress shown on this screen until it ends */
+  def load[R[_]](st0: State, name: String)(using In[Ui, R], In[Model, R]): State ! R =
+    def follow(st: State): State ! R = Model.progress[R].flatMap {
+      case Left(words) => perform[Ui](Ui.Working(Screen[Nothing]("okay-desk", render(st, loading = Some(words)).parts, Nil))).flatMap(_ => follow(st))
+      case Right(Right(what)) => pure(st.copy(model = Some(what), modelName = name))
+      case Right(Left(why)) => pure(st.copy(problem = Some(why)))
+    }
+    Model.begin[R](name).flatMap(_ => follow(st0.copy(modelName = name)))
 
   /** THE QUESTION THOUGHT ABOUT, ITS STEPS SHOWN: the program asked for, then followed — each moment the steps so far
    * (what is decided: the table, the form of the answer, the columns, the condition; the last the one being decided
@@ -182,8 +190,8 @@ object App:
     val models = modelForm(s.modelName)
     val modelPart: Part = loading.fold(models: Part)(words => Part.block("loading")(Part.info(words)))
     val note = Part.block("model-note")(Part.text(s.model.getOrElse(
-      if s.phone then "not loaded yet — on a phone the student with the readers (122 MB) is the one that fits; the models that generate (0.4–1.7 GB) are for a computer"
-      else "the model is not loaded yet")))
+      if s.phone then "not loaded yet — the first question loads it; on a phone the core with the readers is the one that fits; the models that generate (0.4–1.7 GB) are for a computer"
+      else "not loaded yet — the first question loads it")))
     val dataNote = Part.block("data-note")(Part.text(
       if s.tables.isEmpty then "no data open yet" else s"the data: ${s.tables.keys.toList.sorted.mkString(", ")}"), Part.slot("data"))
     val log = s.log.map { e =>

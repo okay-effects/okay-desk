@@ -54,12 +54,13 @@ class AppSuite extends munit.FunSuite:
     assert(t.contains("n\n-\n4") && t.contains("not generated"), t)
     assertEquals(disk.keys.toList.sorted, List("customers.csv", "orders.csv"))
 
-  test("the next visit: the tables kept on the disk are open; a question before the model is a problem said"):
+  test("the next visit: the tables kept on the disk are open; a question before the model loads it, then answers"):
     disk.clear(); disk("orders.csv") = csv(Sample.orders)
     val p = play(Nil, Act.press("Ask", ask -> "How many orders are unpaid?"))
     val t = text(p)
     assert(t.contains("the data: orders"), t)
-    assert(t.contains("load the model first"), t)
+    assert(!t.contains("load the model first"), t)
+    assert(t.contains("readers loaded") || t.contains("unpaid"), t)
     val missing = text(play(List("sample/nothing.csv")))
     assert(missing.contains("not read"), missing)
 
