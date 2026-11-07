@@ -97,7 +97,9 @@ object Phrase:
         val grouped = grp.map(g => " " + group(g)).getOrElse("")
         val ordered = ord.map((_, desc) => ", " + order(desc)).getOrElse("")
         val limited = limit.map { n =>
-          if n == 1 then "" else if ru then pick(s", первые $n", s", топ-$n") else pick(s", top $n", s", the first $n") }.getOrElse("")
+          if n == 1 && agg.isEmpty then "" else if n == 1 then (if ru then pick(", топ-1",
+            ", только первая строка") else pick(", top 1", ", only the first"))
+          else if ru then pick(s", первые $n", s", топ-$n") else pick(s", top $n", s", the first $n") }.getOrElse("")
         val head = (agg, ord, limit) match
           case (Some(("count", _)), _, _) =>
             if ru then pick(s"Сколько ${table(from, Case.Gen)}", s"Число ${table(from, Case.Gen)}", s"Посчитай ${table(from, Case.Nom)}")
@@ -128,7 +130,7 @@ object Phrase:
             else pick(s"Which $from", s"Show the $from", s"List $from", s"The $from")
         // a limit of 1 with an order is said in the head; a limit with a count is "the top N groups"
         val tail = (ord, limit) match
-          case (Some(_), Some(1)) => ""
+          case (Some(_), Some(1)) if agg.isEmpty => ""
           case _ => ordered + limited
         val end = if head.startsWith("How many") || head.startsWith("Сколько") || head.startsWith("Which") || head.startsWith("Какие") || head.startsWith("У какого") then "?" else "."
         head + conds + grouped + tail + end

@@ -736,3 +736,42 @@ phrased twice, 0 contradictions by the data alone, 460 of 626 closed by the data
 exact rules were refined by that law: cut19 sample 12/13 en, 12/13 ru (the data alone 26/26 on the suite; one
 question went to the model's tokens on the bench before the last rule); held-out: data alone 55% whole / 45%
 open / 0 wrong; data + tokens 64% whole, order 93%, limit 95%, group 91%, agg 86%, where 78%.
+
+## 27. The readers' constructors: the errors were rules, not capacity (2026-11-07)
+
+The operator's step 1 after §25 was "more pairs and reading points for the condition, the order and the
+aggregate". The errors were listed first (`DESK_SHOW=n` prints n per constructor; 300 held-out pairs, the skill
+file unchanged), and most were not the readers' — they were exact rules reading the wrong thing:
+
+- a number taken for the limit: the condition's ("cost greater than 273" → limit 273) or a date's ("in
+  2026-11-06" → limit 2026); now the limit's number is never a date's digits nor the condition's number;
+- a column's name taken for the function: "the smallest COUNT among items", "Maximum TOTAL of events", "id и
+  СУММА" (amount) — the function's words now skip column names (and their Russian forms) except where they open
+  the question; "the largest X among T", "минимум X" are an aggregate, and an aggregate without groups is not
+  ordered;
+- a role's column not taken from its words: the group from "per / by / for each / по каждому / в разрезе / по",
+  the order from "sorted by / упорядочив по / the largest", the aggregate from "the largest / средний / итого",
+  the condition's numeric column from the word before its comparison ("где total > 109": the sign counts);
+- a value in several columns made a condition on each ("blue" in name and category); now on the column written
+  nearest before it; a Russian value's stem no longer matches inside other words ("работа" in "работники");
+- the count's order: by the count (`n`) when grouped, not by a column; an explicit direction ("по возрастанию,
+  топ-10") decides before "топ";
+- a condition invented by the readers with no value, number or time in the question: dropped unless its column
+  is named and not already another role's;
+- the absence: the table after "never appear in / не встречающиеся в" is the absent one; a numeric condition
+  on the target kept; "достигает" a closure.
+
+Two errors were the generator's: a link drawn though nothing used the joined table (no phrase can say it), and a
+limit of 1 after an aggregate left unsaid. `Space.random` keeps a link only when a condition or the group uses
+it; `Phrase` says "top 1 / топ-1" there.
+
+| the skill file unchanged (§25's), 300 held-out pairs | whole | wrong above the threshold | sample en | ru |
+|---|---|---|---|---|
+| cut19, before | 50.3% | 49.7% | 13/13 | 13/13 |
+| cut19, the rules | **97.3%** | 2.7% | 13/13 | 13/13 |
+| the core (146 MB page), the rules | **98.7%** (1 abstained) | 1.0% | 13/13 | 13/13 |
+
+By constructor on cut19: kind, table, join, where, agg 100%; group, order, limit 99%. No retraining: 5000 pairs
+would buy little where the readers are not the cause. THE CAVEAT: the held-out pairs come from the same grammar
+the rules were read against — this is the grammar's own phrasing, not people's. The next number must come from
+real data asked in other words (step 2: a real schema, its space, questions not from `Phrase`).

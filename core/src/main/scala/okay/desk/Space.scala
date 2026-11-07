@@ -154,6 +154,10 @@ object Space:
         case Some(("count", _)) => Vector("n")
         case Some((fn, _)) => Vector(fn)
         case None => own.filter(c => c.kind == Kind.Num || c.kind == Kind.Time).map(_.name)
+      // a link only when the program uses the joined table (a condition or the group on its columns): a join the
+      // question
+      // cannot say made pairs no reader can read ("The tasks." with a join to accounts)
+      val usedLink = link.filter(_ => where.exists(w => other.contains(w._1)) || group.exists(other.contains))
       val order = if orderCols.nonEmpty && !(agg.isDefined && group.isEmpty) && rnd.nextInt(10) < 4 then Some((pick(orderCols), rnd.nextInt(10) < 7)) else None
       val limit = if order.isDefined && rnd.nextBoolean() then Some(pick(Vector(1, 3, 5, 10))) else None
-      Program.Rel(from, link, where, group, agg, order, limit)
+      Program.Rel(from, usedLink, where, group, agg, order, limit)

@@ -281,7 +281,13 @@ final class Readers:
         val byColumn = tables.values.toVector.sortBy(_.name).filter(t => t.columns.exists(mentioned)).map(_.name)
         val pointed = Option.when(ti < names.size)(names(ti)).filter(tables.contains)
         // "customers with no orders": the table after the negation word is the absent one, not the target
-        val negated = byName.filter(n => lowerQ.matches(s"(?U).*\\b(no|without|без|нет)\\s+${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*"))
+        // ("staff that never appear in users", "работники, не встречающиеся в бронях": the table after "in" is the
+        // absent one)
+        val negated = byName.filter { n =>
+          val forms = (java.util.regex.Pattern.quote(n.toLowerCase) +: Phrase.Russian.tables.get(n).toVector
+            .flatMap((nom, gen, prep, _) => Vector(nom, gen, prep))).mkString("|")
+          lowerQ.matches(s"(?U).*\\b(no|without|без|нет|never appear in|не встреча\\w* в)\\s+($forms)\\b.*")
+        }
         val targets = if negated.nonEmpty && byName.size > negated.size then byName.filterNot(negated.contains) else byName
         // two tables named and the data links them: the rows are the link's FROM table ("Сумма заказов по каждому
         // клиенту": orders, joined to customers) — unless the question negates one (an absence, above)
@@ -357,7 +363,7 @@ final class Readers:
         // the plain form not inside the negated one ("оплачено" is not in "не оплачено")
         Phrase.Russian.values.get(v).exists { form =>
           val stem = form.split(" ").map(russianStem).mkString(" ")
-          val pattern = s"(?U).*\\b$stem\\p{L}{0,5}\\b.*"
+          val pattern = s"(?U).*\\b$stem\\p{L}{0,${if stem.length >= 5 then 5 else 2}}\\b.*"
           if form.startsWith("не ") then lower.matches(pattern) || lower.matches(pattern.replace("не ", "не"))
           else lower.matches(pattern) && !lower.matches(s"(?U).*\\bне ?$stem\\p{L}{0,5}\\b.*")
         }
@@ -368,14 +374,35 @@ final class Readers:
       }
     }.filter((o, _, _) => o.name == table || joinTo(o).isDefined).sortBy((o, _, v) => (if o.name == table then 0 else 1, -v.length))
     // every fact a condition; the first the "fact" (the join and the where column)
-    val facts = found.distinctBy(_._2)
-    val fact = found.headOption
+    // ONE VALUE, ONE CONDITION: a value found in several columns ("blue" in name and in category) is the condition on
+    // the column the question names beside it, else on the table's own column — never on all of them, and never a
+    // join to another table for a value the table itself holds
+    // a column's forms in the question: its name (and plural), its Russian forms by the stem
+    def forms(c: String): Vector[String] =
+      (Vector(java.util.regex.Pattern.quote(c.toLowerCase) + "(?:s|es)?") ++ Phrase.Russian.columns.get(c).toVector
+        .flatMap((nom, gen, dat) => Vector(nom, gen, dat).map(f => russianStem(f) + "\\p{L}{0,5}"))).distinct
+    def at(f: String): Vector[Int] = s"(?U)\\b$f\\b".r.findAllMatchIn(lower).map(_.start).toVector
+    def valueAt(v: String): Vector[Int] = at(java.util.regex.Pattern.quote(v.toLowerCase)) ++
+      Phrase.Russian.values.get(v).toVector
+      .flatMap(form => at(form.split(" ").map(russianStem).mkString(" ") + "\\p{L}{0,5}"))
+    // how far the column is written from the value ("with owner = paid by kind": owner is beside paid, kind is not); a
+    // column before the value is nearer than one after ("whose vendor is delta by region")
+    def gap(c: String, v: String): Int =
+      (for i <- forms(c).flatMap(at); j <- valueAt(v) yield if i <= j then j - i else (i - j) * 2 + 5)
+        .minOption.getOrElse(Int.MaxValue)
+    val facts = found.groupBy(_._3.toLowerCase).values.toVector.map { same =>
+      same.sortBy((o, c, v) => (gap(c, v), if o.name == table then 0 else 1)).head
+    }.sortBy((o, _, v) => (if o.name == table then 0 else 1, -v.length)).distinctBy(_._2)
+    val fact = facts.headOption
     // a join only when the data needs one: a fact in another table, or a column of another table named in the question
     val join = facts.find(_._1.name != table).flatMap((o, _, _) => joinTo(o).map(c => (o, c))).orElse(
       tables.values.filter(_.name != table).flatMap(o => joinTo(o).filter(_ => o.columns.exists(c =>
-        c.length >= 3 && lower.matches(s"(?U).*\\b${c.toLowerCase}\\b.*"))).map(c => (o, c))).headOption)
+        c.length >= 3 && !t.columns.contains(c) && lower.matches(s"(?U).*\\b${c.toLowerCase}\\b.*")))
+          .map(c => (o, c))).headOption)
     // a word (or a stem ending in *) at a word boundary: "count" must not match "country"
-    def word(ws: String*): Boolean = ws.exists(w => lower.matches(s"(?U).*\\b${w.stripSuffix("*")}${if w.endsWith("*") then "\\w*" else ""}\\b.*"))
+    def wordsIn(text: String, ws: Seq[String]): Boolean =
+      ws.exists(w => text.matches(s"(?U).*\\b${w.stripSuffix("*")}${if w.endsWith("*") then "\\w*" else ""}\\b.*"))
+    def word(ws: String*): Boolean = wordsIn(lower, ws)
     // the joinable tables' columns are candidates too (a translated column may be theirs: "по странам" → country): a
     // choice among them brings the join
     val joinable = tables.values.toVector.filter(_.name != table).flatMap(o => joinTo(o).map(c => (o, c)))
@@ -388,12 +415,45 @@ final class Readers:
     val named = cols.filter((_, c) => c.length >= 3 && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase)}(s|es)?\\b.*") ||
       c.length >= 4 && c.toLowerCase.endsWith("s") && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase.dropRight(1))}\\b.*") ||
       Phrase.Russian.columns.get(c).exists((nom, _, _) => lower.matches(s"(?U).*\\b${russianStem(nom)}\\p{L}{0,5}\\b.*")))
+    // THE COLUMN ITS ROLE'S WORDS NAME: "per team", "по каждому типу", "sorted by day" — the column written right after
+    // the words that give it its role is that role's column, exactly (not the first column the question names)
+    def after(leads: String*): Option[String] =
+      cols.map(_._2).distinct.map(c => (c, forms(c).flatMap(f => leads.flatMap(l =>
+        s"(?U)\\b$l\\s+$f\\b".r.findFirstMatchIn(lower).map(_.start))).minOption))
+        .collect { case (c, Some(i)) => (c, i) }
+        .minByOption(_._2).map(_._1)
+    lazy val groupLead: Option[String] = after("per", "for each", "(?<!sorted |ordered )by", "по каждому", "в разрезе",
+      "(?<!упорядочив )по")
+    lazy val orderLead: Option[String] = after("sorted by", "ordered by", "упорядочив по", "the biggest",
+      "the largest", "the smallest",
+      "the highest", "the lowest", "the least", "самым большим", "самым маленьким", "наибольшим", "наименьшим",
+        "самый высокий",
+      "самый низкий")
+    // the aggregate's column: the numeric column written right after the function's words ("Наибольший рейтинг среди
+    // платежей
+    // у которых количество ниже 100": rating, not qty)
+    lazy val aggLead: Option[String] = after("the largest", "the smallest", "the highest", "the lowest", "maximum",
+      "minimum",
+      "average", "mean", "total", "sum of", "наибольш\\w*", "наименьш\\w*", "максимум", "минимум", "средн\\w*",
+        "средняя величина",
+      "сумма", "итого", "суммарн\\w*").filter(c => t.column(c).exists(i => t.rows.exists(_(i).num.isDefined)))
+    // the numeric column a comparison is written after: "with cost greater than 273", "где total > 109"
+    lazy val compared: Option[String] = t.columns.find(c => forms(c).exists(f => lower.matches(
+      s"(?U).*\\b$f\\s+(?:${Readers.comparisons}|[<>]=?)\\s*-?\\d.*")))
+    // a comparison's direction: greater by its words or its sign
+    lazy val greater: Boolean = word("over", "above", "more than", "greater", "больше", "выше", "свыше") ||
+      lower.matches("(?U).*>=?\\s*-?\\d.*")
     val used = scala.collection.mutable.Set.empty[String]
     def column(slot: String): Option[String] ! R =
       val prefix = prefixes.find(_._1 == slot).get._2(table)
       // a numeric column for agg and order, a text one for group; a named column not yet used
       def numeric(c: String) = cols.find(_._2 == c).exists((tb, _) => tables(tb).column(c).exists(i => tables(tb).rows.exists(_(i).num.isDefined)))
-      val exact = named.map(_._2).filterNot(used).filter(c => if slot == "agg" || slot == "order" then numeric(c) else if slot == "group" then !numeric(c) else true)
+      val lead = slot match
+        case "group" => groupLead
+        case "order" => orderLead.orElse(groupLead)
+        case _ => None
+      val exact = (lead.toVector ++ named.map(_._2).filter(c => if slot == "agg" || slot == "order" then numeric(c)
+        else if slot == "group" then !numeric(c) else true)).filterNot(used).distinct
       // a key column ("id") sorts, aggregates or groups nothing unless the question names it: the readers choose among the rest
       val keyLike = Set("id", "key", "uid")
       val pool0 = if named.exists((_, c) => keyLike(c)) then cols else cols.filterNot((_, c) => keyLike(c) && slot != "where")
@@ -460,7 +520,11 @@ final class Readers:
       val vs = t.rows.map(_(t.columns.indexOf(c)).text).toSet
       "\\d{4}(?:-\\d\\d(?:-\\d\\d)?)?".r.findAllIn(question).toVector.distinct.filter(vs)
     }
-    def number: Option[Int] = "\\d+".r.findAllIn(question).toVector.filterNot(timeValues.contains).headOption.map(_.toInt)
+    // the limit's number: never a date's digits ("in 2026-11-06" is no limit of 2026), never a condition's number
+    // ("with cost greater than 273" is no limit of 273), never a time
+    def number(cond: Option[String]): Option[Int] =
+      "\\d+".r.findAllIn(question.replaceAll("\\d{4}-\\d\\d(?:-\\d\\d)?", " "))
+      .toVector.filterNot(timeValues.contains).filterNot(cond.contains).headOption.map(_.toInt)
       .orElse(numberWords.collectFirst { case (w, n) if lower.matches(s"(?U).*\\b$w\\b.*") => n })
     for
       _ <- Read.note("deciding the form of the answer: a count, a sum, a list, groups, an order…")
@@ -474,7 +538,8 @@ final class Readers:
         // marginals over its compound classes are the fallback
         val probs = probeScores.map(v => math.exp(v.toDouble))
         def partIs(name: String)(p: String => Boolean): Double = partP(name, shapeQ, probs, p)
-        val closure = partIs("kind")(_.startsWith("closure")) > 0.5 || word("reach*", "depend*", "lead*", "достиж*", "завис*", "вед*", "доход*")
+        val closure = partIs("kind")(_.startsWith("closure")) > 0.5 || word("reach*", "depend*", "lead*", "достиж*",
+          "достига*", "завис*", "вед*", "доход*")
         // the closure's direction: FROM the node where the question asks what it depends on, reaches, where it leads;
         // TO it where it asks what reaches or leads to it; the reader where no word says
         val closureFromWords = word("depend*", "reachable", "where does", "завис*", "достижим*", "куда")
@@ -486,25 +551,51 @@ final class Readers:
             lower.matches("(?U).*\\bno\\b.*") || partIs("kind")(_ == "absent") > 0.5)
           val fnProbeScores = logSoftmax(fnProbe.scores(fnQ))
         val fnByReaders = (fns :+ "-")(fnProbeScores.zipWithIndex.map((s, i) => (if i < fns.size then s + fnAsk(i) else s, i)).maxBy(_._1)._2)
-        val topN = word("top", "топ", "three", "five", "ten", "три", "пять", "десять")
+        val topN = word("top", "топ", "the first", "first \\d", "only the first", "первые", "только перв*", "three",
+          "five",
+          "ten", "три", "пять", "десять")
         val perEach = word("per", "each", "по кажд*", "кажд*", "в разрезе", "по стат*", "по город*", "по клиент*", "по стран*")
         // GROWTH: a change in time within an entity — needs a time column (year, date, day, month) in the table
         val timeCol = t.columns.find(c => c.toLowerCase.matches("(?U).*\\b(year|date|day|month|quarter|week|time|год|дата|день|месяц)\\b.*"))
         val growth = timeCol.isDefined && word("grow*", "grew", "growth", "increase*", "rose", "rise", "fastest", "slowest", "decline*", "fell", "shrank", "shrink*", "рост*", "раст*", "растёт", "растут", "вырос*", "быстрее", "упал*", "снижа*")
+        // the function's words, but not a COLUMN's name ("the smallest count among items": count is the column;
+        // "Maximum total of events": total is) — a column's name only where it opens the question ("Count the events")
+        val colWords = (t.columns ++ joinable.flatMap(_._1.columns)).map(_.toLowerCase).filter(_.length >= 3).distinct
+        // (in Russian too: "Три самых больших заказа: id и сумма" — сумма is the column amount, not a sum)
+        val lowerFn = colWords.flatMap(forms).foldLeft(lower)((s, f) => s.replaceAll(s"(?U)(?<=.)\\b$f\\b", "_"))
+        def wordFn(ws: String*): Boolean = wordsIn(lowerFn, ws)
+        // "the smallest X among T", "минимум X", "наибольший X среди T": an aggregate, not a row
+        def extreme(words: String): Boolean = lowerFn.matches(s"(?U).*\\b(?:$words)\\s+\\S+\\s+(?:among|среди)\\b.*")
         val fn = if growth then "growth"
-          else if word("how many", "number of", "count", "сколько", "число", "посчитай") then "count"
-          else if word("average", "mean", "средн*") then "avg"
+          else if wordFn("how many", "number of", "count", "сколько", "число", "посчитай") then "count"
+          else if wordFn("average", "mean", "средн*") then "avg"
+          else if wordFn("minimum", "минимум*") || extreme("the smallest|the lowest|наименьш\\w*") then "min"
+          else if wordFn("maximum", "максимум*") || extreme("the largest|the highest|наибольш\\w*") then "max"
+          else if wordFn("total", "sum of", "summed", "сумм*", "итого") then "sum"
           else if topN && !perEach then "-"
-          else if word("total", "sum of", "сумм*", "итого") then "sum"
           // ("the largest X" is an order with a limit OR a maximum: the readers decide, trained on both phrasings)
           else fnByReaders
-        val hasGroup = fn == "growth" || perEach || word("by") && fn != "-" || (fn != "-" && partIs("group")(_ == "group") > 0.5)
-        val hasOrder = fn == "growth" || word("largest", "smallest", "highest", "lowest", "descending", "first", "top", "самы*", "наибольш*", "по убыван*", "по возраст*", "топ") || partIs("order")(_ == "order") > 0.5
+        val hasGroup = fn == "growth" || perEach || word("by") && fn != "-" || (fn != "-" && groupLead.isDefined) ||
+          (fn != "-" && partIs("group")(_ == "group") > 0.5)
+        // (an aggregate without groups is one number: nothing to order — "The largest since among people" is a maximum)
+        val hasOrder = (fn == "growth" || word("largest", "smallest", "highest", "lowest", "descending", "ascending",
+          "first", "top",
+          "sorted", "ordered", "самы*", "наибольш*", "по убыван*", "по возраст*", "топ", "от большего",
+            "от меньшего", "упорядоч*") ||
+          orderLead.isDefined || partIs("order")(_ == "order") > 0.5) && (fn == "-" || fn == "growth" || hasGroup)
         // ("the largest X" with no aggregate is one row: exact; a maximum has fn from the readers, so this does not fire)
-        val hasLimit = fn == "growth" || topN || (word("largest", "smallest", "highest", "lowest", "самый", "наибольш*", "наимен*") && fn == "-" && !hasGroup) || partIs("limit")(_ == "limit") > 0.5
+        // ("largest first", "сначала самые большие" are an order's direction, not one row)
+        val lowerNoDir = lower.replaceAll("(?U)\\b(largest|smallest) first\\b|" +
+          "\\bсначала самые (большие|маленькие)\\b", " ")
+        def wordNoDir(ws: String*): Boolean = wordsIn(lowerNoDir, ws)
+        val hasLimit = fn == "growth" || topN || (wordNoDir("largest", "smallest", "highest", "lowest", 
+          "biggest", "least",
+          "самы*", "наибольш*", "наимен*") && fn == "-" && !hasGroup) || partIs("limit")(_ == "limit") > 0.5
         val hasSelect = partIs("select")(_ == "select") > 0.5
-        // a number with a comparison word is a condition on a numeric column
-        val numberCond = "\\d+(?:\\.\\d+)?".r.findFirstIn(question).filter(_ => word("over", "above", "more than", "greater", "больше", "выше", "свыше", "below", "under", "less than", "меньше", "ниже", "до"))
+        // a number after a comparison word or sign is a condition on a numeric column: that number, not the first one
+        val numberCond = (s"(?U)\\b(?:${Readers.comparisons}|greater|до)\\s+(-?\\d+(?:\\.\\d+)?)|" +
+          "[<>]=?\\s*(-?\\d+(?:\\.\\d+)?)")
+          .r.findFirstMatchIn(lower).map(m => Option(m.group(1)).getOrElse(m.group(2)))
         val hasWhere = fact.isDefined || numberCond.isDefined || partIs("where")(_ != "-") > 0.5
         val descByReader = parts.contains("dir") && partIs("dir")(_ == "desc") >= partIs("dir")(_ == "asc")
         val sh = if absent then Vector("absent") else if closure then Vector(if closureTo then "closure-to" else "closure-from")
@@ -518,7 +609,8 @@ final class Readers:
           // the other table: the one named after the negation word, else the one the data joins back from
           val o = reverse.find((o, _) => lower.matches(s"(?U).*\\b(no|without|без|нет|в)\\s+${java.util.regex.Pattern.quote(o.name.toLowerCase)}\\b.*"))
             .getOrElse(reverse.head)
-          val conds = facts.filter(_._1.name == table).map((_, c, v) => Conjunctive.Cond(table, c, "=", v))
+          val conds = facts.filter(_._1.name == table).map((_, c, v) => Conjunctive.Cond(table, c, "=", v)) ++
+            numberCond.flatMap(n => compared.map(c => Conjunctive.Cond(table, c, if greater then ">" else "<", n)))
           pure[Either[String, String], R](Conjunctive.program(tables, table, conds = conds, absent = Some(Conjunctive.Join(o._1.name, t.columns.head, o._2)),
             select = Vector(t.columns.head)).map(Query.print))
         else if sh.head == "closure-from" || sh.head == "closure-to" then
@@ -540,8 +632,9 @@ final class Readers:
                 // the measure: a numeric column named in the question, else the first that is not the time
                 val nums = t.columns.filter(c => !timeCol.contains(c) && t.column(c).exists(i => t.rows.exists(_(i).num.isDefined) && t.rows.forall(r => r(i) == Value.Empty || r(i).num.isDefined)))
                 pure[Option[String], R](nums.find(c => named.exists(_._2 == c)).orElse(nums.find(_.toLowerCase != "id")))
-              else if fn != "-" && fn != "count" then column("agg") else pure[Option[String], R](None)
-            orderCol <- if hasOrder && !(fn != "-" && fn != "count" && hasGroup) then column("order") else pure[Option[String], R](None)
+              else if fn != "-" && fn != "count" then aggLead.fold(column("agg"))(c => { used += c; pure(Some(c)) })
+              else pure[Option[String], R](None)
+            orderCol <- if hasOrder && !(fn != "-" && hasGroup) then column("order") else pure[Option[String], R](None)
             groupCol <-
               if fn == "growth" then
                 // the entity: a text column named in the question, else the first that is not a code or a key
@@ -551,12 +644,15 @@ final class Readers:
             whereCol <- if whereOp == "-" then pure[Option[String], R](None) else
               fact.map(_._2).map { c => used += c; c }
                 // a number condition: the numeric column whose values' range holds the number (not the key "id" by accident)
-                .orElse(numberCond.flatMap { n => val x = n.toDouble
+                .orElse(numberCond.flatMap(_ => compared)).orElse(numberCond.flatMap { n => val x = n.toDouble
                   val numericCols = t.columns.filterNot(used).filter(c => t.column(c).exists(i => t.rows.exists(_(i).num.isDefined) && t.rows.forall(r => r(i) == Value.Empty || r(i).num.isDefined)))
                   numericCols.find(c => named.exists(_._2 == c)).orElse(numericCols.find { c => val vs = t.rows.flatMap(_(t.column(c).get).num); vs.nonEmpty && vs.min <= x && x <= vs.max })
                     .orElse(numericCols.filterNot(_ == "id").headOption).orElse(numericCols.headOption) })
                 .orElse(if timeValues.nonEmpty then timeColumn else None)
-                .fold(column("where"))(c => pure(Some(c)))
+                // a condition the readers alone found needs its column named in the question: with no value, no number
+                // and no time there, a condition was invented ("Наименьший часы среди invoices" had got hours = 120)
+                .fold { val taken = used.toSet
+                  column("where").map(_.filter(c => named.exists(_._2 == c) && !taken(c))) }(c => pure(Some(c)))
             // the first condition's op and value
             // THE ORDER'S DIRECTION (the phone asked "slowest grow GDP?" and got the fastest: "-" was written always): the
             // words decide where they are exact — ascending (smallest, slowest, lowest, least, cheapest, earliest, ascending,
@@ -564,10 +660,20 @@ final class Readers:
             // asked at the order's prefix: "-" or the column's name next
             ascending <-
               val asc = word("smallest", "slowest", "lowest", "least", "fewest", "cheapest", "earliest", "ascending", "bottom", "наимен*",
-                "медленн*", "меньше всего", "самы* мал*", "самы* низк*", "самы* дешев*", "самы* медленн*", "по возраст*", "худш*", "worst")
+                "медленн*", "меньше всего", "от меньшего к большему", "сначала самые маленькие", "самы* мал*",
+                  "самы* низк*", "самы* дешев*", "самы* медленн*", "по возраст*", "худш*", "worst")
               val desc = word("largest", "fastest", "highest", "most", "biggest", "greatest", "top", "descending", "latest", "best", "наибольш*",
-                "быстрее", "больше всего", "самы* больш*", "самы* высок*", "самы* быстр*", "по убыван*", "лучш*", "топ")
-              if asc && !desc then pure[Boolean, R](true)
+                "быстрее", "больше всего", "от большего к меньшему", "сначала самые большие", "самы* больш*",
+                  "самы* высок*", "самы* быстр*", "по убыван*", "лучш*", "топ")
+              // an explicit direction phrase decides first: "по возрастанию, топ-10" is ascending, though "топ" alone
+              // reads as the largest
+              val explicitAsc = word("ascending", "in ascending order", "smallest first", "по возрастанию",
+                "от меньшего к большему", "сначала самые маленькие")
+              val explicitDesc = word("descending", "in descending order", "largest first", "по убыванию",
+                "от большего к меньшему", "сначала самые большие")
+              if explicitAsc && !explicitDesc then pure[Boolean, R](true)
+              else if explicitDesc && !explicitAsc then pure[Boolean, R](false)
+              else if asc && !desc then pure[Boolean, R](true)
               else if desc then pure[Boolean, R](false)
               else if !hasOrder then pure[Boolean, R](false)
               else if parts.contains("dir") then pure[Boolean, R](!descByReader)
@@ -577,7 +683,7 @@ final class Readers:
               val opP: String ! R =
                 if whereOp == "empty" then pure("empty")
                 else if fact.exists(_._2 == c) && !lower.matches("(?U).*\\b(not|не|кроме|except)\\b.*") then pure("=")
-                else if numberCond.isDefined then pure(if word("over", "above", "more than", "greater", "больше", "выше", "свыше") then ">" else "<")
+                else if numberCond.isDefined then pure(if greater then ">" else "<")
                 else
                   for
                     oq <- query(pr, opPrefix(table, c)).map(z)
@@ -603,6 +709,9 @@ final class Readers:
             val conds = Vector.newBuilder[String]
             first.foreach(conds += _)
             for (_, c, v) <- facts.drop(1) if !whereCol.contains(c) do conds += s"""{"column": ${q(c)}, "op": "=", "value": ${q(v)}}"""
+            // a number condition beside a fact ("где тип это paid и у которых год выше 2020"): both conditions
+            for n <- numberCond; c <- compared if !whereCol.contains(c) do
+              conds += s"""{"column": ${q(c)}, "op": ${q(if greater then ">" else "<")}, "value": $n}"""
             for c <- timeColumn if !whereCol.contains(c); v <- timeValues do
               conds += s"""{"column": ${q(c)}, "op": "=", "value": ${if v.forall(_.isDigit) then v else q(v)}}"""
             val cs = conds.result()
@@ -613,9 +722,10 @@ final class Readers:
               val by = if fn == "growth" then timeCol.map(b => s""", "by": ${q(b)}""").getOrElse("") else ""
               c.foreach(col => parts += s""""aggregate": [{"fn": ${q(fn)}, "column": ${q(col)}, "as": ${q(if col == "*" then "n" else fn)}$by}]""")
             if order == "order" then
-              val c = if fn != "-" && fn != "count" && group == "group" then Some(fn) else orderCol
+              val c = if fn != "-" && group == "group" then Some(if fn == "count" then "n" else fn) else orderCol
               c.foreach(col => parts += s""""order": [${q((if ascending then "" else "-") + col)}]""")
-            if limit == "limit" then parts += s""""limit": ${number.getOrElse(if fn == "growth" then 10 else 1)}"""
+            if limit == "limit" then parts += s""""limit": ${number(numberCond)
+              .getOrElse(if fn == "growth" then 10 else 1)}"""
             if select == "select" then orderCol.foreach(c => parts += s""""select": ["id", ${q(c)}]""")
             val built = parts.result()
             val withJoin = joinNow.fold(built)((o, c) => built.take(joinSlot) ++ Vector(s""""join": {"table": ${q(o.name)}, "on": [[${q(c)}, ${q(o.columns.head)}]]}""") ++ built.drop(joinSlot))
@@ -654,7 +764,7 @@ final class Readers:
                 for k <- keys if gold.contains(k) || got.contains(k) do
                   total(k) += 1
                   if got.getOrElse(k, "-") == gold.getOrElse(k, "-") then right(k) += 1
-                  else if shown(k) < 3 then
+                  else if shown(k) < sys.env.get("DESK_SHOW").fold(3)(_.toInt) then
                     shown(k) += 1
                     println(s"    $k: ${p.question} → got ${got.getOrElse(k, "-")}, gold ${gold.getOrElse(k, "-")}")
                 if keys.forall(k => got.getOrElse(k, "-") == gold.getOrElse(k, "-")) then whole += 1
@@ -779,6 +889,8 @@ final class Readers:
       none.copyToArray(p.none); pointers(k) = p
 
 object Readers:
+  /** the words of a comparison before its number, the longer first ("greater than" before "greater") */
+  val comparisons = "over|above|more than|greater than|below|under|less than|больше|выше|свыше|меньше|ниже"
   /** the words of a question that are never a value of the data */
   val stop: Set[String] = Set("how", "many", "much", "which", "what", "where", "who", "when", "in", "of", "per", "by", "the",
     "a", "an", "is", "are", "was", "were", "with", "for", "from", "to", "on", "at", "and", "or", "not", "all", "each", "every",
