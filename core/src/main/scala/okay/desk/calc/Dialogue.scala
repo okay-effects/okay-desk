@@ -73,7 +73,9 @@ object Dialogue:
 
   /** a candidate as the person sees it: `none` said in words, a constructor's name otherwise */
   def name(ty: Ty, c: String, lang: Language): String =
-    if c == "none" then (ty match
+    if ty == Ty.DirT then lang.pieces.get(s"ask:$c").flatMap(_.headOption).getOrElse(
+      if lang.code == "ru" then (if c == "desc" then "по убыванию" else "по возрастанию") else (if c == "desc" then "largest first" else "smallest first"))
+    else if c == "none" then (ty match
       case Ty.LimitT(_) => lang.pieces.get("ask:all").flatMap(_.headOption).getOrElse(if lang.code == "ru" then "все" else "all")
       case _ => lang.pieces.get("ask:none").flatMap(_.headOption).getOrElse(if lang.code == "ru" then "без этого" else "none"))
     else c

@@ -35,7 +35,11 @@ object Clarified:
   def prompt(q: String, asked: Option[String] = None): String = asked.getOrElse(
     if russian(q) then "Не уверен, о какой таблице вопрос — выберите:" else "Not sure which table the question means — choose:")
   def button(q: String, choice: String, asked: Boolean = false): String =
-    if asked then (if choice == "none" then (if russian(q) then "без этого" else "none") else choice)
+    if asked then choice match
+      case "none" => if russian(q) then "без этого" else "none"
+      case "desc" => if russian(q) then "по убыванию" else "largest first"
+      case "asc" => if russian(q) then "по возрастанию" else "smallest first"
+      case c => c
     else if russian(q) then s"Таблица $choice" else s"Table $choice"
 
   /** one kept clarification: a JSON line */

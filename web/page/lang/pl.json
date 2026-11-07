@@ -714,6 +714,12 @@
   ],
   "ask:none": [
    "bez tego"
+  ],
+  "ask:desc": [
+   "malejąco"
+  ],
+  "ask:asc": [
+   "rosnąco"
   ]
  }
 }
