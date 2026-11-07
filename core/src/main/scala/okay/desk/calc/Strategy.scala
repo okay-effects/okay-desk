@@ -15,7 +15,7 @@ object Strategy:
   type Step = (Ty, Term)
 
   /** THE PROGRAM: the leftmost hole, its candidates, their weighing, a choice among them in the weighed order */
-  def program[R[_]: Has[Choose]: Has[Weigh]: Has[Writer % Step]](g: Grammar, ctx0: Context, margin: Double = 0.0, limit: Int = 40): Term ! R =
+  def program[R[_]: Has[Choose]: Has[Weigh]: Has[Writer % Step]](g: Rules, ctx0: Context, margin: Double = 0.0, limit: Int = 60): Term ! R =
     def loop(ctx: Context, n: Int): Term ! R =
       g.nextHole(ctx.term) match
         case None => pure(ctx.term)
@@ -39,7 +39,7 @@ object Strategy:
     loop(ctx0, 0)
 
   /** GREEDY: the first way, weighed by the source — the term, or None with the steps up to the hole no source decided */
-  def greedy(g: Grammar, ctx: Context, fill: Fill[Pure], margin: Double = 0.0): (List[Step], Option[Term]) =
+  def greedy(g: Rules, ctx: Context, fill: Fill[Pure], margin: Double = 0.0): (List[Step], Option[Term]) =
     type Row[X] = (Choose + Weigh + Writer % Step)[X]
     val p: Term ! Row = program[Row](g, ctx, margin)
     val weighed: Term ! (Choose + Writer % Step) = handle(p, Weigh.by[Choose + Writer % Step, Term](Fill.lift(fill)))
@@ -47,7 +47,7 @@ object Strategy:
     run(Writer.run[Step, Pure + Writer % Step, Pure, Option[Term]](first))
 
   /** EVERY WAY, weighed uniformly: the enumeration of the space by the reading itself */
-  def every(g: Grammar, ctx: Context): List[Term] =
+  def every(g: Rules, ctx: Context): List[Term] =
     val uniform: Fill[Pure] = new Fill[Pure]:
       def apply(ty: Ty, cs: Vector[String], c: Context): Dist ! Pure = pure(cs.map(x => (x, 0.0)))
     type Row[X] = (Choose + Weigh + Writer % Step)[X]

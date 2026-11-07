@@ -32,6 +32,10 @@ enum Ty:
   case LimitT(ordered: Boolean)
   case NodeT(edges: String)
   case DirectionT
+  // the answer grammar's types (Answers.scala): the sentence, a FACT (a cell of the result), a WORD slot
+  case AnswerT
+  case FactT(row: Int, column: String)
+  case WordT(slot: String)
 
 enum Role:
   case Where, Group, Agg
@@ -58,7 +62,31 @@ enum Term:
 
 /** THE GRAMMAR: the constructors of a type over a schema, and the type of a constructor's next argument given the
  * arguments so far (the types depend on earlier choices: a column's type on the table chosen) */
-final class Grammar(val schema: Schema):
+/** THE RULES of a term language: what a type's constructors are, which open arguments, the type of the next argument
+ * — the hole-finding, the closing and the filling are the same for every such language (the terms, the answers) */
+trait Rules:
+  import Term.*
+  def constructors(ty: Ty): Vector[String]
+  def opens(ty: Ty, con: String): Boolean
+  def next(ty: Ty, con: String, args: Vector[Term]): Option[Ty]
+  /** an OPEN type: any atom is a candidate, the grammar lists only examples (a number compared against) */
+  def open(ty: Ty): Boolean = false
+
+  /** the leftmost hole: its type, its path (argument indices), and a way to fill it (the term with the hole replaced) */
+  def nextHole(term: Term): Option[(Ty, Vector[Int], Term => Term)] = term match
+    case Hole(ty) => Some((ty, Vector.empty, t => t))
+    case Leaf(_, _) => None
+    case Con(ty, name, args) =>
+      // a hole inside an argument first; else the next argument not yet opened
+      args.zipWithIndex.collectFirst(Function.unlift { (a, i) =>
+        nextHole(a).map((hty, path, put) => (hty, i +: path, (t: Term) => Con(ty, name, args.updated(i, put(t))))) })
+        .orElse(next(ty, name, args).map(nt => (nt, Vector(args.size), (t: Term) => Con(ty, name, args :+ t))))
+  /** closed under the rules: no hole, and no argument still to open (`Term.closed` sees only the holes written) */
+  def closed(term: Term): Boolean = nextHole(term).isEmpty
+  /** a hole of `ty` filled with `con`: a leaf, or a node opened with no arguments yet */
+  def apply(ty: Ty, con: String): Term = if opens(ty, con) then Con(ty, con, Vector.empty) else Leaf(ty, con)
+
+final class Grammar(val schema: Schema) extends Rules:
   import Term.*
   private def kindOf(table: String, column: String): Kind = schema.of(table).find(_.name == column).map(_.kind).getOrElse(Kind.Text)
   private def columns(tables: Vector[String], role: Role): Vector[String] = tables.flatMap(t => schema.of(t)).filter { c => role match
@@ -90,9 +118,9 @@ final class Grammar(val schema: Schema):
     case Ty.LimitT(true) => Vector("none", "1", "3", "5", "10")
     case Ty.NodeT(e) => schema.tables(e).rows.flatten.map(_.text).distinct
     case Ty.DirectionT => Vector("from", "to")
+    case Ty.AnswerT | Ty.FactT(_, _) | Ty.WordT(_) => Vector.empty // the answer grammar's, not the terms'
 
-  /** an OPEN type: any atom is a candidate, the grammar lists only examples (a number compared against) */
-  def open(ty: Ty): Boolean = ty match
+  override def open(ty: Ty): Boolean = ty match
     case Ty.ValueT(t, c) => kindOf(t, c) == Kind.Num
     case _ => false
 
@@ -145,17 +173,3 @@ final class Grammar(val schema: Schema):
         case _ => None
       case _ => None
 
-  /** the leftmost hole: its type, its path (argument indices), and a way to fill it (the term with the hole replaced) */
-  def nextHole(term: Term): Option[(Ty, Vector[Int], Term => Term)] = term match
-    case Hole(ty) => Some((ty, Vector.empty, t => t))
-    case Leaf(_, _) => None
-    case Con(ty, name, args) =>
-      // a hole inside an argument first; else the next argument not yet opened
-      args.zipWithIndex.collectFirst(Function.unlift { (a, i) =>
-        nextHole(a).map((hty, path, put) => (hty, i +: path, (t: Term) => Con(ty, name, args.updated(i, put(t))))) })
-        .orElse(next(ty, name, args).map(nt => (nt, Vector(args.size), (t: Term) => Con(ty, name, args :+ t))))
-  /** closed under the grammar: no hole, and no argument still to open (`Term.closed` sees only the holes written) */
-  def closed(term: Term): Boolean = nextHole(term).isEmpty
-
-  /** a hole of `ty` filled with `con`: a leaf, or a node opened with no arguments yet */
-  def apply(ty: Ty, con: String): Term = if opens(ty, con) then Con(ty, con, Vector.empty) else Leaf(ty, con)

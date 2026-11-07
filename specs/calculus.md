@@ -175,3 +175,24 @@ So the stack is: level 0 = the free monad over `Among` (known); level 1 = words 
 (the one new thing); level 2 = the typed program above; level 3 = the space, which is level 2 under `all`. The
 sources of `Weigh` are handlers (§8): the data, the model's tokens, a reader of states, a person, an oracle —
 `by`, `first` (forwards when silent), `nobody`. 28 laws for the calculus, all passing.
+
+## 10. Generation by the same program (2026-11-07)
+
+`Rules` is now the interface of a term language (the constructors of a type, which open arguments, the type of the
+next argument); `Grammar` (the programs over a schema) and `Answers` (the sentences about a result) implement
+it; `Strategy.program` runs over any `Rules`. The answer grammar: one constructor (the shape, fixed by the
+program and the result: Count, Scalar, Groups, Top, Rows, Reach, Missing, Nothing), FACT holes `FactT(row,
+column)` whose only candidate is the cell — the data fills them, no chooser is asked — and WORD holes
+`WordT(slot)` whose candidates are the wordings of the slot in a language (two or three each, en and ru): a
+model's tokens, a person or a uniform weigh choose among them. So generation IS reading over other rules:
+`Strategy.greedy` gives one sentence, `Strategy.every` all the wordings; the interpretation `text` is the
+sentence. A figure in a sentence is a cell by construction for EVERY term of the grammar, not only the shapes a
+hand-written `Answer.of` produced.
+
+Laws (`AnswersSuite`): over the 13 gold results in both languages, every wording (54 sentences) is closed, its
+facts are cells of the result, and the sentence reads back (every fact in it, every number a fact or the count);
+greedy with a uniform weigh is the first wording. 29 laws for the calculus.
+
+What the model does here: it chooses WORDS, never facts. The model-weighed wording (the sentence so far as the
+prefix, the wordings as candidates — the same `Fill.model` with a renderer for answer terms) is the next bench;
+the answer's phrase is the `Phrase` of §3 in the other direction, the same adjunction.
