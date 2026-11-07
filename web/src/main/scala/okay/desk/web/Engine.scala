@@ -2,7 +2,7 @@ package okay.desk.web
 
 import okay.desk.*
 import okay.desk.skill.{OnQwen, Read, Readers as Skill, Words}
-import okay.desk.calc.{Context, Den, Fill, Grammar, Language, Strategy, Term, Ty}
+import okay.desk.calc.{Context, Den, Fill, Grammar, Language, Strategy, Term, Ty, Dialogue}
 import okay.desk.ui.Model
 import okay.llm.compute.{OnCpu, OnWebGl2, OnWebGpu}
 import okay.llm.qwen.{Qwen3Compute, Qwen3Config, Safetensors, Tensors, Tokenizer}
@@ -150,7 +150,7 @@ object Engine:
 
   /** the program read by the readers (no token generated), or written by the model */
   def program(tables: Map[String, Table], question: String, retry: Option[(String, String)]): Future[Either[String, String]] =
-    if skill != null then Read.future(if assembler then skill.program[Async + Read](tables, question) else readByCalculus(tables, question, skill.words, Vector(Language.En.language, Language.Ru.language)), on.handler)
+    if skill != null then Read.future(if assembler then skill.program[Async + Read](tables, question) else readByCalculus(tables, question, skill.words, Vector(Language.En.language, Language.Ru.language), Vector.empty), on.handler)
     else if engine == null then Future.successful(Left("load the model first"))
     else
       val sys = Prompt.system(tables)
@@ -197,7 +197,24 @@ object Engine:
   /** THE CALCULUS ON THE PAGE (docs/calculus.md): the data first, the readers' skill next, the model's own tokens last —
    * one reading program; an open term is "not sure" with the hole named. `?assembler` in the address keeps the old way */
   private val assembler = dom.window.location.search.contains("assembler")
-  private def readByCalculus(tables: Map[String, Table], question: String, words: Words, languages: Vector[Language]): (Either[String, String] ! (Async + Read)) =
+  // THE DIALOGUE (specs/pilot.md §3.2): the hole the last reading stopped at with its options, and the person's answers
+  // to this question so far — a choice answers the pending hole; the reading runs again with the answers as its first
+  // source and refines the same term; a different question starts afresh
+  private var dialogue: (String, Vector[(Ty, String)]) = ("", Vector.empty)
+  private var pending: Option[(Ty, Vector[String])] = None
+  private def answersFor(question: String, choice: Option[String]): Vector[(Ty, String)] =
+    val kept = if dialogue._1 == question then dialogue._2 else Vector.empty
+    val answers = choice.zip(pending).filter((c, p) => p._2.contains(c) || p._1.isInstanceOf[Ty.ValueT]).map((c, p) => (p._1, c))
+      .fold(kept)(a => kept :+ a)
+    dialogue = (question, answers); pending = None
+    answers
+  /** THE ASK of an open hole, as the page's words: the question in the person's language, then the options (the
+   * constructors, one line, `|` between) — `Clarified.readings` reads them back for the buttons */
+  private def asked(ty: Ty, cs: Vector[String], languages: Vector[Language]): String =
+    val lang = languages.headOption.getOrElse(Language.En.language)
+    s"ask: ${Dialogue.question(ty, cs, lang)}\n${cs.mkString(" | ")}"
+  private def readByCalculus(tables: Map[String, Table], question: String, words: Words, languages: Vector[Language],
+      answers: Vector[(Ty, String)]): (Either[String, String] ! (Async + Read)) =
     val s = okay.desk.Space.Schema(tables); val g = new Grammar(s)
     type R[X] = (Async + Read)[X]
     type S[X] = Strategy.Rest[R][X]
@@ -205,16 +222,19 @@ object Engine:
     def noting(f: Fill[S]): Fill[S] = new Fill[S]:
       def apply(ty: Ty, cs: Vector[String], ctx: Context) =
         Read.note[S](s"deciding ${ty.toString.takeWhile(_ != '(')} among ${cs.take(5).mkString(", ")}${if cs.size > 5 then "…" else ""}").flatMap(_ => f(ty, cs, ctx))
-    val fill = noting(Fill.first[S](Fill.exact[S], skill.weigh[S], Fill.model[S](tables)))
-    Strategy.greedyIn[R](g, Context(s, question, Term.Hole(Ty.Program), words, languages), fill).map { (steps, term) =>
-      term match
-        case Some(t) => Den.run(s, t).map((q, _) => Query.print(q))
-        case None => Left(steps.lastOption.map((ty, _) => s"not sure how to read the ${ty.toString.takeWhile(_ != '(').toLowerCase} — ask again naming it").getOrElse("not sure what the question asks"))
+    // the person's answers first (the dialogue), then the data, the readers, the model's tokens
+    val fill = noting(Fill.first[S](Dialogue.decided[S](answers), Fill.exact[S], skill.weigh[S], Fill.model[S](tables)))
+    Dialogue.read[R](g, Context(s, question, Term.Hole(Ty.Program), words, languages), fill).map {
+      case Dialogue.Outcome.Closed(t) => Den.run(s, t).map((q, _) => Query.print(q))
+      case Dialogue.Outcome.Open(ty, _, cs, _) =>
+        pending = Some((ty, cs))
+        Left(asked(ty, cs, languages))
     }
   private var said = Vector.empty[String]
   private var since = 0.0
-  private def ask(tables: Map[String, Table], question: String, retry: Option[(String, String)]): Unit =
+  private def ask(tables: Map[String, Table], question: String, retry: Option[(String, String)], choice: Option[String]): Unit =
     since = js.Date.now()
+    val answers = answersFor(question, choice)
     said = Vector(
       if skill != null then "the question goes to the model in the page…"
       else if retry.isDefined then s"the model is fixing the program (${retry.get._2})…"
@@ -247,7 +267,7 @@ object Engine:
       if skill != null then Future.sequence(tables.keys.toVector.map(wordsFor)).flatMap { ws =>
         skill.words = ws.foldLeft(Words.none)(_ ++ _)
         if assembler then Read.future(skill.program[Async + Read](tables, question), noting)
-        else Future.sequence(Language.detect(question).map(langFor)).flatMap(ls => Read.future(readByCalculus(tables, question, skill.words, ls.flatten), noting))
+        else Future.sequence(Language.detect(question).map(langFor)).flatMap(ls => Read.future(readByCalculus(tables, question, skill.words, ls.flatten, answers), noting))
       }
       else program(tables, question, retry)
     shown = 0
@@ -283,7 +303,7 @@ object Engine:
         case Model.Program(tables, question, retry) =>
           stage("reading a question…")
           program(tables, question, retry).map { r => idle(); r }.recover { case t => idle(); Left(s"the model failed: $t") }
-        case Model.Ask(tables, question, retry) => ask(tables, question, retry); Future.unit
+        case Model.Ask(tables, question, retry, choice) => ask(tables, question, retry, choice); Future.unit
         case Model.Thought() => thought()
         case Model.Summary(question, q, result) => summary(question, q, result).recover { case _ => None }
       Async.fromFuture[X, Rest](f).flatMap(k)))

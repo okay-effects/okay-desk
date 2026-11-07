@@ -96,7 +96,7 @@ class ThinkingSuite extends munit.FunSuite:
     val p = App.think[Row](s, gold.en)
     val answered = handle(p, Handler.Tail[Model, Ui, Either[String, String], Either[String, String]](a => pure(a),
       [X] => (op: Model[X]) => op match
-        case Model.Ask(_, _, _) => ()
+        case Model.Ask(_, _, _, _) => ()
         case Model.Thought() =>
           moments += 1
           if moments <= 2 then Left(Vector(s"step $moments")) else Right(Right(gold.gold))

@@ -2,6 +2,8 @@ package okay.desk.ui
 
 import okay.business.scala3.*
 import okay.desk.{Exact, Prompt, Query, Weights}
+import okay.desk.calc.{Dialogue, Language, Ty}
+import Dialogue.Turn
 import okay.desk.Table as Data
 import okay.http.{Fetch, Response}
 
@@ -21,7 +23,10 @@ object App:
   final case class State(place: String = "chat", tables: Map[String, Data] = Map.empty, log: Vector[Entry] = Vector.empty,
     model: Option[String] = None, modelName: String = Model.default, problem: Option[String] = None, phone: Boolean = false,
     /** a question the readers were not sure about and the readings they hesitated between: offered as buttons */
-    asking: Option[(String, Vector[String])] = None)
+    asking: Option[(String, Vector[String])] = None,
+    /** the dialogue's ask (specs/pilot.md §3.2): the hole's question, when `asking` came from the calculus — the choice
+     * then answers the hole and the same term is refined, instead of the question rewritten */
+    hole: Option[String] = None)
 
   enum Msg:
     case Go(place: String)
@@ -99,10 +104,12 @@ object App:
           .map(_ => cleared.copy(tables = cleared.tables - name, log = cleared.log :+ Entry("system", s"closed $name")))
       case Msg.Load(name) => load[R](cleared, name)
       case Msg.Clarify(question, choice) =>
-        val asked = cleared.copy(log = cleared.log :+ Entry("user", Clarified.saying(question, choice)))
-        val again = Clarified.question(question, choice)
+        val asked = cleared.copy(log = cleared.log :+ Entry("user", Clarified.saying(question, choice)), hole = None)
+        // the dialogue's hole answered: the SAME question, the choice as a source; else the question rewritten
+        val byHole = s.hole.isDefined
+        val again = if byHole then question else Clarified.question(question, choice)
         for
-          answered <- think[R](asked, again)
+          answered <- think[R](asked, again, choice = Option.when(byHole)(choice))
           result <- answer[R](asked, again, answered, retried = false)
           // an answer to the clarified question: the pair kept on the disk (the question as asked, the choice, the
           // program) — the data a later training reads
@@ -110,6 +117,16 @@ object App:
         yield result
       case Msg.Ask(question) =>
         val q = question.trim
+        // THE ACT FIRST (Пилот's act layer, specs/pilot.md §3.2): thanks, a yes or a no to the pending question, a
+        // correction naming an option — none of them a question about the data
+        val turn = Turn.State(s.asking.map(_._1), s.asking.map((_, cs) => (Ty.Program, cs)), Vector.empty)
+        val act = Turn.decide(turn, q, Language.builtIn.values.toVector)
+        act match
+          case Turn.Action.Acknowledge => pure(cleared.copy(log = cleared.log :+ Entry("user", q) :+ Entry("model", Clarified.welcome(q))))
+          case Turn.Action.Nothing => pure(cleared.copy(log = cleared.log :+ Entry("user", q) :+ Entry("model", Clarified.nothingPending(q))))
+          case Turn.Action.Answer(pending, answers) => step[R](s, Msg.Clarify(pending, answers.last._2))
+          case Turn.Action.Correct(corrected, _) => step[R](s.copy(asking = None, hole = None), Msg.Ask(corrected))
+          case Turn.Action.Read(_) =>
         if s.tables.isEmpty then pure(cleared.copy(problem = Some("open a file first — the Data button")))
         else if q.isEmpty then pure(cleared)
         else
@@ -138,7 +155,7 @@ object App:
   /** THE QUESTION THOUGHT ABOUT, ITS STEPS SHOWN: the program asked for, then followed — each moment the steps so far
    * (what is decided: the table, the form of the answer, the columns, the condition; the last the one being decided
    * now, with its seconds) in place of the answer, until the program comes */
-  def think[R[_]](s: State, question: String, retry: Option[(String, String)] = None)(
+  def think[R[_]](s: State, question: String, retry: Option[(String, String)] = None, choice: Option[String] = None)(
       using In[Ui, R], In[Model, R]): Either[String, String] ! R =
     def follow: Either[String, String] ! R = Model.thought[R].flatMap {
       case Left(steps) =>
@@ -146,7 +163,7 @@ object App:
           .flatMap(_ => follow)
       case Right(answered) => pure(answered)
     }
-    Model.ask[R](s.tables, question, retry).flatMap(_ => follow)
+    Model.ask[R](s.tables, question, retry, choice).flatMap(_ => follow)
 
   /** the program run by the exact engine — or, where a model generates, asked once more with what failed */
   def answer[R[_]](s: State, question: String, answered: Either[String, String], retried: Boolean)(
@@ -155,7 +172,8 @@ object App:
       case Left(words) =>
         // "not sure: A or B": the readings offered to the person as buttons
         val offered = Clarified.readings(words).map(cs => (question, cs))
-        pure(s.copy(log = s.log :+ Entry("model", words), asking = offered))
+        val asked = Clarified.askedQuestion(words)
+        pure(s.copy(log = s.log :+ Entry("model", asked.getOrElse(words)), asking = offered, hole = asked))
       case Right(json) =>
         val ran = Query.parse(json).flatMap {
           case q: Query.Relational => Exact.run(s.tables, q).map(r => (q: Query, r))
@@ -224,10 +242,10 @@ object App:
         e.program.toList.map(p => Part.code("the program", p.split("\n").toList, Set.empty)))*)
     }
     // while a question is thought about: its steps where the answer will be, no question form
-    val end: List[Part] = thinking.fold(s.asking.toList.map((q, _) => Part.block("clarify")(Part.text(Clarified.prompt(q)),
+    val end: List[Part] = thinking.fold(s.asking.toList.map((q, _) => Part.block("clarify")(Part.text(Clarified.prompt(q, s.hole)),
       Part.slot("clarify"))) ++ List(questionForm: Part))(lines => List(steps(lines)))
     val choices = if thinking.isDefined then Nil
-      else s.asking.toList.flatMap((q, cs) => cs.map(c => Button(Clarified.button(q, c))(Msg.Clarify(q, c): Msg).at("clarify")))
+      else s.asking.toList.flatMap((q, cs) => cs.map(c => Button(Clarified.button(q, c, s.hole.isDefined))(Msg.Clarify(q, c): Msg).at("clarify")))
     Screen[Msg]("okay-desk")((top(s) ++ List(modelPart, note, dataNote) ++ log ++ end)*)(
       (List(Button(if s.tables.isEmpty then "Data: open files" else s"Data: ${s.tables.size} open")(Msg.Go("data"): Msg).at("data")) ++
         // (while loading, no other load; while thinking, no question form and no other question)

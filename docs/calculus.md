@@ -63,11 +63,15 @@ they are asked, each only where the one before was silent (`Fill.first`):
 | the data (`Fill.exact`) | what the question writes: a table's name (in either language, by a dictionary of the data's own words), a column, a value of a column, a number with its comparison, a year, the words of a function, a direction, a limit, a negation | one candidate or none; `?` for words of constructors the grammar lacks |
 | the trained readers (`Readers.weigh`) | linear probes and pointers over the model's states, one per constructor | the vector tier |
 | the model's own tokens (`Fill.model`) | the term rendered as the program's JSON up to the hole, the candidates scored by the next-token log-probabilities | any model with logits, no training |
-| a person | the answer to "not sure: A or B" | the fourth source; not on the page yet |
+| a person (`Dialogue.decided`) | the answer to the hole's question — its options the candidates the sources weighed, or the grammar's — asked FIRST when the reading runs again, so the same term is refined | on the page: the buttons; «да», «нет», «не так: …», «спасибо» read as acts before any reading (`Dialogue.Act`, `Turn.decide`) |
 | the oracle (`Fill.oracle`) | the gold term | the laws only |
 
 Strategies are handlers of `Among`: `Strategy.greedy` (first), `Strategy.every` (all), a beam (not built). A
-dialogue is `first` with the person as the outermost source.
+dialogue is `first` with the person as the outermost source: `Dialogue.read` ends in a closed term or the hole it
+stopped at with the options to offer; the person's choice is a source (`Dialogue.decided`) placed first, and the
+deterministic strategy walks the same steps to the hole and on (law: 196 holes silenced over the sample, every
+question's options hold the gold, every answer closes to it). This is Okay!Chat's Пилот brought over
+(`specs/pilot.md`): the question per kind of hole is data per language (`ask:<kind>` in the language files).
 
 ## 5. Answers in words: a conclusion, not a retelling
 
@@ -98,7 +102,7 @@ A model on the JVM is a `Reading`: one method, `answer(op: Read[X]): X`.
 
 ## 7. The laws, and what they measure
 
-Thirty-four laws run with `sbt coreJVM/test` (seconds, no model). Among them: the data alone never errs on the
+Forty-one laws run with `sbt coreJVM/test` (seconds, no model). Among them: the data alone never errs on the
 sample's 26 questions and on 626 phrasings of 313 random points (0 contradictions); every point is reached by
 refinement; the reading is the space; every wording of every answer is grounded and reads back; the sources as
 handlers give the function form's terms.
@@ -136,7 +140,7 @@ val a = Answer.ofQuery(query, result); Answer.text(a, ru = false)
 Files: `core/src/main/scala/okay/desk/calc/` — `Calculus.scala` (types, terms, rules, the grammar), `Den.scala`,
 `Refine.scala` (context, fills, rendering, the function-form reference), `Weigh.scala` (the effect and its
 handlers), `Strategy.scala` (the program and the strategies), `Level0.scala`, `Level1.scala`, `Encode.scala`,
-`Answer.scala`, `Answers.scala`. Laws in `core/src/test/scala/okay/desk/`: `CalculusSuite`, `LevelsSuite`,
+`Answer.scala`, `Answers.scala`, `Dialogue.scala`. Laws in `core/src/test/scala/okay/desk/`: `CalculusSuite`, `LevelsSuite`,
 `WeighSuite`, `StrategySuite`, `AnswersSuite`. Benches in `bench/`: `RefineBench`, `RealRefine`, `TeacherRefine`.
 
 ## 9. Languages as data
@@ -149,7 +153,8 @@ alone took Ukrainian from 33% to 48% on people's wording, with no training.
 
 ## 10. Not done
 
-The person as a source and dialogue as refining the last term; a beam; wordings weighed by the model; meaning as an
-equivalence class of terms (only a normal form so far); the data's silence on ambiguous wording. Okay!Chat's
-deterministic dialogue model (acts, a question per hole, the person as a source, lessons, induced word lists) as
-handlers of `Weigh`: `specs/pilot.md`.
+A beam; wordings weighed by the model; meaning as an equivalence class of terms (only a normal form so far); the
+data's silence on ambiguous wording (a wrong closed term is not a question — only an open hole is). Of Okay!Chat's
+dialogue model (`specs/pilot.md`): built — the person as a source, the question per hole, the acts; not built — the
+lessons («надо было» remembered per person ahead of the rules), the typo layer, the word lists built by a DSL and
+grown by induction, the encoder's centroids as the service's vector tier, a need as a term.

@@ -16,18 +16,27 @@ object Clarified:
 
   private def russian(q: String) = q.exists(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я')
 
-  /** the readings of a hesitation, if the words are one: "not sure: A or B" (the readers' abstention) */
+  /** the readings of a hesitation, if the words are one: "not sure: A or B" (the readers' abstention), or the
+   * dialogue's ask (specs/pilot.md §3.2) — "ask: <the hole's question>" and, on the next line, the options */
   def readings(words: String): Option[Vector[String]] =
-    "^not sure: (.+?)(?: — .*)?$".r.findFirstMatchIn(words).map(_.group(1).split(" or ").toVector.map(_.trim))
+    if words.startsWith("ask: ") then words.split("\n").lift(1).map(_.split("\\|").toVector.map(_.trim).filter(_.nonEmpty)).filter(_.size >= 2)
+    else "^not sure: (.+?)(?: — .*)?$".r.findFirstMatchIn(words).map(_.group(1).split(" or ").toVector.map(_.trim))
       .filter(_.size >= 2)
+  /** the hole's question, where the words are the dialogue's ask */
+  def askedQuestion(words: String): Option[String] = Option.when(words.startsWith("ask: "))(words.split("\n").head.drop(5))
 
   /** the question asked again with the choice written into it */
   def question(q: String, choice: String): String = s"${q.trim.stripSuffix("?").stripSuffix(".")} — $choice"
   /** what the person said, in the conversation */
   def saying(q: String, choice: String): String = if russian(q) then s"Я имею в виду $choice" else s"I mean $choice"
-  def prompt(q: String): String =
-    if russian(q) then "Не уверен, о какой таблице вопрос — выберите:" else "Not sure which table the question means — choose:"
-  def button(q: String, choice: String): String = if russian(q) then s"Таблица $choice" else s"Table $choice"
+  /** what the page says to thanks, and to a yes or no with nothing pending */
+  def welcome(q: String): String = if russian(q) then "Пожалуйста. Спрашивайте ещё." else "You're welcome. Ask on."
+  def nothingPending(q: String): String = if russian(q) then "Ничего не ожидает ответа — задайте вопрос о данных." else "Nothing is pending — ask about the data."
+  def prompt(q: String, asked: Option[String] = None): String = asked.getOrElse(
+    if russian(q) then "Не уверен, о какой таблице вопрос — выберите:" else "Not sure which table the question means — choose:")
+  def button(q: String, choice: String, asked: Boolean = false): String =
+    if asked then (if choice == "none" then (if russian(q) then "без этого" else "none") else choice)
+    else if russian(q) then s"Таблица $choice" else s"Table $choice"
 
   /** one kept clarification: a JSON line */
   def line(q: String, choice: String, program: String): String =

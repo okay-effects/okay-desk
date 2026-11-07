@@ -20,8 +20,10 @@ enum Model[X]:
   case Program(tables: Map[String, Data], question: String, retry: Option[(String, String)])
     extends Model[Either[String, String]]
   /** a question's program begun — read by the readers, or written by the model, a retry told what failed;
-   * `Thought` tells how it goes */
-  case Ask(tables: Map[String, Data], question: String, retry: Option[(String, String)]) extends Model[Unit]
+   * `Thought` tells how it goes. `choice`: the person's answer to the hole the SAME question stopped at (the dialogue,
+   * specs/pilot.md §3.2) — the reading refines the same term; a new question starts afresh */
+  case Ask(tables: Map[String, Data], question: String, retry: Option[(String, String)], choice: Option[String] = None)
+    extends Model[Unit]
   /** a moment later: `Left(steps)` while it thinks — what is decided, a line each, the last the one being decided
    * now — or `Right` of the program as `Program` gives it */
   case Thought() extends Model[Either[Vector[String], Either[String, String]]]
@@ -33,8 +35,8 @@ object Model:
   def progress[R[_]](using In[Model, R]): Either[String, Either[String, String]] ! R = perform[Model](Progress())
   def program[R[_]](tables: Map[String, Data], question: String, retry: Option[(String, String)] = None)(
       using In[Model, R]): Either[String, String] ! R = perform[Model](Program(tables, question, retry))
-  def ask[R[_]](tables: Map[String, Data], question: String, retry: Option[(String, String)] = None)(
-      using In[Model, R]): Unit ! R = perform[Model](Ask(tables, question, retry))
+  def ask[R[_]](tables: Map[String, Data], question: String, retry: Option[(String, String)] = None,
+      choice: Option[String] = None)(using In[Model, R]): Unit ! R = perform[Model](Ask(tables, question, retry, choice))
   def thought[R[_]](using In[Model, R]): Either[Vector[String], Either[String, String]] ! R = perform[Model](Thought())
   def summary[R[_]](question: String, query: Query, result: Data)(using In[Model, R]): Option[String] ! R =
     perform[Model](Summary(question, query, result))
@@ -65,6 +67,6 @@ object Model:
       case Begin(_) => ()
       case Progress() => Right(load(""))
       case Program(tables, question, _) => program(tables, question)
-      case Ask(tables, question, _) => asked0 = Some((tables, question))
+      case Ask(tables, question, _, _) => asked0 = Some((tables, question))
       case Thought() => Right(asked0.fold(Left("no question asked"))((t, q) => program(t, q)))
       case Summary(_, _, _) => None))

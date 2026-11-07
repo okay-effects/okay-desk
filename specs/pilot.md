@@ -146,3 +146,18 @@ buttons exist; what is missing is that the answer refines the SAME term instead 
 act layer (yes / no / correction / thanks) before reading. Measured on the teacher pairs: how many of the 30 misread
 become one question instead of a wrong answer. That is the piece both projects need, and it needs no encoder, no
 port and no new effect.
+
+## 7. Built (2026-11-07, the same day)
+
+`core/src/main/scala/okay/desk/calc/Dialogue.scala`: `Dialogue.decided` (the person's answers as the first source),
+`Dialogue.read` (a closed term, or the hole with the options — the sources' best two or three, else the grammar's),
+`Dialogue.question` (a piece per kind of hole, `ask:<kind>`, built in for English and Russian, in the files for
+Ukrainian and Polish), `Dialogue.Act` (yes / no / thanks / correction / question by the languages' lists),
+`Dialogue.Turn.decide` (pure: yes takes the first option, no the second, a correction naming an option answers it,
+another correction joins the question, thanks acknowledges). On the page: `Engine` keeps the pending hole and the
+answers per question; `Model.Ask` carries the choice; `App` decides the act before reading and shows the hole's
+question with its options as buttons; the choice refines the same term. `DialogueSuite` (JVM): 196 holes silenced in
+turn over the sample's 26 readings — every question's options hold the gold, every answer closes to it, the term
+before the hole unchanged; the acts in four languages; the turn table. The page's acts know English and Russian
+(the built-in languages); Ukrainian and Polish acts are in the files and reach the page when the engine passes its
+loaded languages to the act layer — not yet.

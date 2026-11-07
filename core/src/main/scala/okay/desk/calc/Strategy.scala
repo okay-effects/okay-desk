@@ -70,3 +70,9 @@ object Strategy:
     val weighed: Term ! (R + Choose + Writer % Step) = handle(p, Weigh.by[R + Choose + Writer % Step, Term](fill))
     val first: Option[Term] ! (R + Writer % Step) = Choose.first(weighed)
     Writer.run[Step, R + Writer % Step, R, Option[Term]](first)
+
+  /** ONE HOLE WEIGHED in a row (the dialogue asks it of the hole a reading stopped at, for the candidates to offer) */
+  def weighOnce[R[_]](fill: Fill[Rest[R]], ty: Ty, cs: Vector[String], ctx: Context): Dist ! R =
+    val d: Dist ! (R + Choose + Writer % Step) = fill(ty, cs, ctx)
+    val first: Option[Dist] ! (R + Writer % Step) = Choose.first(d)
+    Writer.run[Step, R + Writer % Step, R, Option[Dist]](first).map(_._2.getOrElse(Vector.empty))

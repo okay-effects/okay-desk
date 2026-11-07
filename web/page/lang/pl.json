@@ -196,6 +196,32 @@
   "compare": [
    "niż w",
    "w porównaniu"
+  ],
+  "yes": [
+   "tak",
+   "no tak",
+   "zgadza się",
+   "ok",
+   "dokładnie"
+  ],
+  "no": [
+   "nie"
+  ],
+  "thanks": [
+   "dziękuję",
+   "dzięki",
+   "świetnie",
+   "super"
+  ],
+  "correction": [
+   "nie tak",
+   "nie,",
+   "mam na myśli",
+   "miałem na myśli",
+   "miałam na myśli",
+   "powinno być",
+   "źle",
+   "nie to"
   ]
  },
  "numbers": {
@@ -637,6 +663,57 @@
   "growth": [
    "Jak rósł {C.nom} {T.gen}",
    "Wzrost {C.gen} dla {T.gen}"
+  ],
+  "ask:program": [
+   "Nie jestem pewien, o co chodzi: {options}?"
+  ],
+  "ask:table": [
+   "O którą tabelę chodzi: {options}?"
+  ],
+  "ask:link": [
+   "Czytać razem z powiązaną tabelą: {options}?"
+  ],
+  "ask:where": [
+   "Po której kolumnie warunek: {options}?"
+  ],
+  "ask:group": [
+   "Po której kolumnie grupować: {options}?"
+  ],
+  "ask:aggCol": [
+   "Którą kolumnę liczyć: {options}?"
+  ],
+  "ask:op": [
+   "Jakie porównanie: {options}?"
+  ],
+  "ask:value": [
+   "Jaka wartość {column}: {options}?"
+  ],
+  "ask:fn": [
+   "Co policzyć: {options}?"
+  ],
+  "ask:order": [
+   "Po której kolumnie sortować: {options}?"
+  ],
+  "ask:dir": [
+   "W jakiej kolejności: {options}?"
+  ],
+  "ask:limit": [
+   "Ile wierszy pokazać: {options}?"
+  ],
+  "ask:node": [
+   "O który węzeł chodzi: {options}?"
+  ],
+  "ask:direction": [
+   "W którą stronę: {options}?"
+  ],
+  "ask:word": [
+   "Proszę wybrać: {options}?"
+  ],
+  "ask:all": [
+   "wszystkie"
+  ],
+  "ask:none": [
+   "bez tego"
   ]
  }
 }

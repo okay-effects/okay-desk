@@ -81,7 +81,10 @@ object Language:
         "closure" -> Vector("reach*", "depend*", "lead*"), "closureFrom" -> Vector("depend*", "reachable", "where does"),
         "closureTo" -> Vector("reach*", "lead*"),
         "growth" -> Vector("grow*", "grew", "growth"), "pace" -> Vector("fastest", "slowest", "faster", "slower"),
-        "outside" -> Vector("share", "compare*", "ratio", "percent*"), "compare" -> Vector("than that of", "faster than", "slower than", "than the")),
+        "outside" -> Vector("share", "compare*", "ratio", "percent*"), "compare" -> Vector("than that of", "faster than", "slower than", "than the"),
+        // the acts (Dialogue.Act): what a message does before it is read as a question
+        "yes" -> Vector("yes", "yeah", "yep", "right", "ok", "okay", "sure"), "no" -> Vector("no", "nope"),
+        "thanks" -> Vector("thanks", "thank you", "cheers", "great"), "correction" -> Vector("no,", "not that", "i mean", "i meant", "should have been", "wrong,")),
       numbers = Map("one" -> "1", "three" -> "3", "five" -> "5", "ten" -> "10"),
       tables = Map.empty, columns = Map.empty, values = Map.empty, stemDrop = 1, pieces = Map.empty)
 
@@ -106,6 +109,8 @@ object Language:
         "closureTo" -> Vector("ведут", "ведёт", "доход*", "достига*", "кто"),
         "growth" -> Vector("рос", "росл*", "рост*", "раст*", "выраст*", "вырос*"), "pace" -> Vector("быстрее", "медленнее", "быстр*", "медленн*"),
         "outside" -> Vector("дол*", "сравни*", "процент*"), "compare" -> Vector("чем у", "чем в", "по сравнению"),
+        "yes" -> Vector("да", "ага", "верно", "точно", "ок", "давай"), "no" -> Vector("нет", "неа"),
+        "thanks" -> Vector("спасибо", "благодарю", "отлично", "супер"), "correction" -> Vector("не так", "нет,", "я имею в виду", "я имел в виду", "я имела в виду", "надо было", "неверно", "не то"),
         "sumPhrases" -> Vector("сумма заказов", "сумма продаж", "итого")),
       numbers = Map("один" -> "1", "одна" -> "1", "три" -> "3", "пять" -> "5", "десять" -> "10"),
       tables = okay.desk.Phrase.Russian.tables.map((k, v) => k -> t(v._1, v._2, v._3, v._4)),
