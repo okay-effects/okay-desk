@@ -93,3 +93,44 @@ object Den:
         case rel: Query.Relational => Exact.run(s.tables, rel)
         case l: Query.Logical => Logic.run(s.tables, l)
     yield (q, r)
+
+/** A QUERY BACK TO A POINT (the teacher's pairs carry the gold as the query's JSON; an organ is induced from the
+ * gold TERM): the relational shape as it is; the Datalog shapes the space writes (`Space.compile`) by their form */
+object OfQuery:
+  import okay.desk.Space.{Col, Program}
+  private val Reach = """^\s*(\w+)\(X, Y\) :- (\w+)\(X, Y\)\. \1\(X, Z\) :- \2\(X, Y\), \1\(Y, Z\)\.\s*$""".r
+  private val GoalFrom = """^\s*\w+\(\s*"?([^",()]+?)"?\s*,\s*[A-Z]\w*\s*\)\s*$""".r
+  private val GoalTo = """^\s*\w+\(\s*[A-Z]\w*\s*,\s*"?([^",()]+?)"?\s*\)\s*$""".r
+  private val Absent = """(?s)^\s*q\((\w+)\) :- (\w+)\(([^)]*)\)(.*?), not has\(\w+\)\. has\(\w+\) :- (\w+)\(([^)]*)\)\.\s*$""".r
+  private val Cmp = """(\w+)\s*(=|<|>|<=|>=)\s*("([^"]*)"|[^\s,]+)""".r
+
+  def apply(s: Schema, q: Query): Option[Program] = q match
+    case Query.Relational(from, join, where, group, aggs, _, order, limit) =>
+      val table = s.tables.get(from)
+      def col(name: String): Option[Col] = s.cols.find(c => c.table == from && c.name == name)
+        .orElse(join.flatMap(j => s.cols.find(c => c.table == j.table && c.name == name)))
+      for
+        _ <- table
+        link <- join.fold(Option(None: Option[okay.desk.Space.Link]))(j => s.links.find(l => l.from == from && l.to == j.table).map(Some(_)))
+        conds <- Some(where.collect { case Cond.Cmp(c, op, v) => col(c).map(cc => (cc, op, v)) }).filter(_.forall(_.isDefined)).map(_.flatten)
+        if conds.size == where.size
+        g <- group.headOption.fold(Option(None: Option[Col]))(c => col(c).map(Some(_)))
+        a <- aggs.headOption.fold(Option(None: Option[(String, Option[Col])]))(ag =>
+          if ag.column == "*" then Some(Some((ag.fn, None))) else col(ag.column).map(c => Some((ag.fn, Some(c)))))
+      yield Program.Rel(from, link, conds, g, a, order.headOption.map(o => (o.column.stripPrefix("-"), o.desc)), limit)
+    case Query.Logical(rules, goal) =>
+      rules match
+        case Reach(_, edges) => goal match
+          case GoalFrom(node) => Some(Program.Closure(edges, node, true))
+          case GoalTo(node) => Some(Program.Closure(edges, node, false))
+          case _ => None
+        case Absent(_, target, vars, rest, other, _) =>
+          val names = vars.split(",").map(_.trim).toVector
+          val cols = s.tables.get(target).map(_.columns).getOrElse(Vector.empty)
+          val conds = Cmp.findAllMatchIn(rest).toVector.flatMap { m =>
+            val i = names.indexOf(m.group(1))
+            Option.when(i >= 0 && i < cols.size)(i).flatMap(i => s.cols.find(c => c.table == target && c.name == cols(i)))
+              .map(c => (c, m.group(2), Option(m.group(4)).map(Value.Str(_)).getOrElse(Value.of(m.group(3)))))
+          }
+          s.links.find(l => l.from == other && l.to == target).map(l => Program.Absent(target, l, conds))
+        case _ => None

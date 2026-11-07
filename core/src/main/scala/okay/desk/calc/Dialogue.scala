@@ -49,25 +49,28 @@ object Dialogue:
             case None => pure(Outcome.Open(Ty.Program, ctx.term, g.constructors(Ty.Program), steps))
     }
 
+  /** THE KIND of a hole: what its question is about, and what an organ's template is keyed by */
+  def kind(ty: Ty): String = ty match
+    case Ty.Program | Ty.KindT => "program"
+    case Ty.TableT => "table"
+    case Ty.LinkT(_) | Ty.ReverseLinkT(_) => "link"
+    case Ty.ColumnT(_, Role.Where, _, _) => "where"
+    case Ty.ColumnT(_, Role.Group, _, _) => "group"
+    case Ty.ColumnT(_, Role.Agg, _, _) => "aggCol"
+    case Ty.OpT(_) => "op"
+    case Ty.ValueT(_, _) => "value"
+    case Ty.FnT(_, _) => "fn"
+    case Ty.OrderT(_, _, _) => "order"
+    case Ty.DirT => "dir"
+    case Ty.LimitT(_) => "limit"
+    case Ty.NodeT(_) => "node"
+    case Ty.DirectionT => "direction"
+    case _ => "word"
+
   /** THE QUESTION OF A HOLE, in the person's language: a piece per kind of hole (`ask:<kind>`, data in the language
    * files; English and Russian built in), the candidates named */
   def question(ty: Ty, candidates: Vector[String], lang: Language): String =
-    val kind = ty match
-      case Ty.Program | Ty.KindT => "program"
-      case Ty.TableT => "table"
-      case Ty.LinkT(_) | Ty.ReverseLinkT(_) => "link"
-      case Ty.ColumnT(_, Role.Where, _, _) => "where"
-      case Ty.ColumnT(_, Role.Group, _, _) => "group"
-      case Ty.ColumnT(_, Role.Agg, _, _) => "aggCol"
-      case Ty.OpT(_) => "op"
-      case Ty.ValueT(_, _) => "value"
-      case Ty.FnT(_, _) => "fn"
-      case Ty.OrderT(_, _, _) => "order"
-      case Ty.DirT => "dir"
-      case Ty.LimitT(_) => "limit"
-      case Ty.NodeT(_) => "node"
-      case Ty.DirectionT => "direction"
-      case _ => "word"
+    val kind = Dialogue.kind(ty)
     val names = candidates.map(c => name(ty, c, lang))
     if candidates.isEmpty then return lang.pieces.get("ask:outside").flatMap(_.headOption).getOrElse(
       if lang.code == "ru" then "Это просит сравнить или посчитать долю — такого я не считаю; спросите сами числа и сравните их."
