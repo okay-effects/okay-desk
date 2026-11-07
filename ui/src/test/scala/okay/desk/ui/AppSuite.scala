@@ -135,3 +135,24 @@ class ClarifySuite extends munit.FunSuite:
     val line = disk(Clarified.file)
     assert(line.contains("\"choice\":\"customers\"") || line.contains("\"choice\": \"customers\""), line)
     assert(!disk.keys.exists(k => k.startsWith(Clarified.prefix) && k != Clarified.file), disk.keys.toString)
+
+  test("the dialogue (specs/pilot.md): the hole's question with its options as buttons; the choice answers the SAME question; the acts"):
+    val disk = scala.collection.mutable.Map("orders.csv" -> csv(Sample.orders), "customers.csv" -> csv(Sample.customers))
+    val p = Model.answeredBy[Row, NoModel, Unit](_ => Right("readers loaded"), (_, q) =>
+      if q == vague then Left("ask: Which table is the question about: orders / customers?\norders | customers")
+      else Left("no program for that"))(App.main[Row](Nil))
+    val kept = Disk.inMemory[NoModel, NoDisk, Unit](disk)(p)
+    val fetchless = handle(kept, Handler.Tail[Fetch, Ui, Unit, Unit](a => pure(a), [X] => (op: Fetch[X]) => op match
+      case Fetch.Call(_, _, _, _, answer) => answer(Response(404))
+      case Fetch.Send(_, _, answer) => answer(Response(404))))
+    val ask = "Ask about the data: how many orders are unpaid? total by customer? …"
+    val played = Play(steps(fetchless), Act.press("Ask", ask -> "thanks"), Act.press("Ask", ask -> "yes"), Act.press("Ask", ask -> vague),
+      Act.press("customers"), Act.press("Ask", ask -> "no"))
+    assert(played.problems.isEmpty, played.problems.toString)
+    val shown = played.at.toList.flatMap(_.parts).mkString(" ")
+    assert(shown.contains("You're welcome"), shown)
+    assert(shown.contains("Nothing is pending"), shown)
+    assert(shown.contains("Which table is the question about"), shown)
+    // the button answers the same question (not rewritten); "no" to the re-asked hole takes its second option
+    assert(shown.contains("I mean customers"), shown)
+    assert(shown.split("I mean customers").length == 3, s"the choice twice (the button, then «no»): $shown")

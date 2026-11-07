@@ -127,21 +127,21 @@ object App:
           case Turn.Action.Answer(pending, answers) => step[R](s, Msg.Clarify(pending, answers.last._2))
           case Turn.Action.Correct(corrected, _) => step[R](s.copy(asking = None, hole = None), Msg.Ask(corrected))
           case Turn.Action.Read(_) =>
-        if s.tables.isEmpty then pure(cleared.copy(problem = Some("open a file first — the Data button")))
-        else if q.isEmpty then pure(cleared)
-        else
-          // THE MODEL LOADED BY THE FIRST QUESTION (the operator, from the phone): the one chosen in the form, the
-          // page's default else — its progress shown, then the question goes on; a loading that fails is the answer
-          val ready: State ! R = if s.model.isDefined then pure(cleared) else load[R](cleared, s.modelName)
-          ready.flatMap { st =>
-            if st.model.isEmpty then pure(st)
+            if s.tables.isEmpty then pure(cleared.copy(problem = Some("open a file first — the Data button")))
+            else if q.isEmpty then pure(cleared)
             else
-              val asked = st.copy(log = st.log :+ Entry("user", q))
-              for
-                answered <- think[R](asked, q)
-                result <- answer[R](asked, q, answered, retried = false)
-              yield result
-          }
+              // THE MODEL LOADED BY THE FIRST QUESTION (the operator, from the phone): the one chosen in the form, the
+              // page's default else — its progress shown, then the question goes on; a loading that fails is the answer
+              val ready: State ! R = if s.model.isDefined then pure(cleared) else load[R](cleared, s.modelName)
+              ready.flatMap { st =>
+                if st.model.isEmpty then pure(st)
+                else
+                  val asked = st.copy(log = st.log :+ Entry("user", q))
+                  for
+                    answered <- think[R](asked, q)
+                    result <- answer[R](asked, q, answered, retried = false)
+                  yield result
+              }
 
   /** the model loaded: the loading begun, its progress shown on this screen until it ends */
   def load[R[_]](st0: State, name: String)(using In[Ui, R], In[Model, R]): State ! R =
