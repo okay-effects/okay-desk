@@ -294,3 +294,21 @@ Its note on the page: "said from the result by the answer grammar: every number 
 **Real data.** `RealRefine` (bench): the calculus — the data first, the model's tokens next, no trained reader —
 on the sibling agent's hand-written GDP questions (RealBench, data.md §28), by the page's program on MLX
 (`DESK_DEVICE=mlx`). The outcomes as RealBench counts them (right / refused / wrong). Numbers below as they come.
+
+**Real data, measured (the GDP questions of data.md §28, the core, no trained reader, the JVM by the page's
+program on MLX).** The grammar grew for it: a SECOND condition on the table ("the GDP of Ukraine in 2020"; the
+canonical order of two conditions is the table's order of columns, in the grammar, the denotation, the draw and
+the exact fill alike — the law "the reading is the space" holds again, 26,853 = 26,853 over orders), time
+values as an open type (a year written in the question), a source's explicit refusal `?` (the words of
+constructors the grammar lacks — growth, share, comparison — stop the reading open instead of handing it to the
+model), codes only in capitals, "none" only when nothing is written.
+
+| the calculus, the core | en right / refused / wrong (of 19, 3 outside) | ru |
+|---|---|---|
+| the data alone | 10 / 9 / 0 | 6 / 12 / 1 |
+| the data, then the model's tokens | 12 / 6 / 1 | 6 / 6 / 7 |
+| (the sibling's trained readers, §28, for reference) | 16 / 3 / 0 | 12 / 3 / 4 |
+
+The Russian gap is the data's own words ("Украины", "ВВП"): the sibling's `Words` dictionary, to be plugged into
+the exact fill when committed. The data alone never errs in English; its one Russian error is a country's name
+it cannot read, so it closes on the year alone — `Words` closes that too.

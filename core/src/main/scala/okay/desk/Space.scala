@@ -82,7 +82,10 @@ object Space:
       own = s.of(t)
       link <- None +: s.links.filter(_.from == t).map(Some(_))
       other = link.toVector.flatMap(l => s.of(l.to).filterNot(c => own.exists(_.name == c.name)))
-      where <- (Vector(Vector.empty) ++ conds(own).map(Vector(_)) ++ (for a <- conds(own); b <- conds(other) yield Vector(a, b))).iterator
+      ownConds = conds(own)
+      where <- (Vector(Vector.empty) ++ ownConds.map(Vector(_)) ++
+        (for (a, i) <- ownConds.zipWithIndex; b <- ownConds.drop(i + 1) if a._1 != b._1 yield Vector(a, b)) ++
+        (for a <- ownConds; b <- conds(other) yield Vector(a, b))).iterator
       group <- None +: (own ++ other).filter(c => c.kind == Kind.Text && !where.exists(_._1 == c)).map(Some(_))
       agg <- None +: Some(("count", None)) +: (for fn <- Vector("sum", "avg", "min", "max"); c <- own.filter(_.kind == Kind.Num) yield Some((fn, Some(c))))
       if agg.isDefined || group.isEmpty // a group without an aggregate says nothing
@@ -141,7 +144,9 @@ object Space:
       val other = link.toVector.flatMap(l => s.of(l.to).filterNot(c => own.exists(_.name == c.name)))
       val where = rnd.nextInt(100) match
         case r if r < 40 => Vector.empty
-        case r if r < 85 || link.isEmpty => cond(own).toVector
+        case r if r < 75 || link.isEmpty && r < 90 => cond(own).toVector
+        case r if r < 90 => // two on the table, in the table's order of columns (the canonical order)
+          val a = cond(own).toVector; (a ++ cond(own.filterNot(c => a.exists(_._1 == c))).toVector).sortBy(w => s.tables(from).columns.indexOf(w._1.name))
         case _ => cond(own).toVector ++ cond(other).toVector
       val nums = own.filter(_.kind == Kind.Num)
       val agg = rnd.nextInt(100) match

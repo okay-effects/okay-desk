@@ -25,7 +25,7 @@ object Strategy:
           val ordered: Vector[String] ! R =
             if cs.size <= 1 then pure(cs)
             else Weigh.pick[R](ty, cs, ctx).map { d =>
-              if d.isEmpty then Vector.empty
+              if d.isEmpty || d.exists(_._1 == Fill.refuse) then Vector.empty
               else
                 val sorted = d.sortBy(-_._2)
                 if sorted.size >= 2 && sorted(0)._2 - sorted(1)._2 < margin then Vector.empty else sorted.map(_._1)

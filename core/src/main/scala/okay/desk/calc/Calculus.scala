@@ -121,7 +121,7 @@ final class Grammar(val schema: Schema) extends Rules:
     case Ty.AnswerT | Ty.FactT(_, _) | Ty.WordT(_) => Vector.empty // the answer grammar's, not the terms'
 
   override def open(ty: Ty): Boolean = ty match
-    case Ty.ValueT(t, c) => kindOf(t, c) == Kind.Num
+    case Ty.ValueT(t, c) => kindOf(t, c) == Kind.Num || kindOf(t, c) == Kind.Time // a number, a year, a date: written in the question, not listed
     case _ => false
 
   /** whether a constructor opens arguments (a node) or is an atom (a leaf) */
@@ -144,14 +144,19 @@ final class Grammar(val schema: Schema) extends Rules:
           case 0 => Some(Ty.TableT)
           case 1 => t.map(Ty.LinkT.apply)
           case 2 => t.map(x => Ty.ColumnT(Vector(x), Role.Where, optional = true))
-          case 3 => Some(Ty.ColumnT(other.toVector, Role.Where, optional = true))
-          case 4 =>
-            val used = args.slice(2, 4).collect { case Con(_, c, _) => c }
+          // a second condition on the table, on another column — none when the first was none
+          case 3 => t.map { x =>
+            val first = args.lift(2).collect { case Con(_, c, _) => c }
+            val upTo = first.toVector.flatMap(c => schema.tables(x).columns.takeWhile(_ != c) :+ c) // the canonical order: the second after the first
+            Ty.ColumnT(if first.isEmpty then Vector.empty else Vector(x), Role.Where, optional = true, except = upTo) }
+          case 4 => Some(Ty.ColumnT(other.toVector, Role.Where, optional = true))
+          case 5 =>
+            val used = args.slice(2, 5).collect { case Con(_, c, _) => c }
             t.map(x => Ty.ColumnT(x +: other.toVector, Role.Group, optional = true, except = used))
-          case 5 => Some(Ty.FnT(required = leaf(4).exists(_ != "none")))
-          case 6 => t.flatMap(x => leaf(5).map(fn => Ty.ColumnT(Vector(x), Role.Agg, optional = fn == "none" || fn == "count")))
-          case 7 => t.flatMap(x => leaf(5).map(fn => Ty.OrderT(x, Option.when(fn != "none")(fn), grouped = leaf(4).exists(_ != "none"))))
-          case 8 => Some(Ty.LimitT(ordered = args.lift(7).exists { case Leaf(_, "none") => false; case _ => true }))
+          case 6 => Some(Ty.FnT(required = leaf(5).exists(_ != "none")))
+          case 7 => t.flatMap(x => leaf(6).map(fn => Ty.ColumnT(Vector(x), Role.Agg, optional = fn == "none" || fn == "count")))
+          case 8 => t.flatMap(x => leaf(6).map(fn => Ty.OrderT(x, Option.when(fn != "none")(fn), grouped = leaf(5).exists(_ != "none"))))
+          case 9 => Some(Ty.LimitT(ordered = args.lift(8).exists { case Leaf(_, "none") => false; case _ => true }))
           case _ => None
       case (Ty.Program, "Absent") => args.size match
         case 0 => Some(Ty.TableT)

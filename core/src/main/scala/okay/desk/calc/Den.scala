@@ -25,11 +25,11 @@ object Den:
 
   /** a closed term's point of the space */
   def program(s: Schema, term: Term): Either[String, Program] = term match
-    case Con(Ty.Program, "Rows", Vector(tbl, link, whereOwn, whereOther, group, fn, aggCol, order, limit)) =>
+    case Con(Ty.Program, "Rows", Vector(tbl, link, whereOwn, whereOwn2, whereOther, group, fn, aggCol, order, limit)) =>
       for
         t <- leaf(tbl).toRight("no table")
         l = leaf(link).filter(_ != "none").map { x => val Array(c, to) = x.split("->"): @unchecked; Link(t, c, to) }
-        w1 <- cond(s, whereOwn); w2 <- cond(s, whereOther)
+        w1 <- cond(s, whereOwn); w1b <- cond(s, whereOwn2); w2 <- cond(s, whereOther)
         g <- leaf(group).toRight("no group").flatMap(x => if x == "none" then Right(None) else col(s, t +: l.map(_.to).toVector, x).map(Some(_)))
         f <- leaf(fn).toRight("no function")
         a <- leaf(aggCol).toRight("no aggregate column").flatMap { x =>
@@ -40,7 +40,7 @@ object Den:
           case Con(_, by, Vector(Leaf(_, dir))) => Right(Some((by, dir == "desc")))
           case other => Left(s"an unfinished order: ${other.show}")
         n <- leaf(limit).toRight("no limit").map(x => if x == "none" then None else Some(x.toInt))
-      yield Program.Rel(t, l, w1.toVector ++ w2.toVector, g, a, o, n)
+      yield Program.Rel(t, l, w1.toVector ++ w1b.toVector ++ w2.toVector, g, a, o, n)
     case Con(Ty.Program, "Absent", Vector(tbl, link, where)) =>
       for
         t <- leaf(tbl).toRight("no table")
@@ -55,17 +55,22 @@ object Den:
     case other => Left(s"not a closed program: ${other.show}")
 
   /** a point of the space as a closed term (the inverse) */
-  def term(@annotation.unused s: Schema, p: Program): Term = p match
+  def term(s: Schema, p: Program): Term = p match
     case Program.Rel(from, link, where, group, agg, order, limit) =>
       val other = link.map(_.to).toVector
       def condOf(ts: Vector[String], c: Option[(Col, String, Value)]): Term = c.fold(Leaf(Ty.ColumnT(ts, Role.Where, optional = true), "none")) { (cc, op, v) =>
         Con(Ty.ColumnT(ts, Role.Where, optional = true), cc.name, Vector(Leaf(Ty.OpT(cc.kind), op), Leaf(Ty.ValueT(cc.table, cc.name), v.text))) }
-      val own = where.find(_._1.table == from); val oth = where.find(w => other.contains(w._1.table))
+      val cols = s.tables(from).columns
+      val owns = where.filter(_._1.table == from).sortBy(w => cols.indexOf(w._1.name)); val own = owns.headOption; val own2 = owns.lift(1); val oth = where.find(w => other.contains(w._1.table))
       val fn = agg.map(_._1).getOrElse("none")
+      def upTo(first: Option[(Col, String, Value)]): Vector[String] = first.toVector.flatMap(w => cols.takeWhile(_ != w._1.name) :+ w._1.name)
       Con(Ty.Program, "Rows", Vector(
         Leaf(Ty.TableT, from),
         Leaf(Ty.LinkT(from), link.map(l => s"${l.column}->${l.to}").getOrElse("none")),
-        condOf(Vector(from), own), condOf(other, oth),
+        condOf(Vector(from), own),
+        own2.fold(Leaf(Ty.ColumnT(if own.isEmpty then Vector.empty else Vector(from), Role.Where, optional = true, except = upTo(own)), "none")) { (cc, op, v) =>
+          Con(Ty.ColumnT(Vector(from), Role.Where, optional = true, except = upTo(own)), cc.name, Vector(Leaf(Ty.OpT(cc.kind), op), Leaf(Ty.ValueT(cc.table, cc.name), v.text))) },
+        condOf(other, oth),
         Leaf(Ty.ColumnT(from +: other, Role.Group, optional = true, except = where.map(_._1.name)), group.map(_.name).getOrElse("none")),
         Leaf(Ty.FnT(required = group.isDefined), fn),
         Leaf(Ty.ColumnT(Vector(from), Role.Agg, optional = fn == "none" || fn == "count"), agg.flatMap(_._2).map(_.name).getOrElse("none")),

@@ -42,6 +42,8 @@ object Fill:
   def first[R[_]](fills: Fill[R]*): Fill[R] = new Fill[R]:
     def apply(ty: Ty, cs: Vector[String], ctx: Context): Dist ! R =
       fills.foldLeft(pure[Dist, R](Vector.empty))((acc, f) => acc.flatMap(d => if d.nonEmpty then pure(d) else f(ty, cs, ctx)))
+  /** a source's explicit REFUSAL: this candidate means "not this grammar" — the reading stops open, no source after is asked */
+  val refuse: String = "?"
 
   /** the oracle: the gold term's constructor at the hole's path — the law `read ∘ phrase = id` with a perfect source */
   def oracle[R[_]](grammar: Grammar, gold: Term): Fill[R] = new Fill[R]:
@@ -60,6 +62,12 @@ object Fill:
       val q = ctx.lower
       def named(n: String): Boolean = n.length >= 3 && (q.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}(s|es)?\\b.*") ||
         n.length >= 4 && n.endsWith("s") && q.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase.dropRight(1))}\\b.*"))
+      // a column of several words named by one of them ("country" for Country Name) when no other column shares the word,
+      // or the others are codes and keys ("Country Code")
+      def namedByWord(c: String): Boolean =
+        val ws = c.split("[\\s_]+").filter(_.length >= 4).map(_.toLowerCase)
+        ws.exists { w => q.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(w)}(s|es)?\\b.*") &&
+          !ctx.schema.cols.exists(o => o.name != c && !o.name.toLowerCase.matches(".*\\b(code|id|key)\\b.*") && o.name.split("[\\s_]+").map(_.toLowerCase).contains(w)) }
       def ruTable(n: String): Boolean = Phrase.Russian.tables.get(n).exists((nom, _, _, _) => q.matches(s"(?U).*\\b${nom.dropRight(1)}\\p{L}{0,5}\\b.*"))
       // (a whole form of the dictionary — дню — or the stem)
       def ruColumn(n: String): Boolean = Phrase.Russian.columns.get(n).exists((nom, gen, dat) => Vector(nom, gen, dat).exists(f => q.matches(s"(?U).*\\b$f\\b.*")) ||
@@ -88,8 +96,8 @@ object Fill:
       val used: Set[String] = ctx.term match
         case Con(_, "Rows", args) => args.collect { case Con(Ty.ColumnT(_, Role.Where, _, _), c, _) => c }.toSet
         case _ => Set.empty
-      val fnChosen: Option[String] = ctx.term match { case Con(_, "Rows", args) => args.lift(5).collect { case Leaf(_, f) => f }; case _ => None }
-      val grouped = ctx.term match { case Con(_, "Rows", args) => args.lift(4).exists { case Leaf(_, "none") => false; case Leaf(_, _) => true; case _ => false }; case _ => false }
+      val fnChosen: Option[String] = ctx.term match { case Con(_, "Rows", args) => args.lift(6).collect { case Leaf(_, f) => f }; case _ => None }
+      val grouped = ctx.term match { case Con(_, "Rows", args) => args.lift(5).exists { case Leaf(_, "none") => false; case Leaf(_, _) => true; case _ => false }; case _ => false }
       val limitOne = limitNumber.isEmpty && (ctx.word("only the first", "the first one", "только перв*") || !grouped && (ctx.word("the row", "which of", "the one", "строка", "у какого") ||
         ctx.word("largest", "smallest", "highest", "lowest", "biggest", "самый", "самая", "самое", "наибольш*", "наимен*") && !ctx.word("per", "each", "by", "по", "в разрезе", "among", "среди", "of")))
       val d: Dist = ty match
@@ -119,23 +127,35 @@ object Fill:
           if targets.size == 2 then one(ctx.schema.links.filter(l => targets.contains(l.from) && targets.contains(l.to)).map(_.from).distinct)
           else if targets.nonEmpty then one(targets) else one(byColumnOne)
         case Ty.ColumnT(_, Role.Group, _, _) =>
-          if ctx.word("per", "each", "by", "по кажд*", "в кажд*", "кажд*", "в разрезе", "по") then one(cs.filter(c => c != "none" && !used(c) && (named(c) || ruColumn(c))))
+          if ctx.word("per", "each", "by", "по кажд*", "в кажд*", "кажд*", "в разрезе", "по") then one(cs.filter(c => c != "none" && !used(c) && (named(c) || ruColumn(c) || namedByWord(c))))
           else Vector(("none", 0.0))
         case Ty.ColumnT(ts, Role.Where, optional, _) =>
           // a value of a column written in the question names the column; "none" when no value and no column is written
           // (on a linked table, a value the own table also has is the own table's: "customer dee" is orders.customer)
           val own = ts.headOption.exists(t => ctx.term match { case Con(_, "Rows", args) => args.headOption.contains(Leaf(Ty.TableT, t)); case _ => true })
+          // (a year written in the question — "in 2010", "в 2010 году" — is a condition on the time column, not a number)
+          // (what the term's conditions already use is not written "again": a second condition sees the rest)
+          val usedVals: Set[String] = ctx.term match
+            case Con(_, "Rows", args) => args.collect { case Con(Ty.ColumnT(_, Role.Where, _, _), _, Vector(_, Leaf(_, v))) => v }.toSet
+            case _ => Set.empty
+          val years = "\\b(1[89]\\d\\d|20\\d\\d)\\b".r.findAllIn(ctx.question).toSet.filterNot(y => usedVals.exists(_.contains(y)))
           val valued = cs.filter(c => c != "none" && ts.exists(t => ctx.schema.tables.get(t).exists(tb => tb.column(c).exists(i =>
-            tb.rows.map(_(i).text).distinct.filter(v => own || !ownValues(v)).exists(v => v.length >= 3 && !v.forall(_.isDigit) && grams(v.toLowerCase) ||
+            tb.rows.map(_(i).text).distinct.filter(v => own || !ownValues(v)).exists(v => v.length >= 3 && !v.forall(_.isDigit) && !(v.length <= 3 && v.forall(_.isUpper)) && grams(v.toLowerCase) ||
+              years.contains(v) && ctx.schema.of(t).exists(col => col.name == c && col.kind == Kind.Time) ||
               v.length >= 2 && v.forall(_.isUpper) && ctx.question.matches(s"(?U).*\\b$v\\b.*") ||
               ruValue(v))))))
           // a number with a comparison word: the numeric column whose range holds it
-          val number = "\\d+(?:\\.\\d+)?".r.findFirstIn(ctx.question).filter(_ => ctx.word("over", "above", "more than", "greater", "больше", "выше", "свыше", "below", "under", "less than", "меньше", "ниже")).map(_.toDouble)
+          val number = "\\d+(?:\\.\\d+)?".r.findAllIn(ctx.question).toVector.filterNot(n => usedVals.contains(n) || years.contains(n) || usedVals.exists(u => u.toDoubleOption.contains(n.toDouble))).headOption
+            .filter(_ => ctx.word("over", "above", "more than", "greater", "больше", "выше", "свыше", "below", "under", "less than", "меньше", "ниже")).map(_.toDouble)
           val numbered = number.toVector.flatMap(x => cs.filter(c => c != "none" && ts.exists(t => ctx.schema.of(t).exists(col => col.name == c && col.kind == Kind.Num &&
             { val vs = ctx.schema.tables(t).rows.flatMap(_(ctx.schema.tables(t).columns.indexOf(c)).num); vs.nonEmpty && vs.min <= x && x <= vs.max }))))
-          if valued.size == 1 then Vector((valued.head, 0.0))
-          else if valued.isEmpty && numbered.size == 1 then Vector((numbered.head, 0.0))
-          else if valued.isEmpty && optional && !ctx.word("with", "where", "whose", "over", "above", "below", "under", "than", "с", "где", "у которых", "больше", "меньше", "за", "on", "in") then Vector(("none", 0.0))
+          // the columns something is written for, in the TABLE'S order — the canonical order of two conditions: the first slot
+          // takes the first, the second slot the next (its candidates exclude the columns up to the first's)
+          val written = (valued ++ numbered).distinct.sortBy(c => ts.flatMap(t => ctx.schema.tables.get(t).toVector.flatMap(tb => Option.when(tb.columns.contains(c))(tb.columns.indexOf(c)))).headOption.getOrElse(99))
+          if written.nonEmpty then Vector((written.head, 0.0))
+          // (no value, no number, no year written, and — for a first condition — no word of a condition: no condition; a
+          // second condition's words were the first's)
+          else if years.isEmpty && optional && (usedVals.nonEmpty || !ctx.word("with", "where", "whose", "over", "above", "below", "under", "than", "с", "где", "у которых", "больше", "меньше")) then Vector(("none", 0.0))
           else Vector.empty
         case Ty.OpT(Kind.Num) =>
           val more = ctx.word("above", "more than", "greater", "больше", "выше", "свыше") || q.matches("(?U).*\\bover \\d.*")
@@ -144,7 +164,13 @@ object Fill:
         case Ty.OpT(_) => one(cs)
         case Ty.ValueT(t, c) =>
           val numeric = ctx.schema.of(t).exists(x => x.name == c && x.kind == Kind.Num)
-          if numeric then one("\\d+(?:\\.\\d+)?".r.findAllIn(ctx.question).toVector.distinct)
+          val timeValues = ctx.schema.cols.filter(_.kind == Kind.Time).flatMap(col => ctx.schema.tables(col.table).column(col.name).toVector.flatMap(i => ctx.schema.tables(col.table).rows.map(_(i).text))).toSet
+          if numeric then one("\\d+(?:\\.\\d+)?".r.findAllIn(ctx.question).toVector.distinct.filterNot(timeValues))
+          else if ctx.schema.of(t).exists(col => col.name == c && col.kind == Kind.Time) then
+            // an open type: the year or the date written in the question, whether the examples list it or not
+            val yearsWritten = "\\b(1[89]\\d\\d|20\\d\\d)\\b".r.findAllIn(ctx.question).toSet
+            val written = ctx.schema.tables(t).column(c).toVector.flatMap(i => ctx.schema.tables(t).rows.map(_(i).text)).distinct.filter(v => ctx.grams(v.toLowerCase) || yearsWritten.contains(v))
+            one(written)
           else
             val vs = ctx.schema.tables(t).column(c).toVector.flatMap(i => ctx.schema.tables(t).rows.map(_(i).text).distinct)
             one(vs.filter(v => v.length >= 2 && (grams(v.toLowerCase) || ruValue(v))).sortBy(-_.length).take(1))
@@ -161,7 +187,10 @@ object Fill:
             // a question that is a noun phrase of the table ("The orders where…", "Заказы за…"): rows, no function
             val tableWords = ctx.schema.tables.keys.toVector.flatMap(n => n +: n.dropRight(1) +: Phrase.Russian.tables.get(n).toVector.flatMap((a, b, c, d) => Vector(a, b, c, d)))
             val sizeWords = ctx.word("largest", "smallest", "highest", "lowest", "maximum", "minimum", "наибольш*", "наимен*", "максим*", "миним*")
-            if ctx.word("which", "show", "list", "какие", "покажи", "выведи", "список") ||
+            // (a question that starts with a column's word in the plural — "Countries with…" for Country Name — lists rows)
+            val columnWords = ctx.schema.cols.flatMap(_.name.split("[\\s_]+")).filter(_.length >= 4).map(_.toLowerCase).toSet
+            val startsWithColumn = q.split("[^\\p{L}]+").headOption.exists(w => columnWords(w) || w.endsWith("ies") && columnWords(w.dropRight(3) + "y") || w.endsWith("s") && columnWords(w.dropRight(1)))
+            if ctx.word("which", "show", "list", "какие", "покажи", "выведи", "список") || q.matches("(?U)^(what (was|is|were|are) the|какой (был|была|было)|каков)\\b.*") && !sizeWords || startsWithColumn && !sizeWords && !ctx.word("how many", "number of", "average", "total", "sum", "mean") ||
               q.matches(s"(?U)^(the )?(\\p{L}+ )?(${tableWords.map(java.util.regex.Pattern.quote).mkString("|")})\\b.*") && !sizeWords then Vector(("none", 0.0))
             // ("smallest first, the first 5" is an order with a limit, not a minimum)
             else if ctx.word("minimum", "smallest", "least", "минимум", "наимен*") && !ctx.word("row", "which of", "строка", "у какого", "largest", "maximum", "наибольш*", "максим*", "first", "top", "топ", "первые", "сначала") then Vector(("min", 0.0))
@@ -196,9 +225,11 @@ object Fill:
             else if !topWords || grouped && !ctx.word("top", "топ", "первые") then Vector(("none", 0.0))
             else Vector.empty)
         case Ty.Program | Ty.KindT =>
-          val k = if ctx.word("reach*", "depend*", "lead*", "достиж*", "достиг*", "завис*", "вед*", "доход*") then "closure"
+          val outside = ctx.word("grow*", "grew", "growth", "fastest", "slowest", "faster", "slower", "share", "compare*", "ratio", "percent*",
+            "рос", "росл*", "рост*", "раст*", "быстрее", "медленнее", "дол*", "сравни*", "процент*")
+          val k = if outside then "" else if ctx.word("reach*", "depend*", "lead*", "достиж*", "достиг*", "завис*", "вед*", "доход*") then "closure"
             else if ctx.word("without", "never", "lacking", "без", "нет", "не встреча*") || q.matches("(?U).*\\bno\\b.*") then "absent" else "rows"
-          Vector((if ty == Ty.Program then k.capitalize else k, 0.0))
+          if k.isEmpty then Vector((Fill.refuse, 0.0)) else Vector((if ty == Ty.Program then k.capitalize else k, 0.0))
         case Ty.DirectionT => if ctx.word("depend*", "reachable", "where does", "завис*", "достижим*", "куда") then Vector(("from", 0.0))
           else if ctx.word("reach*", "lead*", "ведут", "ведёт", "доход*", "достига*", "кто") then Vector(("to", 0.0)) else Vector.empty
         case Ty.NodeT(_) => one(cs.sortBy(-_.length).filter(n => q.contains(n.toLowerCase)).take(1))
@@ -244,11 +275,11 @@ object Render:
         case Ty.TableT => "```json\n{\"from\": \""
         case Ty.LinkT(_) => start + ", \"join\": {\"table\": \""
         case Ty.ColumnT(_, Role.Where, _, _) => start + ", \"where\": [{\"column\": \""
-        case Ty.OpT(_) => start + s""", "where": [{"column": "${args.lift(2).flatMap(leaf).getOrElse("")}", "op": """"
-        case Ty.ValueT(_, c) => start + s""", "where": [{"column": "$c", "op": "${args.lift(2).collect { case Con(_, _, Vector(Leaf(_, op))) => op }.getOrElse("=")}", "value": """"
+        case Ty.OpT(_) => start + s""", "where": [{"column": "${args.lastOption.flatMap(leaf).getOrElse("")}", "op": """"
+        case Ty.ValueT(_, c) => start + s""", "where": [{"column": "$c", "op": "${args.lastOption.collect { case Con(_, _, Vector(Leaf(_, op))) => op }.getOrElse("=")}", "value": """"
         case Ty.ColumnT(_, Role.Group, _, _) => start + ", \"group\": [\""
         case Ty.FnT(_) => start + ", \"aggregate\": [{\"fn\": \""
-        case Ty.ColumnT(_, Role.Agg, _, _) => start + s""", "aggregate": [{"fn": "${args.lift(5).flatMap(leaf).getOrElse("sum")}", "column": """"
+        case Ty.ColumnT(_, Role.Agg, _, _) => start + s""", "aggregate": [{"fn": "${args.lift(6).flatMap(leaf).getOrElse("sum")}", "column": """"
         case Ty.OrderT(_, _, _) => start + ", \"order\": [\""
         case Ty.DirT => start + ", \"order\": [\""
         case Ty.LimitT(_) => start + ", \"limit\": "
@@ -263,7 +294,7 @@ object Render:
     case Ty.FnT(_) if c == "none" => "]"
     case Ty.OrderT(_, _, _) if c == "none" => "]"
     case Ty.LimitT(_) if c == "none" => "}"
-    case Ty.DirT => if c == "desc" then "-" else term match { case Con(_, _, args) => args.lift(7).flatMap(leaf).getOrElse("x"); case _ => "x" }
+    case Ty.DirT => if c == "desc" then "-" else term match { case Con(_, _, args) => args.lift(8).flatMap(leaf).getOrElse("x"); case _ => "x" }
     case Ty.DirectionT => if c == "from" then "X" else "\""
     case _ => c
 
