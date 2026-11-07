@@ -40,8 +40,9 @@ class DialogueSuite extends munit.FunSuite:
           val want = run(Fill.oracle[Pure](g, t)(ty, g.constructors(ty), Context(s, text, at))).head._1
           // (a number written in the question is not among a column's values: a value hole takes it typed)
           assert(cs.contains(want) || ty.isInstanceOf[Ty.ValueT], s"$text: the options $cs lack the gold's $want")
-          val question = Dialogue.question(ty, cs, if text == q.ru then Language.Ru.language else Language.En.language)
-          assert(cs.forall(c => question.contains(Dialogue.name(ty, c, Language.En.language)) || c == "none"), question)
+          val l = if text == q.ru then Language.Ru.language else Language.En.language
+          val question = Dialogue.question(ty, cs, l)
+          assert(cs.forall(c => question.contains(Dialogue.name(ty, c, l))), question)
           // the answer as a source, first: the same steps up to the hole, then the gold
           answers = answers :+ (ty, want)
           outcome = run(Dialogue.read[Pure](g, Context(s, text, Term.Hole(Ty.Program)), Fill.first[P](Dialogue.decided[P](answers), silenced(hole, t))))
