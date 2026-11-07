@@ -19,7 +19,9 @@ object App:
   /** `phone`: a small screen — the student with the readers (122 MB) is what fits; the models that generate are a
    * computer's */
   final case class State(place: String = "chat", tables: Map[String, Data] = Map.empty, log: Vector[Entry] = Vector.empty,
-    model: Option[String] = None, modelName: String = Model.default, problem: Option[String] = None, phone: Boolean = false)
+    model: Option[String] = None, modelName: String = Model.default, problem: Option[String] = None, phone: Boolean = false,
+    /** a question the readers were not sure about and the readings they hesitated between: offered as buttons */
+    asking: Option[(String, Vector[String])] = None)
 
   enum Msg:
     case Go(place: String)
@@ -30,6 +32,9 @@ object App:
     case Close(table: String)
     case Load(model: String)
     case Ask(question: String)
+    /** THE ABSTENTION AS A DIALOGUE (specs/data.md §30): the person's choice among the readings the readers hesitated
+     * between — the question asked again with the choice written into it (an exact fact for the rules) */
+    case Clarify(question: String, choice: String)
 
   val accept = ".csv,.tsv,.json,.jsonl,.ndjson"
 
@@ -39,7 +44,7 @@ object App:
       : Unit ! R =
     for
       names <- Disk.names[R]
-      kept <- names.foldLeft(pure[State, R](State(phone = phone))) { (acc, name) =>
+      kept <- names.filterNot(_.startsWith(Clarified.prefix)).foldLeft(pure[State, R](State(phone = phone))) { (acc, name) =>
         acc.flatMap(s => Disk.get[R](name).map(_.fold(s)(text => opened(s, name, text, quietly = true)))) }
       begun <- opens.foldLeft(pure[State, R](kept))((acc, u) => acc.flatMap(s => step[R](s, Msg.OpenUrl(u))))
       _ <- loop[R](begun)
@@ -62,7 +67,7 @@ object App:
       case n => n + ".csv"
 
   def step[R[_]](s: State, m: Msg)(using In[Ui, R], In[Model, R], In[Fetch, R], In[Disk, R]): State ! R =
-    val cleared = s.copy(problem = None)
+    val cleared = s.copy(problem = None, asking = None)
     m match
       case Msg.Go(place) => pure(cleared.copy(place = place))
       case Msg.Opened(files) =>
@@ -93,6 +98,16 @@ object App:
             .foldLeft(pure[Unit, R](()))((acc, f) => acc.flatMap(_ => Disk.remove[R](f)))))
           .map(_ => cleared.copy(tables = cleared.tables - name, log = cleared.log :+ Entry("system", s"closed $name")))
       case Msg.Load(name) => load[R](cleared, name)
+      case Msg.Clarify(question, choice) =>
+        val asked = cleared.copy(log = cleared.log :+ Entry("user", Clarified.saying(question, choice)))
+        val again = Clarified.question(question, choice)
+        for
+          answered <- think[R](asked, again)
+          result <- answer[R](asked, again, answered, retried = false)
+          // an answer to the clarified question: the pair kept on the disk (the question as asked, the choice, the
+          // program) — the data a later training reads
+          _ <- answered.fold(_ => pure[Unit, R](()), program => Clarified.keep[R](question, choice, program))
+        yield result
       case Msg.Ask(question) =>
         val q = question.trim
         if s.tables.isEmpty then pure(cleared.copy(problem = Some("open a file first — the Data button")))
@@ -137,7 +152,10 @@ object App:
   def answer[R[_]](s: State, question: String, answered: Either[String, String], retried: Boolean)(
       using In[Ui, R], In[Model, R]): State ! R =
     answered match
-      case Left(words) => pure(s.copy(log = s.log :+ Entry("model", words)))
+      case Left(words) =>
+        // "not sure: A or B": the readings offered to the person as buttons
+        val offered = Clarified.readings(words).map(cs => (question, cs))
+        pure(s.copy(log = s.log :+ Entry("model", words), asking = offered))
       case Right(json) =>
         val ran = Query.parse(json).flatMap {
           case q: Query.Relational => Exact.run(s.tables, q).map(r => (q: Query, r))
@@ -159,8 +177,9 @@ object App:
             // THE ANSWER IN WORDS (specs/calculus.md §10, §14): a model that generates summarizes (kept only when faithful);
             // else the answer grammar says the result — its facts are cells of the result by construction
             val ru = question.exists(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я')
-            val said = okay.desk.calc.Answer.text(okay.desk.calc.Answer.ofQuery(q, result), ru)
-            val sentence = Entry("model", said, None, Some(if ru then "сказано по результату грамматикой ответов: каждое число — его ячейка" else "said from the result by the answer grammar: every number is a cell of it"))
+            // (a CONCLUSION, not a retelling: the figure that answers — a share, a margin, a gap, who is missing — derived exactly)
+            val said = okay.desk.calc.Claims.text(okay.desk.calc.Claims.of(q, result, s.tables), ru)
+            val sentence = Entry("model", said, None, Some(if ru then "вывод по результату: каждое число — ячейка или точный расчёт по ней" else "concluded from the result: every number is a cell of it or an exact derivation from it"))
             Model.summary[R](question, q, result).map {
               case Some(words) if Prompt.faithful(words, result) => shown.copy(log = shown.log :+ Entry("model", words))
               case Some(_) => shown.copy(log = shown.log :+ Entry("system", "the model's summary stated a number not in the result and was dropped") :+ sentence)
@@ -205,12 +224,16 @@ object App:
         e.program.toList.map(p => Part.code("the program", p.split("\n").toList, Set.empty)))*)
     }
     // while a question is thought about: its steps where the answer will be, no question form
-    val end: List[Part] = thinking.fold(List(questionForm: Part))(lines => List(steps(lines)))
+    val end: List[Part] = thinking.fold(s.asking.toList.map((q, _) => Part.block("clarify")(Part.text(Clarified.prompt(q)),
+      Part.slot("clarify"))) ++ List(questionForm: Part))(lines => List(steps(lines)))
+    val choices = if thinking.isDefined then Nil
+      else s.asking.toList.flatMap((q, cs) => cs.map(c => Button(Clarified.button(q, c))(Msg.Clarify(q, c): Msg).at("clarify")))
     Screen[Msg]("okay-desk")((top(s) ++ List(modelPart, note, dataNote) ++ log ++ end)*)(
       (List(Button(if s.tables.isEmpty then "Data: open files" else s"Data: ${s.tables.size} open")(Msg.Go("data"): Msg).at("data")) ++
         // (while loading, no other load; while thinking, no question form and no other question)
         (if loading.isDefined || thinking.isDefined then Nil
          else List(Button.submit("Load the model", models, Style.Plain)(Msg.Load(_): Msg))) ++
+        choices ++
         (if thinking.isDefined then Nil else List(Button.submit("Ask", questionForm)(Msg.Ask(_): Msg))))*)
 
   /** THE DATA: the tables open, files or a folder, an address, the examples */

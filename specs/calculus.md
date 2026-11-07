@@ -364,3 +364,17 @@ logits, encode, decode, prompt, a note) and the JVM's sync interface `Reading` w
 `MlxReading` answers by its own MLX methods, `ComputeReading` by the page's `OnQwen` awaited — one line. The
 browser's `OnQwen` was a `Read` handler already (futures through `Async`); so a model is a handler of `Read` on
 every platform, and nothing else.
+
+## 17. The answer as a conclusion (the operator, 2026-11-07, evening)
+
+"Not a retelling of the data — an inference, one sentence that answers the question." `Claims` (calc): a claim is
+what the result lets one CONCLUDE — a count against the whole and its share; the leader with its margin over the
+next and against the average; one figure over n rows, and whose it is for a minimum or a maximum; the first and
+the last of groups and the gap; who is missing, by name when few; what a node reaches. Every figure is derived
+EXACTLY here from the result and the table (the whole counted, the next row and the average by the same engine);
+the model's part is which claim answers the question and the words. Law (`ClaimsSuite`): every gold result has a
+claim, its sentence in both languages states only the claim's figures (cells and derivations), the derivations
+recompute. The page says the claim beside the table ("concluded from the result: every number is a cell of it or
+an exact derivation"). E.g. "4 of 8 orders, that is 50%." — "Only fay of 6 customers has no orders." — "cid has
+the largest amount: 200, 150% more than bob (80); 2.1× the average." — "By sum, bob leads (1080) and dee trails
+(45): a gap of 1035 across 5 customer groups."

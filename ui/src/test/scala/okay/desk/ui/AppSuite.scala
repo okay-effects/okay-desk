@@ -51,7 +51,7 @@ class AppSuite extends munit.FunSuite:
     val t = text(p)
     assert(t.contains("the data: customers, orders"), t)
     assert(t.contains("readers loaded"), t)
-    assert(t.contains("4 rows.") || t.contains("4 записей"), s"the answer in words: $t")
+    assert(t.contains("4 of 8 orders, that is 50%."), s"the answer in words: $t")
     assert(t.contains("n\n-\n4") && t.contains("not generated"), t)
     assertEquals(disk.keys.toList.sorted, List("customers.csv", "orders.csv"))
 
@@ -104,3 +104,34 @@ class ThinkingSuite extends munit.FunSuite:
     val played = Play(steps(answered))
     assertEquals(played.result, Some(Right(gold.gold)))
     assertEquals(played.seen, List("okay-desk", "okay-desk"))
+
+/** THE ABSTENTION AS A DIALOGUE (specs/data.md §30): the readers not sure between two tables — the page offers them
+ * as buttons; the person's choice is written into the question, which is read again and answered; the clarification
+ * kept on the disk as a pair for training */
+class ClarifySuite extends munit.FunSuite:
+  type Row[X] = (Ui + Fetch + Disk + Model)[X]
+  type NoModel[X] = (Ui + Fetch + Disk)[X]
+  type NoDisk[X] = (Ui + Fetch)[X]
+  def csv(t: okay.desk.Table): String = (t.columns +: t.rows.map(_.map(_.text))).map(_.mkString(",")).mkString("\n")
+  val vague = "Which were added in 2025?"
+  val customers2025 = """{"from": "customers", "where": [{"column": "since", "op": "=", "value": 2025}]}"""
+
+  test("not sure: the readings as buttons; a choice reads the question again; the pair kept"):
+    val disk = scala.collection.mutable.Map("orders.csv" -> csv(Sample.orders), "customers.csv" -> csv(Sample.customers))
+    val p = Model.answeredBy[Row, NoModel, Unit](_ => Right("readers loaded"), (_, q) =>
+      if q == vague then Left("not sure: orders or customers")
+      else if q == Clarified.question(vague, "customers") then Right(customers2025)
+      else Left("no program for that"))(App.main[Row](Nil))
+    val kept = Disk.inMemory[NoModel, NoDisk, Unit](disk)(p)
+    val fetchless = handle(kept, Handler.Tail[Fetch, Ui, Unit, Unit](a => pure(a), [X] => (op: Fetch[X]) => op match
+      case Fetch.Call(_, _, _, _, answer) => answer(Response(404))
+      case Fetch.Send(_, _, answer) => answer(Response(404))))
+    val ask = "Ask about the data: how many orders are unpaid? total by customer? …"
+    val played = Play(steps(fetchless), Act.press("Ask", ask -> vague), Act.press("Table customers"))
+    assert(played.problems.isEmpty, played.problems.toString)
+    val shown = played.at.toList.flatMap(_.parts).mkString(" ")
+    assert(shown.contains("I mean customers"), shown)
+    assert(shown.contains("bob") && shown.contains("eve"), s"the customers since 2025: $shown")
+    val line = disk(Clarified.file)
+    assert(line.contains("\"choice\":\"customers\"") || line.contains("\"choice\": \"customers\""), line)
+    assert(!disk.keys.exists(k => k.startsWith(Clarified.prefix) && k != Clarified.file), disk.keys.toString)

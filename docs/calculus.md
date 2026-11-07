@@ -69,9 +69,16 @@ they are asked, each only where the one before was silent (`Fill.first`):
 Strategies are handlers of `Among`: `Strategy.greedy` (first), `Strategy.every` (all), a beam (not built). A
 dialogue is `first` with the person as the outermost source.
 
-## 5. Answers in words
+## 5. Answers in words: a conclusion, not a retelling
 
-The answer grammar (`Answers`) is the same `Rules`: one constructor, the shape of the answer, fixed by the program
+An answer is what the result lets one CONCLUDE (`Claims`): a count against the whole and its share ("4 of 8
+orders, that is 50%"), the leader with its margin over the next and against the average ("cid has the largest
+amount: 200, 150% more than bob; 2.1× the average"), the first and the last of groups and the gap, who is missing
+("Only fay of 6 customers has no orders"), what a node reaches. Every figure is derived exactly from the result
+and the table by the engine; the model's part is which claim answers the question and the words. The law: a
+sentence states only the claim's figures, and the derivations recompute.
+
+Beneath it, the answer grammar (`Answers`) is the same `Rules`: one constructor, the shape of the answer, fixed by the program
 and the result (a count, a scalar, groups, the top row, rows, what a node reaches, what is missing); fact holes
 whose only candidate is a cell of the result; word holes with two or three wordings per slot in each language.
 `Strategy.greedy` over it is one sentence, `Strategy.every` all its wordings; the data fills the facts, a weigh
