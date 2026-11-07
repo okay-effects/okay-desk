@@ -134,3 +134,20 @@ What simplifies at each step down: level 2 drops the strategies (one loop), leve
 the alphabet after a word) and the "exact first" strategy (a singleton alphabet), level 0 drops the words. What
 each level keeps as its own: the laws above. The bus (specs/bus.md) is a level-1 notion: the representation of
 the context from which the chooser is linear per alphabet.
+
+## 8. The one operation as an effect (2026-11-07, after the operator's "хорошо")
+
+The category-theoretic reading made concrete: a hole is a pending OPERATION, and the calculus is an effect of
+okay-scala. `Choose.scala`: one operation `Pick(type, candidates, context): Dist`; a reading is a program of
+`Choose` (`Choose.refine`, the same loop as `Refine.greedy` with the pick performed instead of a fill called); the
+SOURCES are handlers of `Pick` — `Choose.by(fill)` the last one (its opinion is the answer, empty included),
+`Choose.first(fill)` a source that answers when it has an opinion and otherwise FORWARDS the operation to the
+handler outside it (the row `Choose + Choose`: the inner handler leaves the outer effect), `Choose.nobody` no
+source at all. The composition of sources is the nesting of handlers; "the data first, then the model, then a
+person" is three handlers around one program. This is the okay rule — the model's output is data, handlers run
+it — as a theorem rather than a convention, and the free monad over one operation is level 0.
+
+Laws (`ChooseSuite`): the data as the only handler gives the same term and the same abstention as the exact fill
+in function form on the sample's 26 questions; the data first with the oracle outside closes every question to
+its point, and the oracle is asked exactly when the data alone leaves the term open; no source at all is never
+wrong. 26 laws in all for the calculus.
