@@ -11,12 +11,15 @@ import okay.desk.*
 object Pairs:
   final case class Pair(tables: Map[String, Table], question: String, program: String)
 
+  // (the pool wide, so a reader learns a NAME in a question, not these names: the sample's orders and customers are in
+  // it too, as the commonest names of business data — the sample reports, it does not decide)
   private val tableNames = Vector("products", "employees", "invoices", "flights", "tickets", "students", "visits",
-    "shipments", "sales", "reviews", "calls", "bookings")
+    "shipments", "sales", "reviews", "calls", "bookings", "orders", "customers", "payments", "users", "items", "events",
+    "projects", "tasks", "contracts", "deliveries", "countries", "cities")
   private val textCols = Vector("name", "category", "region", "status", "type", "owner", "team", "vendor", "city", "kind")
   private val numCols = Vector("price", "qty", "total", "score", "hours", "weight", "age", "rating", "cost", "count")
   private val words = Vector("alpha", "beta", "gamma", "delta", "north", "south", "east", "west", "open", "closed",
-    "new", "done", "red", "blue", "green", "gold", "silver", "home", "work", "spare")
+    "new", "done", "red", "blue", "green", "gold", "silver", "home", "work", "spare", "paid", "unpaid")
 
   def table(rnd: scala.util.Random, name: String, n: Int): Table =
     val tc = rnd.shuffle(textCols).take(1 + rnd.nextInt(2)); val nc = rnd.shuffle(numCols).take(1 + rnd.nextInt(2))
@@ -56,9 +59,25 @@ object Pairs:
     "calls" -> ("звонки", "звонков", "звонках"), "bookings" -> ("брони", "броней", "бронях"),
     "people" -> ("люди", "людей", "людях"), "accounts" -> ("аккаунты", "аккаунтов", "аккаунтах"),
     "staff" -> ("работники", "работников", "работниках"))
-  /** the table's English name in a Russian question replaced by its Russian one in the case the word before asks */
-  def translated(question: String, names: Iterable[String]): String =
-    names.foldLeft(question) { (q, n) =>
+  /** A COLUMN'S NAME IN RUSSIAN: nominative, genitive, dative ("по городу") — and A VALUE'S (one form): the sample's
+   * "Сколько заказов не оплачено?" and "по каждому клиенту" name a value and a column in Russian; a reader that has
+   * only ever seen the English value in a Russian question copies nothing and reads no condition (§24) */
+  private val russianColumns: Map[String, (String, String, String)] = Map(
+    "category" -> ("категория", "категории", "категории"), "region" -> ("регион", "региона", "региону"),
+    "status" -> ("статус", "статуса", "статусу"), "type" -> ("тип", "типа", "типу"), "owner" -> ("владелец", "владельца", "владельцу"),
+    "team" -> ("команда", "команды", "команде"), "vendor" -> ("поставщик", "поставщика", "поставщику"),
+    "city" -> ("город", "города", "городу"), "kind" -> ("вид", "вида", "виду"), "price" -> ("цена", "цены", "цене"),
+    "qty" -> ("количество", "количества", "количеству"), "total" -> ("итог", "итога", "итогу"), "score" -> ("балл", "балла", "баллу"),
+    "hours" -> ("часы", "часов", "часам"), "weight" -> ("вес", "веса", "весу"), "age" -> ("возраст", "возраста", "возрасту"),
+    "rating" -> ("рейтинг", "рейтинга", "рейтингу"), "cost" -> ("стоимость", "стоимости", "стоимости"), "count" -> ("число", "числа", "числу"))
+  private val russianValues: Map[String, String] = Map("north" -> "север", "south" -> "юг", "east" -> "восток", "west" -> "запад",
+    "open" -> "открыто", "closed" -> "закрыто", "new" -> "новые", "done" -> "готово", "red" -> "красные", "blue" -> "синие",
+    "green" -> "зелёные", "gold" -> "золото", "silver" -> "серебро", "home" -> "дом", "work" -> "работа", "spare" -> "запас",
+    "paid" -> "оплачено", "unpaid" -> "не оплачено")
+  /** the table's English name in a Russian question replaced by its Russian one in the case the word before asks;
+   * `columns` and `values` likewise (a value in one form, after `= ` or `равен `, `это `, or alone) */
+  def translated(question: String, names: Iterable[String], columns: Iterable[String] = Nil, values: Iterable[String] = Nil): String =
+    val withTables = names.foldLeft(question) { (q, n) =>
       russian.get(n).fold(q) { (nom, gen, prep) =>
         q.replaceAll(s"(?U)\\b(в|во)\\s+$n\\b", s"$$1 $prep")
           .replaceAll(s"(?U)\\b(Сколько|Посчитай|для|из|без|нет|Сумма|сумма|Число|Строка)\\s+$n\\b", s"$$1 $gen")
@@ -66,12 +85,43 @@ object Pairs:
           .replaceAll(s"(?U)\\b$n\\b", nom)
       }
     }
+    val withColumns = columns.foldLeft(withTables) { (q, c) =>
+      russianColumns.get(c).fold(q) { (nom, gen, dat) =>
+        q.replaceAll(s"(?U)\\b(по|каждому|каждой|по каждому|по каждой)\\s+$c\\b", s"$$1 $dat")
+          .replaceAll(s"(?U)\\b(Сумма|сумма|Суммарный|Итого|Средний|Средняя величина|Число|в разрезе|для|из|убыванию|убыванию)\\s+$c\\b", s"$$1 $gen")
+          .replaceAll(s"(?U)\\b$c\\b", nom)
+      }
+    }
+    values.foldLeft(withColumns) { (q, v) => russianValues.get(v).fold(q)(r => q.replaceAll(s"(?U)\\b$v\\b", r)) }
   private def q(s: String) = "\"" + s + "\""
 
-  /** one pair: a shape drawn, phrased in `ru` or English */
-  def one(rnd: scala.util.Random, ru: Boolean): Pair =
+  /** A PAIR FROM THE SPACE (§25): random tables, a point of the space over them drawn (`Space.random`), its question
+   * by the grammar (`Phrase`), its program compiled — the pairs are the space × the phrases */
+  def fromSpace(rnd: scala.util.Random, ru: Boolean): Pair =
+    val t = table(rnd, pick(rnd, tableNames), 5 + rnd.nextInt(8))
+    val tc = pick(rnd, t.columns.filter(c => textCols.contains(c)))
+    val had = t.rows.map(_(t.columns.indexOf(tc)).text)
+    val withLookup = rnd.nextInt(10) < 5
+    val more = if withLookup then rnd.shuffle(words.filterNot(had.contains)).take(1 + rnd.nextInt(2)) else Vector.empty
+    val tables = Map(t.name -> t) ++
+      (if withLookup then { val o = lookup(rnd, pick(rnd, Vector("people", "accounts", "staff")), had, more); Map(o.name -> o) } else Map.empty) ++
+      (if rnd.nextInt(10) < 4 then Map("edges" -> edges(rnd)) else Map.empty)
+    val s = Space.Schema(tables)
+    val p = Space.random(rnd, s)
+    Pair(tables, Phrase.say(rnd, p, s, ru), Query.print(Space.compile(p, tables).toOption.get))
+
+  /** one pair: from the space, or by the first templates (`legacy`) */
+  def one(rnd: scala.util.Random, ru: Boolean, legacy: Boolean = false): Pair =
+    if !legacy then fromSpace(rnd, ru) else legacyOne(rnd, ru)
+
+  private def legacyOne(rnd: scala.util.Random, ru: Boolean): Pair =
     val p = one0(rnd, ru)
-    if ru && rnd.nextBoolean() then p.copy(question = translated(p.question, p.tables.keys.filter(_ != "edges"))) else p
+    if !ru then p else
+      // each of the three translated by its own coin: the readers see every mix (a Russian value with English names…)
+      val tables = if rnd.nextBoolean() then p.tables.keys.filter(_ != "edges") else Nil
+      val columns = if rnd.nextBoolean() then p.tables.values.flatMap(_.columns).toSet else Set.empty[String]
+      val values = if rnd.nextBoolean() then p.tables.values.flatMap(_.rows.flatten.map(_.text)).toSet else Set.empty[String]
+      p.copy(question = translated(p.question, tables, columns, values))
 
   private def one0(rnd: scala.util.Random, ru: Boolean): Pair =
     val t = table(rnd, pick(rnd, tableNames), 5 + rnd.nextInt(8))
@@ -167,11 +217,12 @@ object Pairs:
 
   /** pairs whose gold programs run (a check on the generator itself) */
   /** `lang`: the pairs in one language alone — None both, Some(false) English, Some(true) Russian */
-  def many(seed: Long, n: Int, lang: Option[Boolean] = None): Vector[Pair] =
+  def many(seed: Long, n: Int, lang: Option[Boolean] = None, legacy: Boolean = false): Vector[Pair] =
     val rnd = new scala.util.Random(seed)
-    Iterator.continually(one(rnd, lang.getOrElse(rnd.nextBoolean()))).filter { p =>
+    Iterator.continually(one(rnd, lang.getOrElse(rnd.nextBoolean()), legacy)).filter { p =>
       Query.parse(p.program).toOption.exists {
-        case r: Query.Relational => Exact.run(p.tables, r).isRight
-        case l: Query.Logical => Logic.run(p.tables, l).isRight
+        // (a pair whose answer is nothing teaches nothing a reader can check: the space pairs are kept only with rows)
+        case r: Query.Relational => Exact.run(p.tables, r).exists(t => legacy || t.rows.nonEmpty)
+        case l: Query.Logical => Logic.run(p.tables, l).exists(t => legacy || t.rows.nonEmpty)
       }
     }.take(n).toVector

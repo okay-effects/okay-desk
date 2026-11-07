@@ -643,3 +643,71 @@ the sample 11/13, 4/13 — it chose customers for everything), and the pointer w
 Russian table names in half of the Russian pairs (`Pairs.translated`: товары/товаров/товарах by the word before)
 did not move the ru table pointer (60%), so the table pointer is the next reader to improve — a measured number
 now, printed by `Readers.measure`. The translated value is the next pairs' phrasing (§23).
+
+## 25. Bottom-up: the space of meanings over a schema (the operator, 2026-11-07)
+
+The operator's direction: go from Datalog to words, not from words to Datalog — build the full model of the
+Datalog fragment reflected onto the data tables, then map what people ask onto it. Four steps, all built:
+
+1. **`Space`** (core): the fragment as data over a schema. `Schema` reads the data: a column's kind (key, text,
+   number, time), the links the values prove (`orders.customer → customers`), the edge-like tables. `Program` is a
+   point: `Rel` (rows, a link, conditions, a group, an aggregate, an order, a limit), `Absent` (a negation along a
+   link), `Closure`. `compile` takes a point to the `Query` the engines run (the relational query, or
+   `Conjunctive.program`, or the closure rules). `enumerate` walks the space up to a size: one condition (two with
+   a link), one group, one aggregate, one order, a limit of 1/3/5/10; the silly points excluded (a group on a
+   column a condition fixes, an order on one aggregate without groups, an edge-like table as rows). Over the
+   sample: 87,445 programs (16 absences, 14 closures). Laws (`SpaceSuite`): every 97th runs on the engines; EVERY
+   gold program of the 13 is a point of the space (`contains`, up to aliases, the selection, and which number a
+   comparison names). `random` draws a point by the same structure, weighted so the rare shapes appear.
+2. **`Phrase`** (core): the grammar from a point to a question, compositional — one phrase per constructor, several
+   wordings each; Russian declines by the word before (`Phrase.Russian`: tables in four cases, columns in three,
+   values in one), and each kind of name is said in Russian or left in English by its own coin. The pairs are the
+   space × the phrases: `Pairs.fromSpace` (random tables, a point drawn, its phrase, its program compiled), kept
+   only when the answer has rows. The template generator stays as `legacy` (DESK_LEGACY in the bench) for the
+   comparison.
+3. **`Readers.measureByConstructor`**: the whole reading run on held-out pairs and compared with the gold
+   constructor by constructor — kind, table, join, conditions, group, aggregate, order, limit, goal — and whole;
+   the abstentions apart; "wrong above the threshold" = answered and wrong, the number the exactness promise
+   rests on. DESK_CONSTRUCTORS=n in the bench. Coverage of the sample is `SpaceSuite`'s third law.
+4. **Abstention**: when the two best tables are within a margin of log-probability (0.3) and nothing exact decided
+   the table, the reading answers "not sure: A or B" (a step on the page) instead of guessing;
+   `Readers.abstainMargin`, 0 to never abstain.
+
+Before this (the translated values, §24's next phrasing, 2026-11-07 morning): columns and values said in Russian
+in half of the Russian template pairs did NOT move the sample (en 13/13, ru 8/13; "не оплачено" still read as no
+condition) and made the held-out slots a little worse (shape 82%, where 53%) — the template pairs with
+translations are harder and the readers did not learn the translated value as a condition. Recorded, not kept as
+the way; the space pairs are the way, measured below.
+
+**Measured 2026-11-07 (the space pairs, cut19, 2000 pairs, 200 held-out by slot, 100 by constructor).** The road,
+each step a number:
+
+| readers trained on | whole | table | where | group | agg | order | limit | sample en | ru |
+|---|---|---|---|---|---|---|---|---|---|
+| templates (§24, for reference) | — | 61% (pointer) | — | — | — | — | — | 13/13 | 9/13 |
+| the space, compound shape probe | 34% | 83% | 38% | 72% | 59% | 59% | 72% | 7/13 | 4/13 |
+| + readers by constructor | 47% | 97% | 65% | 73% | 59% | 59% | 72% | 11/13 | 4/13 |
+| + wider name pool, closure words, readers decide "largest" | 52% | 99% | 68% | 72% | 65% | 63% | 76% | 11/13 | 4/13 |
+| + the name reader (tokens → tables; 94.5% alone, 96% with meaning) | 57% | 100% | 65% | 70% | 63% | 61% | 72% | 11/13 | 3/13 |
+| + exact rules: a Russian name by the dictionary's stem, the name reader first when sure, the link's direction, "largest" = one row | 57% | 100% | 76% | 92% | 82% | 78% | 92% | 13/13 | 13/13 |
+
+(The per-constructor percentages in the last rows are over the pairs that have the constructor; the earlier rows
+divided by all 100, so they read lower than they were.) The table is read exactly now: the name written in the
+question in either language (the dictionary of the language module, by the stem — the same table of forms the
+phrases are generated from), the link's direction when two tables' columns are named ("Total amount per country":
+the rows are the link's FROM table), the name reader (a pointer from the question's tokens to the tables' names)
+when it is sure, both readers else; the meaning reader alone was biased by a schema (customers on every question
+of the sample). The same dictionary gives the columns ("по городам" → city) and the common values ("не
+оплачено" → unpaid, the negated form only as negated) as exact facts — what §24 tried to teach the readers from
+translated template pairs and could not. The abstention ("not sure: A or B") fired on 6 of 100 held-out pairs
+and 7 of the sample's Russian questions before the exact rules, 0 after.
+
+What the readers alone still read weakest, by constructor: the condition (76%: the value of a translated word,
+a number against the wrong column), the order (78%), the aggregate (82%). The closures are 100%, the kind 100%.
+"Whole" 57% is the product of the parts; a part's gap is now a number per constructor, printed by
+`Readers.measureByConstructor` — the next readers to train are those three.
+
+**Final 2026-11-07, after the exact rules for named tables** (two named with a link → the link's from table; a
+singular names the table unless it is a column of another table; the Russian stem likewise against the
+dictionary's column stems): cut19 en 13/13, ru 13/13; the CORE (the teacher's skill, not retrained on it) en
+13/13, ru 13/13 (was 13/13, 7/13 over §24's thirteen), by constructor on the core whole 54%, abstained 2.

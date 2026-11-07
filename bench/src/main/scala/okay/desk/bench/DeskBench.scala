@@ -69,8 +69,9 @@ object DeskBench:
           if scala.sys.env.contains("DESK_READERS") then model match
             case q3: mlx.llm.Qwen3 =>
               val t1 = System.nanoTime()
-              val readers = MlxReading.ready(chat, q3, scala.sys.env.getOrElse("DESK_LAYER", "20").toInt, repo, Pairs.many(42, scala.sys.env.getOrElse("DESK_PAIRS", "1500").toInt))
-              if !scala.sys.env.contains("DESK_SKIP_MEASURE") then readers.measure(Pairs.many(43, 200))
+              val readers = MlxReading.ready(chat, q3, scala.sys.env.getOrElse("DESK_LAYER", "20").toInt, repo, Pairs.many(42, scala.sys.env.getOrElse("DESK_PAIRS", "1500").toInt, legacy = scala.sys.env.contains("DESK_LEGACY")))
+              if !scala.sys.env.contains("DESK_SKIP_MEASURE") then readers.measure(Pairs.many(43, 200, legacy = scala.sys.env.contains("DESK_LEGACY")))
+              if scala.sys.env.contains("DESK_CONSTRUCTORS") then readers.measureByConstructor(Pairs.many(44, scala.sys.env("DESK_CONSTRUCTORS").toInt, legacy = scala.sys.env.contains("DESK_LEGACY")))
               println(f"readers trained (${(System.nanoTime() - t1) / 1e9}%.0f s)")
               var right = Map("en" -> 0, "ru" -> 0); var fails = Vector.empty[String]
               for (q, i) <- questions.zipWithIndex; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) do

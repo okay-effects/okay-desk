@@ -20,6 +20,31 @@ final class Readers:
   private var shape: Softmax = null
   private var op: Softmax = null
   private var fnProbe: Softmax = null
+  /** THE READERS BY CONSTRUCTOR (§25, step 3): one small probe per constructor of the space, read at the program's
+   * start — the kind (rows, an absence, a closure either way), whether there is a condition and its comparison, a
+   * group, an order and its direction, a limit, a selection. The compound shape probe (one class per combination)
+   * fell to 46% on the space's pairs, and its marginal "some condition" fired on everything */
+  private val parts = scala.collection.mutable.Map.empty[String, Softmax]
+  private val partNames = Vector("kind", "where", "group", "order", "dir", "limit", "select")
+  /** the constructor's classes of a gold program */
+  private def partsOf(program: String, sl: Slots): Map[String, String] =
+    val dir = Query.parse(program).toOption.collect { case Query.Relational(_, _, _, _, _, _, o +: _, _) => if o.desc then "desc" else "asc" }.getOrElse("-")
+    val kind = if sl.shape == "absent" || sl.shape.startsWith("closure") then sl.shape else "rows"
+    Map("kind" -> kind, "where" -> Readers.part(sl.shape, 2), "group" -> Readers.part(sl.shape, 3), "order" -> Readers.part(sl.shape, 4),
+      "dir" -> dir, "limit" -> Readers.part(sl.shape, 5), "select" -> Readers.part(sl.shape, 7))
+  /** the probability a constructor's reading satisfies `p`; the compound probe's marginal when the skill predates the parts */
+  private def partP(name: String, q: Array[Float], shapeProbs: Array[Double], p: String => Boolean): Double =
+    parts.get(name) match
+      case Some(probe) =>
+        val ps = logSoftmax(probe.scores(q)).map(v => math.exp(v.toDouble))
+        probe.classes.zipWithIndex.collect { case (c, i) if p(c) => ps(i) }.sum
+      case None =>
+        val i = partNames.indexOf(name)
+        val of: String => String = name match
+          case "kind" => c => if c == "absent" || c.startsWith("closure") then c else "rows"
+          case "dir" => _ => "-"
+          case _ => c => Readers.part(c, Vector(0, 2, 3, 4, 0, 5, 7)(i))
+        shape.classes.zipWithIndex.collect { case (c, j) if p(of(c)) => shapeProbs(j) }.sum
   val fns = Vector("count", "sum", "avg", "min", "max")
   private def fnPrefix(t: String) = "```json\n{\"from\": \"" + t + "\", \"aggregate\": [{\"fn\": \""
   private val pointers = scala.collection.mutable.Map.empty[String, Pointer]
@@ -72,6 +97,8 @@ final class Readers:
       ps.zip(as).map((a, b) => a + b)
     }
   private var agreedAll = true
+  /** the margin under which the table reading abstains (log-probability); 0 never abstains */
+  var abstainMargin: Float = 0.3f
   /** the program, and whether every slot the two readers both read was read alike */
   def programWith[R[_]: Has[Read]](tables: Map[String, Table], question: String): Option[(String, Boolean)] ! R =
     agreedAll = true
@@ -81,6 +108,37 @@ final class Readers:
   private def valueStart(pr: Prompted, value: String): Option[Int] =
     val at = pr.qText.toLowerCase.indexOf(value.toLowerCase)
     Option.when(at >= 0)(pr.qChars.lastIndexWhere(_ <= at)).filter(_ >= 0)
+
+  /** THE NAME READER (§25): the token of the question that names a table — its English name or a Russian form of it
+   * (`Phrase.Russian.tables`) — for the pointer from the question's TOKENS to the tables' names; the last-token
+   * pointer reads the table by meaning, this one by the name written, in any language */
+  private def nameToken(pr: Prompted, table: String): Option[Int] =
+    val forms = table +: Phrase.Russian.tables.get(table).toVector.flatMap((a, b, c, d) => Vector(a, b, c, d))
+    forms.flatMap(valueStart(pr, _)).headOption
+  /** the tables scored by the name pointer: each table's best question token (log-softmax over the tables) */
+  private def nameScores(qs: Vector[Array[Float]], tks: Vector[Array[Float]]): Array[Float] =
+    val p = pointers("name")
+    val per = qs.map(q => p.scores(q, tks))
+    logSoftmax(Array.tabulate(tks.size)(i => per.map(_(i)).max))
+
+  /** the two table readers' log-probabilities per table, and the question token each table's name score came from */
+  def tableReadings[R[_]: Has[Read]](tables: Map[String, Table], question: String): String ! R =
+    for
+      pr <- prompted(Pairs.Pair(tables, question, ""))
+      ks <- keys(pr).map(_.map(z))
+      last <- Read.states(pr.ids, Vector(pr.ids.length - 1)).map(st => z(st.head))
+      qs <- questionStates(pr).map(_.map(z))
+      pieces <- Read.each(pr.question)(t => Read.decode(Seq(pr.ids(t))))
+    yield
+      val names = tables.keys.toVector.sorted
+      val tks = names.map(n => ks(pr.indexOfTable(n)))
+      val byLast = logSoftmax(pointers("table").scores(last, ks))
+      val byMeaning = logSoftmax(names.map(n => byLast(pr.indexOfTable(n))).toArray)
+      val per = qs.map(q => pointers("name").scores(q, tks))
+      val byName = nameScores(qs, tks)
+      names.zipWithIndex.map { (n, i) =>
+        val tok = per.indices.maxBy(j => per(j)(i))
+        f"$n: meaning ${byMeaning(i)}%.2f name ${byName(i)}%.2f (at '${pieces(tok).trim}')" }.mkString("; ")
 
   def train[R[_]: Has[Read]](pairs: Vector[Pairs.Pair]): Unit ! R =
     for
@@ -103,6 +161,11 @@ final class Readers:
           if name == "shape" then
             shape = Softmax(exs.map(_._2.shape).distinct, d)
             shape.train(qs.zip(exs).map((q, e) => (q, e._2.shape)), steps = 300, lr = 0.05f)
+            val golds = exs.map((p, sl, _) => partsOf(p.program, sl))
+            for part <- partNames do
+              val probe = Softmax(golds.map(_(part)).distinct, d)
+              probe.train(qs.zip(golds).map((q, g) => (q, g(part))), steps = 300, lr = 0.05f)
+              parts(part) = probe
           else
             val p = Pointer(d)
             val slot: Slots => Option[String] = name match
@@ -117,6 +180,20 @@ final class Readers:
             pointers(name) = p
         }
       }
+      // the name pointer: the question token naming the table against the tables' names
+      nameEx <- each(exs.zip(keyStates)) { case ((p, sl, pr), ks) =>
+        nameToken(pr, sl.table).fold(pure[Option[(Array[Float], Vector[Array[Float]], Int)], R](None)) { tok =>
+          questionStates(pr).map { qs =>
+            val names = p.tables.keys.toVector.sorted
+            Some((z(qs(tok)), names.map(n => ks(pr.indexOfTable(n))), names.indexOf(sl.table)))
+          }
+        }
+      }
+      _ =
+        val name = Pointer(d)
+        name.train(nameEx.flatten, steps = 150, lr = 0.05f)
+        pointers("name") = name
+        println(s"  the name reader: ${nameEx.flatten.size} of ${exs.size} pairs name the table in the question")
       // the op and the value's start, on the pairs that have a condition
       withWhere = exs.flatMap { (p, sl, pr) =>
         Query.parse(p.program).toOption.collect { case Query.Relational(_, _, Cond.Cmp(c, o, v) +: _, _, _, _, _, _) => (p, sl, pr, c, o, v.text) }
@@ -157,21 +234,65 @@ final class Readers:
       last <- Read.states(pr.ids, Vector(pr.ids.length - 1)).map(st => z(st.head))
       // the table by the pointer among every name (§24: 61% of the held-out tables; among the tables' names alone or
       // with the model asked at `{"from": "` it read fewer of the sample — a column pointed at falls to the exact rules)
-      ti = pointers("table").predict(last, ks)
+      // the table by BOTH readers: the last-token pointer (by meaning) and the name pointer (by the name written in the
+      // question, in any language), their log-probabilities over the tables summed
+      tableNames = tables.keys.toVector.sorted
+      qs <- if pointers.contains("name") then questionStates(pr).map(_.map(z)) else pure[Vector[Array[Float]], R](Vector.empty)
+      tableScores =
+        val byLast = logSoftmax(pointers("table").scores(last, ks))
+        val tks = tableNames.map(n => ks(pr.indexOfTable(n)))
+        val byMeaning = logSoftmax(tableNames.map(n => byLast(pr.indexOfTable(n))).toArray)
+        // the name reader alone when it is sure (94.5% alone on the held-out; the meaning reader is biased by a schema:
+        // customers on every question of the sample), else both
+        val both = if qs.isEmpty then byMeaning else
+          val byName = nameScores(qs, tks)
+          val sorted = byName.sorted.reverse
+          if sorted.length < 2 || sorted(0) - sorted(1) >= 0.5f then byName else byMeaning.zip(byName).map(_ + _)
+        val all = byLast.clone()
+        for (n, i) <- tableNames.zipWithIndex do all(pr.indexOfTable(n)) = both(i)
+        all
+      ti = tableScores.zipWithIndex.maxBy(_._1)._2
+      // ABSTENTION (§25, step 4): the two best tables within the margin and nothing exact to decide — "not sure" is the
+      // answer, named; the margin is in log-probability (0.3 ≈ the best under 1.35× the second)
+      closeTables =
+        val byTable = tables.keys.toVector.sorted.map(n => (n, tableScores(pr.indexOfTable(n)))).sortBy(-_._2)
+        byTable.take(2) match
+          case Vector((a, sa), (b, sb)) if sa - sb < abstainMargin => Some((a, b))
+          case _ => None
       // EXACT FIRST, for the table too: a table named in the question is the table (the pointer's choice among several
       // named); else the one table a named column belongs to (real data: "GICS Sector" is a column of one table only);
       // else the pointer's
       chosen =
         val lowerQ = question.toLowerCase
-        def mentioned(n: String) = n.length >= 3 && lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*")
+        // a table is named by its name, or by a Russian form of it (the language module's dictionary, by the stem)
+        // (a table is named in the singular too: "the largest unpaid order" names orders)
+        // — but not when the singular is a COLUMN of another table ("Total amount by customer": the column customer of
+        // orders, not the table customers), in Russian likewise by the dictionary's stems
+        def columnElsewhere(n: String, word: String) = tables.values.exists(t => t.name != n && t.columns.exists(_.equalsIgnoreCase(word)))
+        def columnStemElsewhere(n: String, stem: String) = tables.values.exists(t => t.name != n &&
+          t.columns.exists(c => Phrase.Russian.columns.get(c).exists((nom, _, _) => nom.startsWith(stem))))
+        def mentioned(n: String) = n.length >= 3 && (lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*") ||
+          n.length >= 4 && n.toLowerCase.endsWith("s") && !columnElsewhere(n, n.dropRight(1)) &&
+            lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase.dropRight(1))}\\b.*") ||
+          Phrase.Russian.tables.get(n).exists((nom, _, _, _) => !columnStemElsewhere(n, nom.dropRight(1)) &&
+            lowerQ.matches(s"(?U).*\\b${nom.dropRight(1)}\\p{L}{0,5}\\b.*")))
         val byName = tables.keys.toVector.sorted.filter(mentioned)
+        val links = Space.Schema(tables).links
         val byColumn = tables.values.toVector.sortBy(_.name).filter(t => t.columns.exists(mentioned)).map(_.name)
         val pointed = Option.when(ti < names.size)(names(ti)).filter(tables.contains)
         // "customers with no orders": the table after the negation word is the absent one, not the target
         val negated = byName.filter(n => lowerQ.matches(s"(?U).*\\b(no|without|без|нет)\\s+${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*"))
         val targets = if negated.nonEmpty && byName.size > negated.size then byName.filterNot(negated.contains) else byName
-        val c0 = pointed.filter(targets.contains).orElse(targets.headOption)
-          .orElse(if byColumn.size == 1 then byColumn.headOption else pointed.filter(byColumn.contains).orElse(pointed).orElse(byColumn.headOption))
+        // two tables named and the data links them: the rows are the link's FROM table ("Сумма заказов по каждому
+        // клиенту": orders, joined to customers) — unless the question negates one (an absence, above)
+        val byLink = if negated.isEmpty && targets.size == 2 then links.find(l => targets.contains(l.from) && targets.contains(l.to)).map(_.from) else None
+        val c0 = byLink.orElse(pointed.filter(targets.contains)).orElse(targets.headOption)
+          // columns of two tables named and the data links them (orders.customer → customers): the rows are the link's
+          // FROM table, the other is joined — "Total amount per country"
+          .orElse(if byColumn.size == 1 then byColumn.headOption
+            else if byColumn.size == 2 then links.find(l => byColumn.contains(l.from) && byColumn.contains(l.to)).map(_.from)
+              .orElse(pointed.filter(byColumn.contains).orElse(pointed).orElse(byColumn.headOption))
+            else pointed.filter(byColumn.contains).orElse(pointed).orElse(byColumn.headOption))
         // an absence read on the wrong side ("Какие клиенты без заказов?" read as orders): the target is the table the
         // read one's rows point INTO when none points into the read one
         def into(a: Table, b: Table): Boolean = a.rows.nonEmpty && { val keys = b.rows.map(_(0).text).toSet
@@ -185,13 +306,19 @@ final class Readers:
       how = chosen.map { t =>
         val lowerQ = question.toLowerCase
         def mentioned(n: String) = n.length >= 3 &&
-          lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*")
+          lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*") ||
+          Phrase.Russian.tables.get(n).exists((nom, _, _, _) => lowerQ.matches(s"(?U).*\\b${nom.dropRight(1)}\\p{L}{0,5}\\b.*"))
         if mentioned(t) then "named in the question"
         else if tables(t).columns.exists(mentioned) then "it has a column the question names"
         else "read from the model's state"
       }
       _ <- Read.note(chosen.fold("no table found for the question")(t => s"the table: $t (${how.get})"))
-      result <- chosen.fold(pure[Either[String, String], R](Left("no table read")))(t => assemble(tables, question, pr, ks, t))
+      result <- chosen match
+        case Some(t) if closeTables.exists((a, b) => how.contains("read from the model's state") && (t == a || t == b)) =>
+          val (a, b) = closeTables.get
+          Read.note(s"not sure which table the question means: $a or $b — ask again naming it").map(_ => Left(s"not sure: $a or $b"))
+        case Some(t) => assemble(tables, question, pr, ks, t)
+        case None => pure[Either[String, String], R](Left("no table read"))
       _ <- Read.note(result.fold(why => s"no program: $why", _ => "the program assembled — the exact engine runs it"))
     yield result
 
@@ -223,8 +350,17 @@ final class Readers:
     val qWords = "(?U)[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*".r.findAllIn(question).map(_.replaceAll("[.'-]+$", "")).toVector
     val grams: Set[String] = (1 to 4).flatMap(k => if qWords.size >= k then qWords.sliding(k).map(_.mkString(" ")) else Nil).toSet
     val gramsLower = grams.map(_.toLowerCase)
+    def russianStem(w: String) = if w.length <= 3 then w else w.dropRight(if w.length > 4 then 2 else 1)
     def inQuestion(v: String): Boolean =
-      !Readers.stop(v.toLowerCase) && (if v.length <= 3 && v.forall(_.isUpper) then grams(v) else gramsLower(v.toLowerCase))
+      !Readers.stop(v.toLowerCase) && (if v.length <= 3 && v.forall(_.isUpper) then grams(v) else gramsLower(v.toLowerCase)) ||
+        // a value's Russian form from the dictionary, by its stem — a negated form ("не оплачено") only as negated, and
+        // the plain form not inside the negated one ("оплачено" is not in "не оплачено")
+        Phrase.Russian.values.get(v).exists { form =>
+          val stem = form.split(" ").map(russianStem).mkString(" ")
+          val pattern = s"(?U).*\\b$stem\\p{L}{0,5}\\b.*"
+          if form.startsWith("не ") then lower.matches(pattern) || lower.matches(pattern.replace("не ", "не"))
+          else lower.matches(pattern) && !lower.matches(s"(?U).*\\bне ?$stem\\p{L}{0,5}\\b.*")
+        }
     val found: Vector[(Table, String, String)] = tables.values.toVector.flatMap { o =>
       o.columns.zipWithIndex.flatMap { (c, i) =>
         o.rows.map(_(i).text).distinct.filter(v => (v.length >= 3 && !v.forall(_.isDigit) || v.length >= 2 && v.forall(_.isUpper) ||
@@ -248,8 +384,10 @@ final class Readers:
     // EXACT FIRST: a column named in the question (its name, a word of 3+ letters) is the column — the readers decide
     // only among what the question does not name (a translation: "по городам" for city)
     // (a column is named by its name, or its name's plural or singular: "values" names Value, "orders" an order column)
+    // (or by a Russian form of the column's name — the language module's dictionary, by the stem: "по городам" names city)
     val named = cols.filter((_, c) => c.length >= 3 && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase)}(s|es)?\\b.*") ||
-      c.length >= 4 && c.toLowerCase.endsWith("s") && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase.dropRight(1))}\\b.*"))
+      c.length >= 4 && c.toLowerCase.endsWith("s") && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase.dropRight(1))}\\b.*") ||
+      Phrase.Russian.columns.get(c).exists((nom, _, _) => lower.matches(s"(?U).*\\b${russianStem(nom)}\\p{L}{0,5}\\b.*")))
     val used = scala.collection.mutable.Set.empty[String]
     def column(slot: String): Option[String] ! R =
       val prefix = prefixes.find(_._1 == slot).get._2(table)
@@ -335,13 +473,17 @@ final class Readers:
         // THE SHAPE AS SEPARATE DECISIONS, each exact where the question says it, read where it does not: the probe's
         // marginals over its compound classes are the fallback
         val probs = probeScores.map(v => math.exp(v.toDouble))
-        def marginal(p: String => Boolean): Double = shape.classes.zipWithIndex.collect { case (c, i) if p(c) => probs(i) }.sum
-        val closure = marginal(_.startsWith("closure")) > 0.5 || word("reach*", "depend*", "lead*", "достиж*", "завис*", "вед*", "доход*")
-        val closureTo = (word("reach", "reaches", "lead*", "ведут", "ведёт", "доход*") && !word("reachable", "достижим*"))
+        def partIs(name: String)(p: String => Boolean): Double = partP(name, shapeQ, probs, p)
+        val closure = partIs("kind")(_.startsWith("closure")) > 0.5 || word("reach*", "depend*", "lead*", "достиж*", "завис*", "вед*", "доход*")
+        // the closure's direction: FROM the node where the question asks what it depends on, reaches, where it leads;
+        // TO it where it asks what reaches or leads to it; the reader where no word says
+        val closureFromWords = word("depend*", "reachable", "where does", "завис*", "достижим*", "куда")
+        val closureTo = !closureFromWords && (word("reach*", "lead*", "ведут", "ведёт", "доход*", "достига*", "кто") ||
+          partIs("kind")(_ == "closure-to") > partIs("kind")(_ == "closure-from"))
           // ABSENCE (§24): "customers with no orders", "без заказов" — the rows of this table that no row of another names;
           // needs another table with a column into this one's first (the reverse of a join); the probe where no word says it
           val absent = reverse.nonEmpty && (word("without", "never", "lacking", "без", "нет", "не встреча*") ||
-            lower.matches("(?U).*\\bno\\b.*") || marginal(_ == "absent") > 0.5)
+            lower.matches("(?U).*\\bno\\b.*") || partIs("kind")(_ == "absent") > 0.5)
           val fnProbeScores = logSoftmax(fnProbe.scores(fnQ))
         val fnByReaders = (fns :+ "-")(fnProbeScores.zipWithIndex.map((s, i) => (if i < fns.size then s + fnAsk(i) else s, i)).maxBy(_._1)._2)
         val topN = word("top", "топ", "three", "five", "ten", "три", "пять", "десять")
@@ -354,20 +496,22 @@ final class Readers:
           else if word("average", "mean", "средн*") then "avg"
           else if topN && !perEach then "-"
           else if word("total", "sum of", "сумм*", "итого") then "sum"
-          else if word("largest", "highest", "maximum", "самый больш*", "наибольш*", "максим*") && !perEach then "-"
+          // ("the largest X" is an order with a limit OR a maximum: the readers decide, trained on both phrasings)
           else fnByReaders
-        val hasGroup = fn == "growth" || perEach || word("by") && fn != "-" || (fn != "-" && fn != "count" && marginal(c => Readers.part(c, 3) == "group") > 0.5)
-        val hasOrder = fn == "growth" || word("largest", "smallest", "highest", "lowest", "descending", "first", "top", "самы*", "наибольш*", "по убыван*", "по возраст*", "топ") || marginal(c => Readers.part(c, 4) == "order") > 0.6
-        val hasLimit = fn == "growth" || topN || (word("largest", "smallest", "highest", "самый", "наибольш*") && fn == "-" && !hasGroup) || marginal(c => Readers.part(c, 5) == "limit") > 0.6
-        val hasSelect = marginal(c => Readers.part(c, 7) == "select") > 0.5
+        val hasGroup = fn == "growth" || perEach || word("by") && fn != "-" || (fn != "-" && partIs("group")(_ == "group") > 0.5)
+        val hasOrder = fn == "growth" || word("largest", "smallest", "highest", "lowest", "descending", "first", "top", "самы*", "наибольш*", "по убыван*", "по возраст*", "топ") || partIs("order")(_ == "order") > 0.5
+        // ("the largest X" with no aggregate is one row: exact; a maximum has fn from the readers, so this does not fire)
+        val hasLimit = fn == "growth" || topN || (word("largest", "smallest", "highest", "lowest", "самый", "наибольш*", "наимен*") && fn == "-" && !hasGroup) || partIs("limit")(_ == "limit") > 0.5
+        val hasSelect = partIs("select")(_ == "select") > 0.5
         // a number with a comparison word is a condition on a numeric column
         val numberCond = "\\d+(?:\\.\\d+)?".r.findFirstIn(question).filter(_ => word("over", "above", "more than", "greater", "больше", "выше", "свыше", "below", "under", "less than", "меньше", "ниже", "до"))
-        val hasWhere = fact.isDefined || numberCond.isDefined || marginal(c => Readers.part(c, 2) != "-") > 0.3
+        val hasWhere = fact.isDefined || numberCond.isDefined || partIs("where")(_ != "-") > 0.5
+        val descByReader = parts.contains("dir") && partIs("dir")(_ == "desc") >= partIs("dir")(_ == "asc")
         val sh = if absent then Vector("absent") else if closure then Vector(if closureTo then "closure-to" else "closure-from")
           else Vector("rel", fn, if hasWhere then "=" else "-", if hasGroup then "group" else "-", if hasOrder then "order" else "-",
             if hasLimit then "limit" else "-", "-", if hasSelect then "select" else "-")
-        (sh, fn, hasGroup, hasOrder, numberCond, timeCol)
-      (sh, fn, hasGroup, hasOrder, numberCond, timeCol) = decided
+        (sh, fn, hasGroup, hasOrder, numberCond, timeCol, descByReader)
+      (sh, fn, hasGroup, hasOrder, numberCond, timeCol, descByReader) = decided
       _ <- Read.note("the form of the answer: " + Readers.form(sh))
       result <-
         if sh.head == "absent" then
@@ -426,6 +570,7 @@ final class Readers:
               if asc && !desc then pure[Boolean, R](true)
               else if desc then pure[Boolean, R](false)
               else if !hasOrder then pure[Boolean, R](false)
+              else if parts.contains("dir") then pure[Boolean, R](!descByReader)
               else ask(pr, "```json\n{\"from\": \"" + table + "\", \"order\": [\"", Vector("-", orderCol.orElse(aggCol).getOrElse("x")))
                 .map(scores => scores(1) > scores(0))
             first <- whereCol.fold(pure[Option[String], R](None)) { c =>
@@ -477,10 +622,55 @@ final class Readers:
             Right(withJoin.mkString("{", ", ", "}"))
     yield result
 
+  /** THE READERS MEASURED BY CONSTRUCTOR (§25, step 3): the whole reading run on held-out pairs, the program read
+   * compared with the gold constructor by constructor — the kind (rows, an absence, a closure), the table, the
+   * conditions, the group, the aggregate, the order, the limit — and whole; the abstentions counted apart, and the
+   * WRONG ABOVE THE THRESHOLD (answered, and wrong) is the number the exactness promise rests on */
+  def measureByConstructor[R[_]: Has[Read]](pairs: Vector[Pairs.Pair]): Unit ! R =
+    val right = scala.collection.mutable.Map.empty[String, Int].withDefaultValue(0)
+    val total = scala.collection.mutable.Map.empty[String, Int].withDefaultValue(0)
+    var abstained = 0; var whole = 0; var failed = 0
+    val shown = scala.collection.mutable.Map.empty[String, Int].withDefaultValue(0)
+    def parts(q: Query): Map[String, String] = q match
+      case Query.Relational(from, join, where, group, aggs, _, order, limit) =>
+        val aliases = aggs.map(a => a.as -> a.fn).toMap
+        Map("kind" -> "rows", "table" -> from, "join" -> join.map(_.table).getOrElse("-"),
+          "where" -> where.map { case Cond.Cmp(c, op, v) => s"$c $op ${v.text}"; case w => w.toString }.sorted.mkString(";"),
+          "group" -> group.mkString(","), "agg" -> aggs.map(a => s"${a.fn} ${a.column}").mkString(","),
+          "order" -> order.map(o => s"${if o.desc then "-" else ""}${aliases.getOrElse(o.column, o.column)}").mkString(","), "limit" -> limit.fold("-")(_.toString))
+      case Query.Logical(rules, goal) =>
+        if rules.contains(" not ") then
+          Map("kind" -> "absent", "table" -> "\\w+\\(.*?\\)\\s*:-\\s*(\\w+)\\(".r.findFirstMatchIn(rules).map(_.group(1)).getOrElse("-"),
+            "where" -> "(V\\w+ [<>=!]+ [^,.]+)".r.findAllMatchIn(rules).map(_.group(1)).toVector.sorted.mkString(";"))
+        else Map("kind" -> "closure", "table" -> "goal", "goal" -> goal.replaceAll("\\s", ""))
+    val keys = Vector("kind", "table", "join", "where", "group", "agg", "order", "limit", "goal")
+    for
+      _ <- each(pairs) { p =>
+        program(p.tables, p.question).map {
+          case Left(_) => abstained += 1
+          case Right(text) =>
+            (Query.parse(text).toOption.map(parts), Query.parse(p.program).toOption.map(parts)) match
+              case (Some(got), Some(gold)) =>
+                for k <- keys if gold.contains(k) || got.contains(k) do
+                  total(k) += 1
+                  if got.getOrElse(k, "-") == gold.getOrElse(k, "-") then right(k) += 1
+                  else if shown(k) < 3 then
+                    shown(k) += 1
+                    println(s"    $k: ${p.question} → got ${got.getOrElse(k, "-")}, gold ${gold.getOrElse(k, "-")}")
+                if keys.forall(k => got.getOrElse(k, "-") == gold.getOrElse(k, "-")) then whole += 1
+              case _ => failed += 1
+        }
+      }
+    yield
+      val n = pairs.size
+      println(f"  by constructor on $n held-out pairs: whole ${whole * 100.0 / n}%.1f%%, abstained $abstained, unparsable $failed, " +
+        f"wrong above the threshold ${(n - abstained - whole) * 100.0 / n}%.1f%%; " +
+        keys.filter(total.contains).map(k => f"$k ${right(k) * 100.0 / total(k)}%.0f%% (${total(k)})").mkString(", "))
+
   /** the readers measured on held-out pairs, slot by slot: the pointer alone against the pointer with ask — so a
    * change is judged on 200 pairs, not on the bench's 12 questions */
   def measure[R[_]: Has[Read]](pairs: Vector[Pairs.Pair]): Unit ! R =
-    var shapeRight = 0; var tableRight = 0; var tableRu = 0; var tableRuRight = 0; var tableBothRight = 0; var tableAmong = 0
+    var shapeRight = 0; var tableRight = 0; var tableRu = 0; var tableRuRight = 0; var tableBothRight = 0; var tableAmong = 0; var tableByName = 0; var tableByBoth = 0
     val right = scala.collection.mutable.Map.empty[String, (Int, Int, Int, Int)].withDefaultValue((0, 0, 0, 0))
     for
       exs <- each(pairs.flatMap(p => slots(p.program).map(sl => (p, sl))))((p, sl) => prompted(p).map(pr => (p, sl, pr)))
@@ -497,6 +687,14 @@ final class Readers:
             if ru then { tableRu += 1; if ok then tableRuRight += 1 }
           names = p.tables.keys.toVector.sorted
           _ = if names.lift(pointers("table").predict(last, names.map(n => ks(pr.indexOfTable(n))))).contains(sl.table) then tableAmong += 1
+          qs <- if pointers.contains("name") then questionStates(pr).map(_.map(z)) else pure[Vector[Array[Float]], R](Vector.empty)
+          _ =
+            if qs.nonEmpty then
+              val tks = names.map(n => ks(pr.indexOfTable(n)))
+              val byName = nameScores(qs, tks)
+              if names(byName.zipWithIndex.maxBy(_._1)._2) == sl.table then tableByName += 1
+              val byMeaning = logSoftmax(names.map(n => logSoftmax(pointers("table").scores(last, ks))(pr.indexOfTable(n))).toArray)
+              if names(byMeaning.zip(byName).map(_ + _).zipWithIndex.maxBy(_._1)._2) == sl.table then tableByBoth += 1
           tb <- tableBoth(pr, last, ks, names)
           _ = if names(tb.zipWithIndex.maxBy(_._1)._2) == sl.table then tableBothRight += 1
           sq <- query(pr, prefixes.head._2(sl.table)).map(z)
@@ -520,7 +718,7 @@ final class Readers:
           }
         yield ()
       }
-    yield println(f"  measured on ${exs.size} held-out pairs: table pointer ${tableRight * 100.0 / exs.size}%.1f%% (ru ${tableRuRight * 100.0 / math.max(tableRu, 1)}%.1f%% of $tableRu) among the tables ${tableAmong * 100.0 / exs.size}%.1f%% with ask ${tableBothRight * 100.0 / exs.size}%.1f%%; shape ${shapeRight * 100.0 / exs.size}%.1f%%; " +
+    yield println(f"  measured on ${exs.size} held-out pairs: table pointer ${tableRight * 100.0 / exs.size}%.1f%% (ru ${tableRuRight * 100.0 / math.max(tableRu, 1)}%.1f%% of $tableRu) among the tables ${tableAmong * 100.0 / exs.size}%.1f%% with ask ${tableBothRight * 100.0 / exs.size}%.1f%% by the name ${tableByName * 100.0 / exs.size}%.1f%% meaning+name ${tableByBoth * 100.0 / exs.size}%.1f%%; shape ${shapeRight * 100.0 / exs.size}%.1f%%; " +
       right.toVector.sortBy(_._1).map((k, v) => f"$k pointer ${v._2 * 100.0 / v._1}%.0f%% ask ${v._3 * 100.0 / v._1}%.0f%% both ${v._4 * 100.0 / v._1}%.0f%% (${v._1})").mkString(", "))
 
   // ---- the readers as bytes (a skill is a file, read on the JVM and in the browser alike): a header, then named
@@ -537,6 +735,8 @@ final class Readers:
     line(s"readers ${mean.length} ${pointers.size}")
     tensor("mean", mean); tensor("std", std); tensor("scale", Array(scale))
     probe("shape", shape); probe("op", op); probe("fn", fnProbe)
+    line(s"parts ${parts.size}")
+    for (k, p) <- parts.toVector.sortBy(_._1) do { line(s"part $k"); probe(k, p) }
     for (k, p) <- pointers.toVector.sortBy(_._1) do
       line(s"pointer $k ${p.wq.length}"); tensor(s"$k.wq", p.wq.flatten); tensor(s"$k.wk", p.wk.flatten); tensor(s"$k.none", p.none)
     out.toByteArray
@@ -563,8 +763,16 @@ final class Readers:
     val d = head(1).toInt; val n = head(2).toInt
     mean = tensor(); std = tensor(); scale = tensor()(0)
     shape = probe(); op = probe(); fnProbe = probe()
-    for _ <- 1 to n do
-      val h = line().split(" "); val k = h(1); val rows = h(2).toInt
+    // the constructors' probes, when the skill has them (a line "parts k"); else the next line is a pointer's
+    parts.clear()
+    var pending = line()
+    if pending.startsWith("parts ") then
+      for _ <- 1 to pending.split(" ")(1).toInt do
+        val name = line().split(" ")(1)
+        parts(name) = probe()
+      pending = line()
+    for i <- 1 to n do
+      val h = (if i == 1 then pending else line()).split(" "); val k = h(1); val rows = h(2).toInt
       val wq = tensor(); val wk = tensor(); val none = tensor()
       val p = Pointer(d, rows)
       wq.grouped(d).zipWithIndex.foreach((row, i) => row.copyToArray(p.wq(i))); wk.grouped(d).zipWithIndex.foreach((row, i) => row.copyToArray(p.wk(i)))
@@ -606,5 +814,7 @@ object Readers:
     def programWith(tables: Map[String, Table], question: String): Option[(String, Boolean)] =
       Read.run(readers.programWith[Read](tables, question), reading)
     def measure(pairs: Vector[Pairs.Pair]): Unit = Read.run(readers.measure[Read](pairs), reading)
+    def measureByConstructor(pairs: Vector[Pairs.Pair]): Unit = Read.run(readers.measureByConstructor[Read](pairs), reading)
+    def tableReadings(tables: Map[String, Table], question: String): String = Read.run(readers.tableReadings[Read](tables, question), reading)
     def bytes: Array[Byte] = readers.bytes
     def load(bytes: Array[Byte]): Unit = readers.load(bytes)

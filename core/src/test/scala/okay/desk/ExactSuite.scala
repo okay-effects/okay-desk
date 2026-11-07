@@ -80,18 +80,20 @@ class ConjunctiveSuite extends munit.FunSuite:
 
 class AbsentPairsSuite extends munit.FunSuite:
   test("the generated absent pairs: the slots read the shape and the table, the answer is the keys the first table lacks"):
-    val ps = skill.Pairs.many(7, 400).filter(_.program.contains(" not "))
-    assert(ps.size > 30, s"${ps.size} absent pairs of 400")
+    val ps = skill.Pairs.many(7, 600).filter(p => p.program.contains(" not ") && !p.program.matches("(?s).*V\\w+ [<>=] .*"))
+    assert(ps.size >= 15, s"${ps.size} absent pairs of 600")
     for p <- ps do
       val sl = skill.Probes.slots(p.program).get
       assertEquals(sl.shape, "absent")
       val l = Query.parse(p.program).toOption.get.asInstanceOf[Query.Logical]
       val got = Logic.run(p.tables, l).toOption.get.rows.map(_.head.text).toSet
-      val other = p.tables(sl.table); val first = p.tables.values.find(_.name != sl.table).get
-      // the key column: one whose values all name rows of the other (two may, by the shared word pool)
-      val keyCols = first.columns.indices.filter(c => first.rows.forall(r => other.rows.exists(_.head.text == r(c).text)))
-      val expected = keyCols.map(k => other.rows.map(_.head.text).filterNot(first.rows.map(_(k).text).toSet).toSet)
-      assert(expected.contains(got), s"$got not among $expected")
+      // the other table and its key column from the rule `has(V) :- other(…V…)`; the target's key is its first column
+      val Has = "(?s).*has\\((V\\w+)\\)\\s*:-\\s*(\\w+)\\(([^)]*)\\).*".r
+      val Has(v, otherName, vars) = l.rules: @unchecked
+      val other = p.tables(otherName); val target = p.tables(sl.table)
+      val k = vars.split(",").map(_.trim).indexOf(v)
+      val expected = target.rows.map(_.head.text).filterNot(other.rows.map(_(k).text).toSet).toSet
+      assertEquals(got, expected)
       assert(got.nonEmpty)
 
 class TranslatedSuite extends munit.FunSuite:
@@ -102,3 +104,9 @@ class TranslatedSuite extends munit.FunSuite:
     assertEquals(skill.Pairs.translated("Сколько строк в products?", Seq("products")), "Сколько строк в товарах?")
     assertEquals(skill.Pairs.translated("Какие people без products?", Seq("products", "people")), "Какие люди без товаров?")
     assertEquals(skill.Pairs.translated("Сумма qty по city из sales.", Seq("sales")), "Сумма qty по city из продаж.")
+  test("columns and values translated too: by the word before for a column, one form for a value"):
+    assertEquals(skill.Pairs.translated("Сколько products с status = unpaid?", Seq("products"), Seq("status"), Seq("unpaid")),
+      "Сколько товаров с статус = не оплачено?")
+    assertEquals(skill.Pairs.translated("Сумма price по каждому city.", Nil, Seq("price", "city"), Nil), "Сумма цены по каждому городу.")
+    assertEquals(skill.Pairs.translated("Какие sales с region = north?", Seq("sales"), Seq("region"), Seq("north")),
+      "Какие продажи с регион = север?")
