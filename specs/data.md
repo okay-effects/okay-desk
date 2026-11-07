@@ -873,3 +873,29 @@ again → the customers since 2025 on the screen → the pair on the disk.
 
 Not yet: a dialogue for the other hesitations (a column, a value) — the readers abstain only on the table so far;
 the refusals outside the fragment (§28) offer no choice, only the reason.
+
+## 31. Can the compatibility layer be a matrix? Yes — and the test is too easy (2026-11-07)
+
+okay-inlay specs/bus.md §6's first test. `BusAdapter` (bench): the readers run on the reference (cut19, bus v1 =
+layer 19) over 400 training questions, every state they ask for recorded (9,916 reading points in 2,019 reads);
+Qwen3-1.7B's states at the same token positions (the same tokenizer), layers 16/19/22; ridge regression to bus v1
+(λ 0.1 of the mean diagonal, centred), the best layer by held-out R²; then the reference skill file UNCHANGED read
+through the map.
+
+| Qwen3-1.7B, the skill unchanged | R² | sample en / ru | held-out whole | abstained | wrong |
+|---|---|---|---|---|---|
+| through the map (layer 19; 16: 0.891, 22: 0.905) | 0.906 | 13/13, 13/13 | 95.3% | 0 | 4.7% |
+| CONTROL: the states replaced by one constant | — | 13/13, 13/13 | 91.3% | 13 | 4.3% |
+| for reference: cut19 itself | — | 13/13, 13/13 | 97.7% | 0 | 2.3% |
+
+A linear map carries the bus: 0.906 of the variance, and the skill reads a model it was never trained on as well
+as its own, less two points. BUT the control says how little of this measure the states decide: with no state at
+all, the exact rules (§27–§29) and the model's own logits (ask) read 91% whole and the whole sample — the states
+add 4 points, mostly the 13 abstentions (a table never named, a closure's goal). The sample and the generator's
+pairs name almost everything; they no longer test the bus. A bus test needs questions the rules cannot decide: a
+table or a column not named and not in the dictionary, a value only translated, a judgement ("the largest unpaid
+order" as a row or a maximum) — measured with and without the states, the gain being the bus's.
+
+Next for the bus: such a set (from the space: points whose phrasing names neither the table nor the columns), the
+map and the control on it, then Qwen3.5-0.8B (another family: another tokenizer — the reading points mapped by
+characters, specs/bus.md L0).

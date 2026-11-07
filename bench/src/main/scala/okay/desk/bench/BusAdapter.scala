@@ -123,6 +123,13 @@ object BusAdapter:
     // 1. the reading points: the readers run on the reference, every state asked recorded
     val (tChat, tModel) = load(teacherRepo)
     val skill = MlxReading.ready(tChat, tModel, 19, teacherRepo, sys.error("no skill file for the reference"))
+    // THE CONTROL (DESK_ADAPTER_CONTROL=1): the states replaced by one constant vector — what the exact rules and the
+    // model's own logits (ask) read with no state at all; the map's gain is the difference
+    if sys.env.contains("DESK_ADAPTER_CONTROL") then
+      val (sChat, sModel) = load(sourceRepo)
+      val zero = Ridge(Array.fill(2048)(0.0), Array.fill(1024)(0.0), Array.fill(2048, 1024)(0.0))
+      evaluate(skill, Mapped(MlxReading(sChat, sModel, layers.head), zero), s"$sourceRepo, the states replaced by a constant")
+      return
     val rec = Recording(MlxReading(tChat, tModel, 19))
     val reader = Readers.On(skill.readers, rec)
     val train = Pairs.many(46, n)
@@ -150,13 +157,17 @@ object BusAdapter:
     val (best, map, score) = fits.maxBy(_._3)
     println(f"the map: $sourceRepo layer $best → bus v1 (cut19 layer 19), R² $score%.3f")
     // 4. the skill unchanged, read through the map
-    val mapped = Readers.On(skill.readers, Mapped(MlxReading(sChat, sModel, best), map))
+    evaluate(skill, Mapped(MlxReading(sChat, sModel, best), map), s"$sourceRepo through the map")
+
+  /** the sample and the held-out pairs read by the skill unchanged on a reading */
+  def evaluate(skill: Readers.On, reading: Reading, what: String): Unit =
+    val mapped = Readers.On(skill.readers, reading)
     var right = Map("en" -> 0, "ru" -> 0)
     for (q, i) <- Sample.questions.zipWithIndex; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) do
       val gold = Sample.run(Query.parse(q.gold).toOption.get).toOption.get
       val got = mapped.program(Sample.tables, text)
       if got.flatMap(Query.parse).flatMap(Sample.run).exists(Sample.same(_, gold)) then right = right.updated(lang, right(lang) + 1)
       else println(s"  [$lang ${i + 1}] ${got.fold(e => s"($e)", identity)}")
-    println(s"$sourceRepo through the map, the skill unchanged | en: ${right("en")}/${Sample.questions.size} | " +
+    println(s"$what, the skill unchanged | en: ${right("en")}/${Sample.questions.size} | " +
       s"ru: ${right("ru")}/${Sample.questions.size}")
     mapped.measureByConstructor(Pairs.many(44, sys.env.getOrElse("DESK_CONSTRUCTORS", "300").toInt))
