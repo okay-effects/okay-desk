@@ -25,6 +25,8 @@ lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
       "io.github.okay-effects" %%% "okay-scala" % "0.1.1",
       "io.github.okay-effects" %%% "okay-effects-json-value" % "0.1.1",
       "org.scalameta" %%% "munit" % "1.2.3" % Test))
+  // the JS tests on the page's regular expressions (ES2018: (?U), lookbehind), so a rule that differs in the browser fails here
+  .jsSettings(scalaJSLinkerConfig ~= { _.withESFeatures(_.withESVersion(org.scalajs.linker.interface.ESVersion.ES2018)) })
 
 /** THE DESK AS AN OKAY-UI PROGRAM (specs/data.md §16): the screen, the messages, the effects `Model` and okay-http's
  * `Fetch` — plain data; played by a test script on the JVM, drawn by okay-ui's DOM face in the page */

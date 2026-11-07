@@ -17,6 +17,9 @@ final class Readers:
   private var mean: Array[Float] = Array.empty; private var std: Array[Float] = Array.empty; private var scale = 1f
   private def z(x: Array[Float]): Array[Float] =
     Array.tabulate(x.length)(i => math.max(-4f, math.min(4f, (x(i) - mean(i)) / std(i))) * scale)
+  /** the data's own words (§29): a dataset's names in another language, read as exact facts beside the generator's
+   * dictionary; none unless the data brings them */
+  var words: Words = Words.none
   private var shape: Softmax = null
   private var op: Softmax = null
   private var fnProbe: Softmax = null
@@ -113,7 +116,7 @@ final class Readers:
    * (`Phrase.Russian.tables`) — for the pointer from the question's TOKENS to the tables' names; the last-token
    * pointer reads the table by meaning, this one by the name written, in any language */
   private def nameToken(pr: Prompted, table: String): Option[Int] =
-    val forms = table +: Phrase.Russian.tables.get(table).toVector.flatMap((a, b, c, d) => Vector(a, b, c, d))
+    val forms = table +: words.table(table).toVector.flatMap((a, b, c, d) => Vector(a, b, c, d))
     forms.flatMap(valueStart(pr, _)).headOption
   /** the tables scored by the name pointer: each table's best question token (log-softmax over the tables) */
   private def nameScores(qs: Vector[Array[Float]], tks: Vector[Array[Float]]): Array[Float] =
@@ -270,11 +273,11 @@ final class Readers:
         // orders, not the table customers), in Russian likewise by the dictionary's stems
         def columnElsewhere(n: String, word: String) = tables.values.exists(t => t.name != n && t.columns.exists(_.equalsIgnoreCase(word)))
         def columnStemElsewhere(n: String, stem: String) = tables.values.exists(t => t.name != n &&
-          t.columns.exists(c => Phrase.Russian.columns.get(c).exists((nom, _, _) => nom.startsWith(stem))))
+          t.columns.exists(c => words.column(c).exists((nom, _, _) => nom.startsWith(stem))))
         def mentioned(n: String) = n.length >= 3 && (lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*") ||
           n.length >= 4 && n.toLowerCase.endsWith("s") && !columnElsewhere(n, n.dropRight(1)) &&
             lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase.dropRight(1))}\\b.*") ||
-          Phrase.Russian.tables.get(n).exists((nom, _, _, _) => !columnStemElsewhere(n, nom.dropRight(1)) &&
+          words.table(n).exists((nom, _, _, _) => !columnStemElsewhere(n, nom.dropRight(1)) &&
             lowerQ.matches(s"(?U).*\\b${nom.dropRight(1)}\\p{L}{0,5}\\b.*")))
         val byName = tables.keys.toVector.sorted.filter(mentioned)
         val links = Space.Schema(tables).links
@@ -284,7 +287,7 @@ final class Readers:
         // ("staff that never appear in users", "работники, не встречающиеся в бронях": the table after "in" is the
         // absent one)
         val negated = byName.filter { n =>
-          val forms = (java.util.regex.Pattern.quote(n.toLowerCase) +: Phrase.Russian.tables.get(n).toVector
+          val forms = (java.util.regex.Pattern.quote(n.toLowerCase) +: words.table(n).toVector
             .flatMap((nom, gen, prep, _) => Vector(nom, gen, prep))).mkString("|")
           lowerQ.matches(s"(?U).*\\b(no|without|без|нет|never appear in|не встреча\\w* в)\\s+($forms)\\b.*")
         }
@@ -313,7 +316,7 @@ final class Readers:
         val lowerQ = question.toLowerCase
         def mentioned(n: String) = n.length >= 3 &&
           lowerQ.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*") ||
-          Phrase.Russian.tables.get(n).exists((nom, _, _, _) => lowerQ.matches(s"(?U).*\\b${nom.dropRight(1)}\\p{L}{0,5}\\b.*"))
+          words.table(n).exists((nom, _, _, _) => lowerQ.matches(s"(?U).*\\b${nom.dropRight(1)}\\p{L}{0,5}\\b.*"))
         if mentioned(t) then "named in the question"
         else if tables(t).columns.exists(mentioned) then "it has a column the question names"
         else "read from the model's state"
@@ -362,15 +365,17 @@ final class Readers:
     val grams: Set[String] = (1 to 4).flatMap(k => if qWords.size >= k then qWords.sliding(k).map(_.mkString(" ")) else Nil).toSet
     val gramsLower = grams.map(_.toLowerCase)
     def russianStem(w: String) = if w.length <= 3 then w else w.dropRight(if w.length > 4 then 2 else 1)
+    // the question with common Russian words masked for the values' stems: "Самоа" is not in "самый", "Того" not in "того"
+    val lowerV = Readers.commonRu.foldLeft(lower)((s, w) => s.replaceAll(s"(?U)\\b$w\\b", "_"))
     def inQuestion(v: String): Boolean =
       !Readers.stop(v.toLowerCase) && (if v.length <= 3 && v.forall(_.isUpper) then grams(v) else gramsLower(v.toLowerCase)) ||
         // a value's Russian form from the dictionary, by its stem — a negated form ("не оплачено") only as negated, and
         // the plain form not inside the negated one ("оплачено" is not in "не оплачено")
-        Phrase.Russian.values.get(v).exists { form =>
+        words.value(v).exists { form =>
           val stem = form.split(" ").map(russianStem).mkString(" ")
           val pattern = s"(?U).*\\b$stem\\p{L}{0,${if stem.length >= 5 then 5 else 2}}\\b.*"
-          if form.startsWith("не ") then lower.matches(pattern) || lower.matches(pattern.replace("не ", "не"))
-          else lower.matches(pattern) && !lower.matches(s"(?U).*\\bне ?$stem\\p{L}{0,5}\\b.*")
+          if form.startsWith("не ") then lowerV.matches(pattern) || lowerV.matches(pattern.replace("не ", "не"))
+          else lowerV.matches(pattern) && !lower.matches(s"(?U).*\\bне ?$stem\\p{L}{0,5}\\b.*")
         }
     // a number after a comparison is its bound, not a cell's value ("Value > 1.99E11" is no condition Value = 1.99E11)
     def compares(v: String): Boolean = v.matches("-?[\\d.]+(?:[eE][+-]?\\d+)?") && lower.matches(
@@ -388,11 +393,11 @@ final class Readers:
     // join to another table for a value the table itself holds
     // a column's forms in the question: its name (and plural), its Russian forms by the stem
     def forms(c: String): Vector[String] =
-      (Vector(java.util.regex.Pattern.quote(c.toLowerCase) + "(?:s|es)?") ++ Phrase.Russian.columns.get(c).toVector
+      (Vector(java.util.regex.Pattern.quote(c.toLowerCase) + "(?:s|es)?") ++ words.column(c).toVector
         .flatMap((nom, gen, dat) => Vector(nom, gen, dat).map(f => russianStem(f) + "\\p{L}{0,5}"))).distinct
     def at(f: String): Vector[Int] = s"(?U)\\b$f\\b".r.findAllMatchIn(lower).map(_.start).toVector
     def valueAt(v: String): Vector[Int] = at(java.util.regex.Pattern.quote(v.toLowerCase)) ++
-      Phrase.Russian.values.get(v).toVector
+      words.value(v).toVector
       .flatMap(form => at(form.split(" ").map(russianStem).mkString(" ") + "\\p{L}{0,5}"))
     // how far the column is written from the value ("with owner = paid by kind": owner is beside paid, kind is not); a
     // column before the value is nearer than one after ("whose vendor is delta by region")
@@ -423,7 +428,7 @@ final class Readers:
     // (or by a Russian form of the column's name — the language module's dictionary, by the stem: "по городам" names city)
     val named = cols.filter((_, c) => c.length >= 3 && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase)}(s|es)?\\b.*") ||
       c.length >= 4 && c.toLowerCase.endsWith("s") && lower.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(c.toLowerCase.dropRight(1))}\\b.*") ||
-      Phrase.Russian.columns.get(c).exists((nom, _, _) => lower.matches(s"(?U).*\\b${russianStem(nom)}\\p{L}{0,5}\\b.*")))
+      words.column(c).exists((nom, _, _) => lower.matches(s"(?U).*\\b${russianStem(nom)}\\p{L}{0,5}\\b.*")))
     // THE COLUMN ITS ROLE'S WORDS NAME: "per team", "по каждому типу", "sorted by day" — the column written right after
     // the words that give it its role is that role's column, exactly (not the first column the question names)
     def after(leads: String*): Option[String] =
@@ -453,6 +458,14 @@ final class Readers:
     lazy val greater: Boolean = word("over", "above", "more than", "greater", "больше", "выше", "свыше") ||
       lower.matches("(?U).*>=?\\s*-?\\d.*")
     val used = scala.collection.mutable.Set.empty[String]
+    // a time column (year, date) is an aggregate's or an order's column only when the question names it: "the largest
+    // GDP" orders by the measure, not by the year
+    def isTime(c: String) = c.toLowerCase.matches(
+      "(?U).*\\b(year|date|day|month|quarter|week|time|год|дата|день|месяц)\\b.*")
+    // ("в 2010 году", "in which year" name a year, not the time column as the measure)
+    val lowerNoYear = lower.replaceAll("(?U)\\b\\d{4}\\s+(год\\w*|year)\\b|" +
+      "\\b(в каком|какой|какого) год\\w*|\\b(in )?(which|what) year", " ")
+    def namedHere(c: String) = forms(c).exists(f => lowerNoYear.matches(s"(?U).*\\b$f\\b.*"))
     def column(slot: String): Option[String] ! R =
       val prefix = prefixes.find(_._1 == slot).get._2(table)
       // a numeric column for agg and order, a text one for group; a named column not yet used
@@ -461,7 +474,8 @@ final class Readers:
         case "group" => groupLead
         case "order" => orderLead.orElse(groupLead)
         case _ => None
-      val exact = (lead.toVector ++ named.map(_._2).filter(c => if slot == "agg" || slot == "order" then numeric(c)
+      val exact = (lead.toVector ++ named.map(_._2).filter(c => if slot == "agg" || slot == "order" then numeric(c) &&
+        (!isTime(c) || namedHere(c))
         else if slot == "group" then !numeric(c) else true)).filterNot(used).distinct
       // a key column ("id") sorts, aggregates or groups nothing unless the question names it: the readers choose among the rest
       val keyLike = Set("id", "key", "uid")
@@ -470,11 +484,7 @@ final class Readers:
       // a joined table's columns only for a group ("по странам"): a condition, an order or an aggregate stay on the table's
       // own unless a fact of the data brought the join
       val pool1 = if slot == "group" || joinNow.isDefined then pool0 else pool0.filter((tb, _) => tb == table)
-      // a time column (year, date) is an aggregate's or an order's column only when the question names it: "the largest
-      // GDP" orders by the measure, not by the year
-      def isTime(c: String) = c.toLowerCase.matches(
-        "(?U).*\\b(year|date|day|month|quarter|week|time|год|дата|день|месяц)\\b.*")
-      val measure = pool1.filter((_, c) => numeric(c) && (!isTime(c) || named.exists(_._2 == c) || lead.contains(c)))
+      val measure = pool1.filter((_, c) => numeric(c) && (!isTime(c) || namedHere(c) || lead.contains(c)))
       val pool = if slot == "agg" || slot == "order" then
         (if measure.nonEmpty then measure else pool1.filter((_, c) => numeric(c)))
         else if slot == "group" then pool1.filterNot((_, c) => numeric(c)) else pool1
@@ -927,6 +937,9 @@ object Readers:
     else if has("\\b(compare|сравни\\w*)\\b") || has("\\b(than|чем)\\b") && !has("\\d") then
       Some("a comparison of two things is not in the fragment yet (ask for each)")
     else None
+  /** common Russian words a short name's stem could match (Самоа in самый, Того in того) */
+  val commonRu: Vector[String] = Vector("самый", "самая", "самое", "самой", "самые", "самых", "самым", "самого",
+    "самому", "самыми", "того", "этого", "всего", "чего", "кого", "мало", "много")
   /** the words of a comparison before its number, the longer first ("greater than" before "greater") */
   val comparisons = "over|above|more than|greater than|below|under|less than|больше|выше|свыше|меньше|ниже"
   /** the words of a question that are never a value of the data */

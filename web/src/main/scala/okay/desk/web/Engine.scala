@@ -1,7 +1,7 @@
 package okay.desk.web
 
 import okay.desk.*
-import okay.desk.skill.{OnQwen, Read, Readers as Skill}
+import okay.desk.skill.{OnQwen, Read, Readers as Skill, Words}
 import okay.desk.ui.Model
 import okay.llm.compute.{OnCpu, OnWebGl2, OnWebGpu}
 import okay.llm.qwen.{Qwen3Compute, Qwen3Config, Safetensors, Tensors, Tokenizer}
@@ -182,6 +182,13 @@ object Engine:
   // A QUESTION FOLLOWED: begun in the background, its steps kept as the readers say them (`Read.Note`); `Thought`
   // answers a moment later with the steps so far — the last with its seconds — or the program
   private var thinking: Option[Future[Either[String, String]]] = None
+  // THE DATA'S OWN WORDS (specs/data.md §29): words/<table>.json beside the page when the data has them (the examples'),
+  // fetched once a table; none else
+  private val wordsOf = scala.collection.mutable.Map.empty[String, Future[Words]]
+  private def wordsFor(name: String): Future[Words] = wordsOf.getOrElseUpdate(name,
+    dom.fetch(s"words/$name.json").toFuture.flatMap { r =>
+      if !r.ok then Future.successful(Words.none) else r.text().toFuture.map(t => Words.parse(t).getOrElse(Words.none))
+    }.recover { case _ => Words.none })
   private var said = Vector.empty[String]
   private var since = 0.0
   private def ask(tables: Map[String, Table], question: String, retry: Option[(String, String)]): Unit =
@@ -215,7 +222,10 @@ object Engine:
       case op @ (_: Read.States | _: Read.Logits) => afterATurn(on.handler(op))
       case other => on.handler(other)
     val f =
-      if skill != null then Read.future(skill.program[Async + Read](tables, question), noting)
+      if skill != null then Future.sequence(tables.keys.toVector.map(wordsFor)).flatMap { ws =>
+        skill.words = ws.foldLeft(Words.none)(_ ++ _)
+        Read.future(skill.program[Async + Read](tables, question), noting)
+      }
       else program(tables, question, retry)
     shown = 0
     thinking = Some(f.map { r => idle(); r }.recover { case t => idle(); Left(s"the model failed: $t") })

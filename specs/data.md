@@ -818,3 +818,39 @@ What real data showed that the generator's tables did not:
   on real data should meet English.
 
 Speed: 0.4–0.5 s a question on the JVM (MLX), the whole 14,000-row table described in the prompt as the page does.
+
+## 29. The data's own words (2026-11-07)
+
+§28's Russian misses were all names the generator's dictionary never had: the countries ("Украины", "Польши",
+"Германии") and the table ("ВВП"). `Words` (core/skill) is a dataset's names in Russian — its tables, columns and
+the values of its text columns — read by the exact rules exactly where `Phrase.Russian` was (a value's form by its
+stem is the value; a table's form names it; a column's names it). `MakeWords` (bench) makes it once per dataset with
+a model that generates (Qwen3.5-4B, thinking off, 25 names a prompt, 40 s for the GDP table): the answers matched
+by their order (the model translates the left side too: "Афганистан => Афганистан"), a name said twice cut to once
+("ввп (ввп)"), forms of letters, spaces and hyphens only, and no stem shared by two values (6 of 262 dropped: an
+ambiguous word is no fact). The page fetches `words/<table>.json` for each table (the examples' ship beside it;
+none else); `RealBench` reads them with DESK_WORDS.
+
+Two exact rules real Russian needed with them:
+
+- a short name's stem must not match a common word: "Самоа" in "самый", "Того" in "того" — the question's common
+  Russian words are masked for the values' stems (`Readers.commonRu`);
+- a year written in the question ("в 2010 году", "в каком году") names a year, not the time column as the measure —
+  with the column's Russian name ("год") known, "Средний ВВП в 2010 году" had averaged the years.
+
+| the core, people's questions on the GDP series | en (16 + 3 outside) | ru (16 + 3 outside) |
+|---|---|---|
+| §28 | 16 right, 3 refused, 0 wrong | 12 right, 3 refused, 4 wrong |
+| + the data's words | 16 right, 3 refused, 0 wrong | **16 right, 3 refused, 0 wrong** |
+
+Unchanged elsewhere: the space over GDP 99.0%, the held-out pairs 99.0% (the core), the sample 13/13 13/13.
+
+**THE PAGE'S SELF-TEST HAD BEEN READING A STALE PAGE.** A `jwebserver` from the evening before still held port 8734,
+serving an old build of the main checkout: `scripts/page.sh` could not start its own (the "kill: No such process" at
+its end) and measured the old page — the "12/12 en, 6/12 ru" of §22b for the core came from it. The fresh page, the
+core on WebGPU: **13/13 en, 13/13 ru**, the same as the JVM. Before trusting `page.sh`, check that nothing else
+listens on 8734 (`lsof -iTCP:8734 -sTCP:LISTEN`).
+
+What is not done: words for a person's own file. The page has no model that generates by default; the dictionary is
+made offline for the examples. A page could make it with a generating model on demand, or ask the person for the
+names it cannot read (§30's dialogue).

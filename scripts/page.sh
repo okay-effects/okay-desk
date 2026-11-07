@@ -12,6 +12,7 @@ sbt -batch web/fullLinkJS > /dev/null
 web=web/target/web; mkdir -p $web/model
 cp web/page/index.html $web/ && cp web/target/scala-3.3.8/okay-desk-web-opt/main.js $web/
 cp -r web/page/sample $web/
+cp -r web/page/words $web/
 for f in config.json tokenizer.json; do cp "$MODEL_DIR/$f" $web/model/; done
 sbt -batch "bench/runMain okay.desk.bench.SplitWeights $MODEL_DIR $PWD/$web/model" > /dev/null
 cp "$SKILL" $web/model/readers.skill
@@ -23,6 +24,8 @@ if [ -d "$CORE_DIR" ]; then
   sbt -batch "bench/runMain okay.desk.bench.SplitWeights $CORE_DIR $PWD/$web/model-core" > /dev/null
   cp "$SKILL" $web/model-core/readers.skill
 fi
+# another server on the port would answer instead of this build (a stale one did, §29): refuse to measure it
+if lsof -iTCP:8734 -sTCP:LISTEN > /dev/null 2>&1; then echo "port 8734 is taken: $(lsof -iTCP:8734 -sTCP:LISTEN | tail -1)"; exit 1; fi
 jwebserver -d "$PWD/$web" -p 8734 -o none > /dev/null 2>&1 &
 server=$!
 trap 'kill $server' EXIT

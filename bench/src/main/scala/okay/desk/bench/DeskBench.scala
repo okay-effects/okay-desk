@@ -70,14 +70,17 @@ object DeskBench:
             case q3: mlx.llm.Qwen3 =>
               val t1 = System.nanoTime()
               val readers = MlxReading.ready(chat, q3, scala.sys.env.getOrElse("DESK_LAYER", "20").toInt, repo, Pairs.many(42, scala.sys.env.getOrElse("DESK_PAIRS", "1500").toInt, legacy = scala.sys.env.contains("DESK_LEGACY")))
+              // the sample read by the page's own forward when DESK_DEVICE names a device (the browser's numbers on the JVM)
+              val sampleReaders = ComputeReading.device.fold(readers)(c => { println(s"  the sample by the page's program on ${c.api}")
+                Readers.On(readers.readers, ComputeReading(dir, scala.sys.env.getOrElse("DESK_LAYER", "20").toInt, c)) })
               if !scala.sys.env.contains("DESK_SKIP_MEASURE") then readers.measure(Pairs.many(43, 200, legacy = scala.sys.env.contains("DESK_LEGACY")))
               if scala.sys.env.contains("DESK_CONSTRUCTORS") then readers.measureByConstructor(Pairs.many(44, scala.sys.env("DESK_CONSTRUCTORS").toInt, legacy = scala.sys.env.contains("DESK_LEGACY")))
               println(f"readers trained (${(System.nanoTime() - t1) / 1e9}%.0f s)")
               var right = Map("en" -> 0, "ru" -> 0); var fails = Vector.empty[String]
               for (q, i) <- questions.zipWithIndex; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) do
-                val got = readers.program(tables, text).flatMap(Query.parse).flatMap(run)
+                val got = sampleReaders.program(tables, text).flatMap(Query.parse).flatMap(run)
                 if got.exists(same(_, golds(i))) then right = right.updated(lang, right(lang) + 1)
-                else fails = fails :+ s"[$lang ${i + 1}] ${readers.program(tables, text).fold(e => e, identity)}"
+                else fails = fails :+ s"[$lang ${i + 1}] ${sampleReaders.program(tables, text).fold(e => e, identity)}"
               val line = f"$repo%-42s readers | en: ${right("en")}/${questions.size} | ru: ${right("ru")}/${questions.size}"
               println(line); summary += line
               if scala.sys.env.contains("DESK_VERBOSE") then fails.foreach(f => println(s"  $f"))

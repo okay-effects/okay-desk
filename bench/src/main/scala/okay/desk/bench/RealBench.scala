@@ -93,6 +93,10 @@ object RealBench:
       case q3: mlx.llm.Qwen3 =>
         val layer = sys.env.getOrElse("DESK_LAYER", "19").toInt
         val readers = MlxReading.ready(chat, q3, layer, repo, sys.error("no skill file: train it with DeskBench first"))
+        // the data's own words (§29), when DESK_WORDS names their file
+        for p <- sys.env.get("DESK_WORDS") do
+          readers.readers.words = Words.parse(java.nio.file.Files.readString(java.nio.file.Path.of(p))).fold(e => sys.error(e), identity)
+          println(s"  words: $p")
         // 1. people's questions
         val zero = Map("en" -> 0, "ru" -> 0)
         var right = zero; var refused = zero; var wrong = zero
