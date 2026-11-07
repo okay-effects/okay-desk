@@ -102,7 +102,7 @@ A model on the JVM is a `Reading`: one method, `answer(op: Read[X]): X`.
 
 ## 7. The laws, and what they measure
 
-Forty-one laws run with `sbt coreJVM/test` (seconds, no model). Among them: the data alone never errs on the
+Forty-two laws run with `sbt coreJVM/test` (seconds, no model). Among them: the data alone never errs on the
 sample's 26 questions and on 626 phrasings of 313 random points (0 contradictions); every point is reached by
 refinement; the reading is the space; every wording of every answer is grounded and reads back; the sources as
 handlers give the function form's terms.
@@ -115,6 +115,9 @@ The benches need a model (`DESK_DEVICE=mlx|cpu`, `DESK_SOURCE=readers`, `DESK_WO
 | data, then the model's tokens | 65% | 12/6/1 — 10/6/3 | 51 / 37 / 9 |
 | data, readers, tokens | 91% | 12/6/1 — 10/6/3 | 66 / 39 / 25 |
 | the readers alone, for reference | 57% | 16/3/0 — 12/3/4 | 63% / 25% / 16% |
+
+On the live page (WebGPU, the data, the readers, the tokens; margin ln 3): the 38 GDP questions — 31 right, 6 asked
+back (every one outside the grammar: a comparison, a share), 0 wrong (`specs/pilot.md` §7).
 
 Two things the numbers say. On data, the data alone never errs. On people's wording it does —
 "сколько денег"

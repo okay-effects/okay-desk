@@ -161,3 +161,20 @@ turn over the sample's 26 readings — every question's options hold the gold, e
 before the hole unchanged; the acts in four languages; the turn table. The page's acts know English and Russian
 (the built-in languages); Ukrainian and Polish acts are in the files and reach the page when the engine passes its
 loaded languages to the act layer — not yet.
+
+**Measured on the live page (2026-11-07, evening; WebGPU, the core model, the data → the readers → the tokens, the
+driver `scripts`-less in /tmp — the 38 GDP questions typed into the page, the program or the question read back,
+scored by `bench/PageScore`):**
+
+| margin | right | asked | wrong |
+|---|---|---|---|
+| 0 | 31 | 5 (all outside the grammar) | 2 |
+| ln 3 (the default now) | 31 | 6 (all outside the grammar, said without options) | 1 → 0 after "of Poland" |
+
+The margin changes nothing on the sample (13/13 13/13 at 0, ln 1.5, ln 2, ln 3) nor on the GDP 19; it turns
+"Show the first 5" / «Покажи первые 5» from a whole table (the readers' "none" for the order) into the question
+«По какому столбцу упорядочить: без этого / Year / Value?», whose button answers the SAME question — the next
+hole («В каком порядке: по убыванию / по возрастанию?») asked in turn, «спасибо» answered «Пожалуйста». A question
+outside the grammar (a comparison, a share) is said as such, without options. Two wrong readings fixed on the way:
+"in which year was the GDP of Poland the highest" (a time column beside a size word is the answer, not the order;
+"of Poland" is not an among-word) and «быстрее, чем Германии» (a comparison, refused).
