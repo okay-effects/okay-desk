@@ -775,3 +775,46 @@ By constructor on cut19: kind, table, join, where, agg 100%; group, order, limit
 would buy little where the readers are not the cause. THE CAVEAT: the held-out pairs come from the same grammar
 the rules were read against — this is the grammar's own phrasing, not people's. The next number must come from
 real data asked in other words (step 2: a real schema, its space, questions not from `Phrase`).
+
+## 28. Real data: the GDP series, people's questions (2026-11-07)
+
+The operator's step 2: a number for real data instead of "asked about the slowest, got the fastest". `RealBench`
+(bench) reads the World Bank's GDP series the page's example opens (13,979 rows: Country Name, Country Code, Year,
+Value), the skill file unchanged (the core's), and measures two things:
+
+1. **People's questions**, written by hand — not by `Phrase` — in English and Russian, each with its gold
+   program(s): 16 inside the space (a value of a year, the top ten, growth fastest and slowest, average, total,
+   the largest ever, the smallest of a year, the year a country peaked, counts and lists under a bound, per
+   country, all rows, a country by year, a country's growth) and 3 OUTSIDE it (two years compared, a share, two
+   countries compared) where the only right outcomes are an exact answer or a refusal.
+2. **The space over the GDP schema**: 200 points of `Space.random` over this schema, said by `Phrase`, measured by
+   constructor.
+
+| the core, the skill unchanged | people en (16 + 3 outside) | people ru | the space over GDP |
+|---|---|---|---|
+| before (§27's rules) | 12 right, 0 refused, **7 wrong** | 4 right, 0 refused, 15 wrong | 82.5% whole |
+| after | **16 right, 3 refused, 0 wrong** | 12 right, 3 refused, 4 wrong | **99.0%** whole |
+
+What real data showed that the generator's tables did not:
+
+- **The measure is not named.** People say "GDP", the table's name; the column is `Value`. An order or an
+  aggregate now never falls on a time column (Year, date…) unless the question names it — "the largest GDP"
+  orders by the measure.
+- **Numbers as data have.** `1.9923637003755365E11` was read in pieces (a limit of 2), and a bound written after
+  "over" was taken for a cell equal to it (the value is in the column). Numbers with exponents are read whole;
+  a number after a comparison is its bound, never a fact; the limit's number is a whole integer, never part of a
+  decimal, a date or the bound.
+- **Outside the fragment, refuse.** A share ("доля", "percent"), two years compared ("in 2010 and 2020"), two
+  things compared ("faster than", "сравни") had each produced a program for another question — an answer that
+  looks right. `Readers.outside` names why, and the page shows it as the step "not answered: …". All three, both
+  languages: refused. Wrong answers on people's English questions: 0.
+- **An extreme word is the function's when the function is an extreme**: "Наименьший Value … в разрезе Country
+  Code" is a minimum per group, not ordered; "наименьший ВВП" without "среди" orders and takes one row.
+- **Russian needs the data's own words.** The 4 Russian misses are all values the dictionary does not know:
+  "Украины", "Польши", "Германии" (country names), and "ВВП" for the table. The language module (§20, the
+  dictionary of `Phrase.Russian`) carries the generator's names only. NEXT: a DATA DICTIONARY — the distinct
+  values of a table's text columns (and its name) said in the language, made once per dataset by a model that
+  generates (offline), checked by the exact back-translation, kept beside the data as exact facts. Then Russian
+  on real data should meet English.
+
+Speed: 0.4–0.5 s a question on the JVM (MLX), the whole 14,000-row table described in the prompt as the page does.
