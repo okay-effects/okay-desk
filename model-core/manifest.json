@@ -1,0 +1,1 @@
+{"files": ["weights-00.safetensors", "weights-01.safetensors"], "embedding": {"common": "embed-common.safetensors", "latin-en": "embed-latin-en.safetensors", "latin-rest": "embed-latin-rest.safetensors", "cyrillic": "embed-cyrillic.safetensors", "cjk": "embed-cjk.safetensors", "other": "embed-other.safetensors"}, "index": "embed-index.bin", "vocab": 151669}

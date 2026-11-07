@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Chat with your data in the browser, offline: a small model reads the question into a program, an exact engine computes the answer. Nothing leaves the browser.">
+<title>okay-desk — chat with your data, in the browser</title>
+<style>
+  body > footer { border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+    color: var(--okay-muted, #5b6472); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body > footer .bar { max-width: 1000px; margin: 0 auto; padding: 18px 14px 32px; display: flex; flex-wrap: wrap;
+    align-items: baseline; gap: 6px; }
+  body > footer .more { margin-left: auto; font-weight: 600; }
+  body > footer a { color: var(--okay-accent, #2b5bd7); }
+  #engine-status { max-width: 1000px; margin: 0 auto; padding: 0 14px; font: 13px system-ui; color: #5b6472; }
+</style>
+<script type="module">
+  import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+  window.webllm = webllm;
+</script>
+<script defer src="main.js?v=be38ee14"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="engine-status"></div>
+  <footer><div class="bar">
+    Built on <a href="https://okay-effects.github.io/" target="_blank" rel="noopener noreferrer">okay-effects</a> —
+    algebraic effects for Scala
+    <a class="more" href="https://okay-effects.github.io/#author" target="_blank" rel="noopener noreferrer">Need more?</a>
+  </div></footer>
+</body>
+</html>
