@@ -197,6 +197,10 @@ object Engine:
   /** THE CALCULUS ON THE PAGE (docs/calculus.md): the data first, the readers' skill next, the model's own tokens last —
    * one reading program; an open term is "not sure" with the hole named. `?assembler` in the address keeps the old way */
   private val assembler = dom.window.location.search.contains("assembler")
+  /** THE MARGIN (Okay!Chat's second gate, specs/pilot.md §2): two candidates closer than this in log-probability are
+   * a question, not a choice — `?margin=<nats>` in the address; the sources that write (the data, the person) give
+   * one candidate and are never gated */
+  private val margin: Double = "margin=([0-9.]+)".r.findFirstMatchIn(dom.window.location.search).map(_.group(1).toDouble).getOrElse(0.0)
   // THE DIALOGUE (specs/pilot.md §3.2): the hole the last reading stopped at with its options, and the person's answers
   // to this question so far — a choice answers the pending hole; the reading runs again with the answers as its first
   // source and refines the same term; a different question starts afresh
@@ -224,7 +228,7 @@ object Engine:
         Read.note[S](s"deciding ${ty.toString.takeWhile(_ != '(')} among ${cs.take(5).mkString(", ")}${if cs.size > 5 then "…" else ""}").flatMap(_ => f(ty, cs, ctx))
     // the person's answers first (the dialogue), then the data, the readers, the model's tokens
     val fill = noting(Fill.first[S](Dialogue.decided[S](answers), Fill.exact[S], skill.weigh[S], Fill.model[S](tables)))
-    Dialogue.read[R](g, Context(s, question, Term.Hole(Ty.Program), words, languages), fill).map {
+    Dialogue.read[R](g, Context(s, question, Term.Hole(Ty.Program), words, languages), fill, margin).map {
       case Dialogue.Outcome.Closed(t) => Den.run(s, t).map((q, _) => Query.print(q))
       case Dialogue.Outcome.Open(ty, _, cs, _) =>
         pending = Some((ty, cs))
