@@ -378,3 +378,34 @@ recompute. The page says the claim beside the table ("concluded from the result:
 an exact derivation"). E.g. "4 of 8 orders, that is 50%." — "Only fay of 6 customers has no orders." — "cid has
 the largest amount: 200, 150% more than bob (80); 2.1× the average." — "By sum, bob leads (1080) and dee trails
 (45): a gap of 1035 across 5 customer groups."
+
+## 18. A language as data in both directions; Ukrainian and Polish (the operator, 2026-11-07)
+
+GF's idea, where it helps: one record per language serves parsing and linearization. `Language` (calc): the WORDS
+of each constructor as the exact fill reads them (count, avg, sum, min, max, size, big, small, desc, asc, ordered,
+top, one, onlyFirst, rows, whatWas, group, among, condition, more, less, absent, negation, into, closure,
+closureFrom, closureTo, outside, numbers), the FORMS of the generator's names (tables in four cases, columns in
+three, values), the stem rule, and the PIECES phrases are said with (templates with slots `{T.gen}`, `{C.dat}`,
+`{V}`, `{N}`, `{K}`, `{X}`). English and Russian are built in (the lists moved out of `Fill.exact`, which now
+reads `ctx.has("key")` — not one language word left in it); Ukrainian and Polish are files, `web/page/lang/uk.json`
+and `pl.json`, loaded when a question's script asks for them (`Language.detect`: і/ї/є → uk, ą/ę/ł… → pl; the
+benches through `Languages`, the page by a fetch when the calculus runs there). `Say.say` linearizes a point from
+a language's pieces — the other direction of the same record.
+
+The law (`SayingSuite`), GF's own: 313 points said by the language file, read by the data alone with that language
+loaded — no contradiction. It found and fixed ~50 inconsistencies per language on the first run (a table's form
+whose stem the rule missed, "зростанням" taken for growth, "менше" taken for a direction, "nie mają" not a
+negation, "minimum" as a limit without "dla" among the exclusions): uk 0 contradictions, 223 of 313 closed by the
+data alone; pl 0, 226. The 37 laws pass; en and ru are unchanged by the refactor (26/26, 457 of 626).
+
+On the teacher's natural-wording pairs, the languages loaded on demand (no training, no dictionary of the data):
+
+| | uk (75): right / open / wrong | en | ru |
+|---|---|---|---|
+| the data alone, before | 3 / 64 / 8 | 38 | 27 |
+| the data alone, with uk.json | 15 / 50 / 10 | 37 | 27 |
+| data, readers, tokens, before | 25 / 0 / 50 | 66 | 39 |
+| data, readers, tokens, with uk.json | **36** / 0 / 39 | 65 | 39 |
+
+A language file alone moved Ukrainian from 33% to 48% on people's wording; the readers never saw a Ukrainian
+word. What a file cannot give is the data's own names and the values people use — that is `Words` and the teacher.

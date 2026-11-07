@@ -139,9 +139,16 @@ handlers), `Strategy.scala` (the program and the strategies), `Level0.scala`, `L
 `Answer.scala`, `Answers.scala`. Laws in `core/src/test/scala/okay/desk/`: `CalculusSuite`, `LevelsSuite`,
 `WeighSuite`, `StrategySuite`, `AnswersSuite`. Benches in `bench/`: `RefineBench`, `RealRefine`, `TeacherRefine`.
 
-## 9. Not done
+## 9. Languages as data
+
+A language is one record in both directions (`Language`): the words of each constructor as the data source reads
+them, the forms of names, the stem rule, and the pieces phrases are said with. English and Russian are built in;
+Ukrainian and Polish are files (`web/page/lang/uk.json`, `pl.json`) loaded when a question's script asks for them.
+The law, GF's own: what the file says of 313 points, the data alone reads with it and never contradicts. A file
+alone took Ukrainian from 33% to 48% on people's wording, with no training.
+
+## 10. Not done
 
 The calculus on the page (the page still reads by the readers' assembler); the person as a source and dialogue
 as refining the last term; a beam; wordings weighed by the model; meaning as an equivalence class of terms (only
-a normal form so far); phrases as a bidirectional grammar in GF's sense; the levels' encodings proved in Lean;
-the data's silence on ambiguous wording.
+a normal form so far); the data's silence on ambiguous wording; the language files fetched by the page (when the calculus runs there).

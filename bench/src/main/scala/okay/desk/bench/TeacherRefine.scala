@@ -34,7 +34,7 @@ object TeacherRefine:
       for t <- taught do
         val tables = Teacher.schema(t.seed); val s = Space.Schema(tables); val g = new calc.Grammar(s)
         val fill: Fill[Read] = if arm == "the data alone" then Fill.exact[Read] else Fill.first[Read]((Vector(Fill.exact[Read]) ++ readers.map(_.weigh[Read]).toVector :+ Fill.model[Read](tables))*)
-        val term = Read.run(Strategy.greedyIn[Read](g, Context(s, t.question, Term.Hole(Ty.Program)), fill), reading)._2
+        val term = Read.run(Strategy.greedyIn[Read](g, Context(s, t.question, Term.Hole(Ty.Program), languages = Languages.forQuestion(t.question)), fill), reading)._2
         val gold = Query.parse(t.program).flatMap(q => run(tables, q)).toOption
         val got = term.flatMap(x => Den.run(s, x).toOption)
         val ok = got.exists((_, r) => gold.exists(gd => Sample.same(r, gd)))

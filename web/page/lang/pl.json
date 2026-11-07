@@ -1,0 +1,621 @@
+{
+ "code": "pl",
+ "stemDrop": 2,
+ "lists": {
+  "count": [
+   "ile",
+   "liczba",
+   "policz"
+  ],
+  "avg": [
+   "średni*",
+   "przeciętn*"
+  ],
+  "sum": [
+   "suma",
+   "łączn*",
+   "razem",
+   "sumarycz*"
+  ],
+  "min": [
+   "minimum",
+   "najmniejsz*",
+   "najniższ*"
+  ],
+  "max": [
+   "maksimum",
+   "maksymaln*"
+  ],
+  "size": [
+   "największ*",
+   "najmniejsz*",
+   "najwyższ*",
+   "najniższ*",
+   "maksym*",
+   "minim*"
+  ],
+  "sizeAny": [
+   "większ*",
+   "mniejsz*",
+   "największ*",
+   "najmniejsz*"
+  ],
+  "big": [
+   "największ*",
+   "najwyższ*",
+   "najszybsz*",
+   "top"
+  ],
+  "small": [
+   "najmniejsz*",
+   "najniższ*",
+   "najwolniejsz*"
+  ],
+  "desc": [
+   "malejąc*",
+   "od największ*",
+   "najpierw największe"
+  ],
+  "asc": [
+   "rosnąc*",
+   "od najmniejsz*",
+   "najpierw najmniejsze"
+  ],
+  "ordered": [
+   "posortowan*",
+   "uporządkowan*",
+   "najpierw",
+   "top",
+   "pierwsz*"
+  ],
+  "top": [
+   "top",
+   "pierwsz*"
+  ],
+  "topOnly": [
+   "top",
+   "pierwsz*"
+  ],
+  "one": [
+   "wiersz",
+   "który z",
+   "która z"
+  ],
+  "onlyFirst": [
+   "tylko pierwsz*"
+  ],
+  "rows": [
+   "które",
+   "pokaż",
+   "wypisz",
+   "lista",
+   "wymień",
+   "znajdź"
+  ],
+  "whatWas": [
+   "jaki był",
+   "jaka była",
+   "jakie było",
+   "jaki jest",
+   "jaka jest"
+  ],
+  "group": [
+   "na każd*",
+   "w każd*",
+   "każd*",
+   "według",
+   "wg",
+   "w podziale"
+  ],
+  "among": [
+   "wśród",
+   "według",
+   "wg",
+   "z",
+   "dla"
+  ],
+  "condition": [
+   "z",
+   "gdzie",
+   "których",
+   "powyżej",
+   "poniżej",
+   "więcej",
+   "mniej",
+   "ponad"
+  ],
+  "more": [
+   "powyżej",
+   "więcej niż",
+   "ponad",
+   "większ*"
+  ],
+  "less": [
+   "poniżej",
+   "mniej niż",
+   "mniejsz*"
+  ],
+  "absent": [
+   "bez",
+   "nie ma*",
+   "nigdy",
+   "brak"
+  ],
+  "negation": [
+   "bez",
+   "brak",
+   "nie mają",
+   "nie ma"
+  ],
+  "into": [
+   "w",
+   "we"
+  ],
+  "closure": [
+   "osiąg*",
+   "zależ*",
+   "prowadz*",
+   "dochodz*"
+  ],
+  "closureFrom": [
+   "zależ*",
+   "osiągaln*",
+   "dokąd"
+  ],
+  "closureTo": [
+   "prowadzą",
+   "prowadzi",
+   "dochodz*",
+   "osiąga*",
+   "kto"
+  ],
+  "outside": [
+   "rósł",
+   "rosł*",
+   "wzrost*",
+   "wzrast*",
+   "szybciej",
+   "wolniej",
+   "udział*",
+   "porówna*",
+   "procent*"
+  ]
+ },
+ "numbers": {
+  "jeden": "1",
+  "jedna": "1",
+  "trzy": "3",
+  "pięć": "5",
+  "dziesięć": "10"
+ },
+ "tables": {
+  "products": [
+   "produkty",
+   "produktów",
+   "produktach",
+   "produktom"
+  ],
+  "employees": [
+   "pracownicy",
+   "pracowników",
+   "pracownikach",
+   "pracownikom"
+  ],
+  "invoices": [
+   "faktury",
+   "faktur",
+   "fakturach",
+   "fakturom"
+  ],
+  "flights": [
+   "loty",
+   "lotów",
+   "lotach",
+   "lotom"
+  ],
+  "tickets": [
+   "bilety",
+   "biletów",
+   "biletach",
+   "biletom"
+  ],
+  "students": [
+   "studenci",
+   "studentów",
+   "studentach",
+   "studentom"
+  ],
+  "visits": [
+   "wizyty",
+   "wizyt",
+   "wizytach",
+   "wizytom"
+  ],
+  "shipments": [
+   "przesyłki",
+   "przesyłek",
+   "przesyłkach",
+   "przesyłkom"
+  ],
+  "sales": [
+   "sprzedaże",
+   "sprzedaży",
+   "sprzedażach",
+   "sprzedażom"
+  ],
+  "reviews": [
+   "recenzje",
+   "recenzji",
+   "recenzjach",
+   "recenzjom"
+  ],
+  "calls": [
+   "połączenia",
+   "połączeń",
+   "połączeniach",
+   "połączeniom"
+  ],
+  "bookings": [
+   "rezerwacje",
+   "rezerwacji",
+   "rezerwacjach",
+   "rezerwacjom"
+  ],
+  "people": [
+   "ludzie",
+   "ludzi",
+   "ludziach",
+   "ludziom"
+  ],
+  "accounts": [
+   "konta",
+   "kont",
+   "kontach",
+   "kontom"
+  ],
+  "staff": [
+   "personel",
+   "personelu",
+   "personelu",
+   "personelowi"
+  ],
+  "orders": [
+   "zamówienia",
+   "zamówień",
+   "zamówieniach",
+   "zamówieniom"
+  ],
+  "customers": [
+   "klienci",
+   "klientów",
+   "klientach",
+   "klientom"
+  ],
+  "payments": [
+   "płatności",
+   "płatności",
+   "płatnościach",
+   "płatnościom"
+  ],
+  "users": [
+   "użytkownicy",
+   "użytkowników",
+   "użytkownikach",
+   "użytkownikom"
+  ],
+  "items": [
+   "pozycje",
+   "pozycji",
+   "pozycjach",
+   "pozycjom"
+  ],
+  "events": [
+   "zdarzenia",
+   "zdarzeń",
+   "zdarzeniach",
+   "zdarzeniom"
+  ],
+  "projects": [
+   "projekty",
+   "projektów",
+   "projektach",
+   "projektom"
+  ],
+  "tasks": [
+   "zadania",
+   "zadań",
+   "zadaniach",
+   "zadaniom"
+  ],
+  "contracts": [
+   "umowy",
+   "umów",
+   "umowach",
+   "umowom"
+  ],
+  "deliveries": [
+   "dostawy",
+   "dostaw",
+   "dostawach",
+   "dostawom"
+  ],
+  "countries": [
+   "kraje",
+   "krajów",
+   "krajach",
+   "krajom"
+  ],
+  "cities": [
+   "miasta",
+   "miast",
+   "miastach",
+   "miastom"
+  ]
+ },
+ "columns": {
+  "category": [
+   "kategoria",
+   "kategorii",
+   "kategorii"
+  ],
+  "region": [
+   "region",
+   "regionu",
+   "regionowi"
+  ],
+  "status": [
+   "status",
+   "statusu",
+   "statusowi"
+  ],
+  "type": [
+   "typ",
+   "typu",
+   "typowi"
+  ],
+  "owner": [
+   "właściciel",
+   "właściciela",
+   "właścicielowi"
+  ],
+  "team": [
+   "zespół",
+   "zespołu",
+   "zespołowi"
+  ],
+  "vendor": [
+   "dostawca",
+   "dostawcy",
+   "dostawcy"
+  ],
+  "city": [
+   "miasto",
+   "miasta",
+   "miastu"
+  ],
+  "kind": [
+   "rodzaj",
+   "rodzaju",
+   "rodzajowi"
+  ],
+  "price": [
+   "cena",
+   "ceny",
+   "cenie"
+  ],
+  "qty": [
+   "ilość",
+   "ilości",
+   "ilości"
+  ],
+  "total": [
+   "suma",
+   "sumy",
+   "sumie"
+  ],
+  "score": [
+   "wynik",
+   "wyniku",
+   "wynikowi"
+  ],
+  "hours": [
+   "godziny",
+   "godzin",
+   "godzinom"
+  ],
+  "weight": [
+   "waga",
+   "wagi",
+   "wadze"
+  ],
+  "age": [
+   "wiek",
+   "wieku",
+   "wiekowi"
+  ],
+  "rating": [
+   "ocena",
+   "oceny",
+   "ocenie"
+  ],
+  "cost": [
+   "koszt",
+   "kosztu",
+   "kosztowi"
+  ],
+  "count": [
+   "liczba",
+   "liczby",
+   "liczbie"
+  ],
+  "day": [
+   "dzień",
+   "dnia",
+   "dniowi"
+  ],
+  "since": [
+   "rok",
+   "roku",
+   "rokowi"
+  ],
+  "customer": [
+   "klient",
+   "klienta",
+   "klientowi"
+  ],
+  "country": [
+   "kraj",
+   "kraju",
+   "krajowi"
+  ],
+  "amount": [
+   "kwota",
+   "kwoty",
+   "kwocie"
+  ],
+  "name": [
+   "nazwa",
+   "nazwy",
+   "nazwie"
+  ],
+  "segment": [
+   "segment",
+   "segmentu",
+   "segmentowi"
+  ],
+  "stock": [
+   "zapas",
+   "zapasu",
+   "zapasowi"
+  ]
+ },
+ "values": {
+  "north": "północ",
+  "south": "południe",
+  "east": "wschód",
+  "west": "zachód",
+  "open": "otwarte",
+  "closed": "zamknięte",
+  "new": "nowe",
+  "done": "gotowe",
+  "red": "czerwone",
+  "blue": "niebieskie",
+  "green": "zielone",
+  "gold": "złoto",
+  "silver": "srebro",
+  "home": "dom",
+  "work": "praca",
+  "spare": "zapas",
+  "paid": "opłacone",
+  "unpaid": "nieopłacone",
+  "overdue": "przeterminowane",
+  "refunded": "zwrócone",
+  "retail": "detal",
+  "wholesale": "hurt"
+ },
+ "pieces": {
+  "count": [
+   "Ile {T.gen}",
+   "Ile jest {T.gen}",
+   "Policz {T.nom}"
+  ],
+  "rows": [
+   "Które {T.nom}",
+   "Pokaż {T.nom}",
+   "Wypisz {T.nom}",
+   "Lista {T.gen}"
+  ],
+  "sum": [
+   "Suma {C.gen} dla {T.gen}",
+   "Łączna {C.nom} {T.gen}",
+   "Razem {C.nom} dla {T.gen}"
+  ],
+  "avg": [
+   "Średnia {C.nom} {T.gen}",
+   "Średnia wartość {C.gen} dla {T.gen}"
+  ],
+  "min": [
+   "Najmniejszy {C.nom} wśród {T.gen}",
+   "Minimum {C.gen} dla {T.gen}"
+  ],
+  "max": [
+   "Największy {C.nom} wśród {T.gen}",
+   "Maksimum {C.gen} dla {T.gen}"
+  ],
+  "top1Desc": [
+   "{T.nom} z największym {C}",
+   "Wiersz {T.gen} z największym {C}",
+   "Który z {T.gen} ma najwyższy {C}"
+  ],
+  "top1Asc": [
+   "{T.nom} z najmniejszym {C}",
+   "Wiersz {T.gen} z najmniejszym {C}",
+   "Który z {T.gen} ma najniższy {C}"
+  ],
+  "by": [
+   "{T.nom} według {C.gen}",
+   "Pokaż {T.nom} posortowane według {C.gen}"
+  ],
+  "condEq": [
+   "z {C} = {V}",
+   "których {C} to {V}",
+   "gdzie {C} to {V}"
+  ],
+  "condMore": [
+   "z {C} powyżej {N}",
+   "których {C} jest większy niż {N}",
+   "gdzie {C} > {N}"
+  ],
+  "condLess": [
+   "z {C} poniżej {N}",
+   "których {C} jest mniejszy niż {N}"
+  ],
+  "condTime": [
+   "z dnia {V}",
+   "w {V}",
+   "z {C} = {V}"
+  ],
+  "and": [
+   "i",
+   "oraz"
+  ],
+  "group": [
+   "na każdy {C}",
+   "według {C.gen}",
+   "w podziale na {C}"
+  ],
+  "desc": [
+   "malejąco",
+   "od największego do najmniejszego",
+   "najpierw największe"
+  ],
+  "asc": [
+   "rosnąco",
+   "od najmniejszego do największego",
+   "najpierw najmniejsze"
+  ],
+  "topN": [
+   "pierwsze {K}",
+   "top {K}"
+  ],
+  "absent": [
+   "Którzy {T.nom} nie mają {O}",
+   "{T.nom} bez {O}",
+   "{T.nom}, których nie ma w {O}"
+  ],
+  "closureFrom": [
+   "Od czego zależy {X}, bezpośrednio lub pośrednio?",
+   "Co jest osiągalne z {X}?",
+   "Dokąd prowadzi {X}?"
+  ],
+  "closureTo": [
+   "Które węzły dochodzą do {X}?",
+   "Co prowadzi do {X}?",
+   "Kto osiąga {X}?"
+  ],
+  "onlyFirst": [
+   "tylko pierwszy",
+   "tylko pierwsza"
+  ]
+ }
+}

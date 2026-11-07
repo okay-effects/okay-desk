@@ -36,7 +36,7 @@ object RealRefine:
       val on = MlxReading.ready(chat, model, layer, repo, sys.error("no skill file")); on.readers.words = words; println("  the readers' skill as a Weigh source"); on.readers }
     def refine(text: String, exactOnly: Boolean): Option[Term] =
       val fill: Fill[Read] = if exactOnly then Fill.exact[Read] else Fill.first[Read]((Vector(Fill.exact[Read]) ++ readers.map(_.weigh[Read]).toVector :+ Fill.model[Read](tables))*)
-      Read.run(Strategy.greedyIn[Read](g, Context(s, text, Term.Hole(Ty.Program), words), fill), reading)._2
+      Read.run(Strategy.greedyIn[Read](g, Context(s, text, Term.Hole(Ty.Program), words, Languages.forQuestion(text)), fill), reading)._2
     for arm <- Vector("the data alone", "the data, then the model's tokens") do
       val zero = Map("en" -> 0, "ru" -> 0); var right = zero; var refused = zero; var wrong = zero
       for (q, i) <- RealBench.questions.zipWithIndex; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) do
