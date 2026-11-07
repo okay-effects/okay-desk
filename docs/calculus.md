@@ -149,6 +149,7 @@ alone took Ukrainian from 33% to 48% on people's wording, with no training.
 
 ## 10. Not done
 
-The calculus on the page (the page still reads by the readers' assembler); the person as a source and dialogue
-as refining the last term; a beam; wordings weighed by the model; meaning as an equivalence class of terms (only
-a normal form so far); the data's silence on ambiguous wording; the language files fetched by the page (when the calculus runs there).
+The person as a source and dialogue as refining the last term; a beam; wordings weighed by the model; meaning as an
+equivalence class of terms (only a normal form so far); the data's silence on ambiguous wording. Okay!Chat's
+deterministic dialogue model (acts, a question per hole, the person as a source, lessons, induced word lists) as
+handlers of `Weigh`: `specs/pilot.md`.

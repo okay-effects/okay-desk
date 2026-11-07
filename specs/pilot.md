@@ -1,6 +1,7 @@
 # Пилот in the calculus — Okay!Chat's deterministic dialogue model as handlers of `Weigh`
 
-*The operator, 2026-11-07: «есть проект okay-chat, где есть детерминированные диалоговые модели — подумай, как они могут быть
+*The operator, 2026-11-07: «есть проект okay-chat, где есть детерминированные диалоговые модели — подумай, как они могут
+быть
 встроены и использованы в нашем новом исчислении». Written after reading Okay!Chat's README and its specs (`pilot.md`,
 `routing.md`, `turn-decision.md`, `meaning.md`, `slot-matching.md`, `memory.md`, `learning-loop.md`, `intent-dsl.md`,
 `conversation-continuations.md`) and the platform's `okay.frame.Frame`, `okay.intent.{Centroid, Induced, Dsl}`. Nothing
