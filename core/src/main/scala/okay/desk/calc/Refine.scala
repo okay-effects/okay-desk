@@ -102,7 +102,7 @@ object Fill:
         else q.matches(pattern) && !q.matches(s"(?U).*\\b(не|nie) ?$stem\\p{L}{0,5}\\b.*") }
       val grams: Set[String] = ctx.grams
       // the limit the words say: a number with top/first words, 1 for "the row/which of/the largest X" without groups
-      val topWords = ctx.has("top") || ctx.has("size")
+      val topWords = ctx.has("top") || ctx.has("size") || ctx.has("pace")
       val limitNumber: Option[String] =
         val n = "\\b(\\d{1,2})\\b".r.findAllMatchIn(ctx.question).map(_.group(1)).toVector.filter(Set("1", "3", "5", "10"))
         val words = ctx.numbers.collect { case (w, v) if ctx.word(w) => v }.toVector
@@ -190,7 +190,8 @@ object Fill:
           else if usedVals.nonEmpty && valued.nonEmpty then Vector(("none", 0.0)) // the written value is the first condition's
           // (no value, no number, no year written, and — for a first condition — no word of a condition: no condition; a
           // second condition's words were the first's)
-          else if years.isEmpty && optional && (usedVals.nonEmpty || !ctx.has("condition")) then Vector(("none", 0.0))
+          // (a question that BEGINS with "where"/"где" asks where, it does not condition: "Where does GDP grow fastest?")
+          else if years.isEmpty && optional && (usedVals.nonEmpty || !ctx.has("condition") || ctx.startsWith("condition")) then Vector(("none", 0.0))
           else Vector.empty
         case Ty.OpT(Kind.Num) =>
           // ("over" counts only before a number: "summed over orders" is not a comparison)
@@ -246,7 +247,8 @@ object Fill:
             case Some(_) => one(cs.filter(_ != "none"))
             case None =>
               // (a column a condition already uses is not the order's: "в 2023 году" is the condition, the order is the measure)
-              val namedCols = cs.filter(c => c != "none" && (named(c) || ruColumn(c)))
+              // (a column a condition already uses — "в 2023 году" — is not the order's unless the order is written: by size words alone the order is the measure)
+              val namedCols = cs.filter(c => c != "none" && (explicit || !used(c)) && (named(c) || ruColumn(c)))
               // "the largest X" with no column named: a size word orders by the one numeric column
               val numeric = cs.filter(c => c != "none" && !used(c) && ctx.schema.cols.exists(x => x.name == c && x.kind == Kind.Num))
               if namedCols.nonEmpty then one(namedCols)
@@ -265,7 +267,7 @@ object Fill:
             else if !topWords || grouped && !ctx.has("topOnly") then Vector(("none", 0.0))
             else Vector.empty)
         case Ty.Program | Ty.KindT =>
-          val outside = ctx.has("outside")
+          val outside = ctx.has("outside") || ctx.has("growth") && ctx.has("compare")
           val k = if outside then "" else if ctx.has("closure") then "closure" else if ctx.has("absent") then "absent" else "rows"
           if k.isEmpty then Vector((Fill.refuse, 0.0)) else Vector((if ty == Ty.Program then k.capitalize else k, 0.0))
         case Ty.DirectionT => if ctx.has("closureFrom") then Vector(("from", 0.0))

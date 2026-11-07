@@ -192,6 +192,10 @@
    "najwolniej",
    "najszybsz*",
    "najwolniejsz*"
+  ],
+  "compare": [
+   "niż w",
+   "w porównaniu"
   ]
  },
  "numbers": {
