@@ -728,3 +728,11 @@ closures 100%. The whole assembler with its rules turned out to be one greedy st
 calculus with no trained reader at all reads more of the held-out than the readers did, and what the data decides
 it decides without error. The vector tier (the readers as fills) is the next source to plug in, when `Readers`
 gets a public surface for its probes and pointers; the kit then measures per type how far a linear fill carries.
+
+**The levels (specs/calculus.md §7), 2026-11-07.** Level 0 the choice calculus, level 1 the word calculus (exact
+facts inside `next`), level 2 typed terms (the §26 calculus) encoded in level 1, level 3 the space and phrases
+encoded in level 2. Laws of all levels pass (LevelsSuite + CalculusSuite, 23 laws). The level-3 law: 313 points
+phrased twice, 0 contradictions by the data alone, 460 of 626 closed by the data alone. The bench after the
+exact rules were refined by that law: cut19 sample 12/13 en, 12/13 ru (the data alone 26/26 on the suite; one
+question went to the model's tokens on the bench before the last rule); held-out: data alone 55% whole / 45%
+open / 0 wrong; data + tokens 64% whole, order 93%, limit 95%, group 91%, agg 86%, where 78%.

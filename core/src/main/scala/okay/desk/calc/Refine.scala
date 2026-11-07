@@ -49,7 +49,13 @@ object Fill:
       def named(n: String): Boolean = n.length >= 3 && (q.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}(s|es)?\\b.*") ||
         n.length >= 4 && n.endsWith("s") && q.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase.dropRight(1))}\\b.*"))
       def ruTable(n: String): Boolean = Phrase.Russian.tables.get(n).exists((nom, _, _, _) => q.matches(s"(?U).*\\b${nom.dropRight(1)}\\p{L}{0,5}\\b.*"))
-      def ruColumn(n: String): Boolean = Phrase.Russian.columns.get(n).exists((nom, _, _) => q.matches(s"(?U).*\\b${if nom.length <= 3 then nom else nom.dropRight(if nom.length > 4 then 2 else 1)}\\p{L}{0,5}\\b.*"))
+      // (a whole form of the dictionary — дню — or the stem)
+      def ruColumn(n: String): Boolean = Phrase.Russian.columns.get(n).exists((nom, gen, dat) => Vector(nom, gen, dat).exists(f => q.matches(s"(?U).*\\b$f\\b.*")) ||
+        q.matches(s"(?U).*\\b${if nom.length <= 3 then nom else nom.dropRight(if nom.length > 4 then 2 else 1)}\\p{L}{0,5}\\b.*"))
+      // the values the term's own conditions already use, and the own table's values (a linked table's are others')
+      val ownValues: Set[String] = ctx.term match
+        case Con(_, "Rows", args) => args.headOption.collect { case Leaf(_, t) => ctx.schema.tables.get(t).toVector.flatMap(_.rows.flatten.map(_.text)).toSet }.getOrElse(Set.empty)
+        case _ => Set.empty
       def one(xs: Vector[String]): Dist = if xs.size == 1 then Vector((xs.head, 0.0)) else Vector.empty
       // a value's Russian form from the dictionary, by its stem: a negated form ("не оплачено", "неоплаченные") only as
       // negated, the plain form not inside the negated one
@@ -74,8 +80,8 @@ object Fill:
         case _ => Set.empty
       val fnChosen: Option[String] = ctx.term match { case Con(_, "Rows", args) => args.lift(5).collect { case Leaf(_, f) => f }; case _ => None }
       val grouped = ctx.term match { case Con(_, "Rows", args) => args.lift(4).exists { case Leaf(_, "none") => false; case Leaf(_, _) => true; case _ => false }; case _ => false }
-      val limitOne = limitNumber.isEmpty && !grouped && (ctx.word("the row", "which of", "the one", "строка", "у какого") ||
-        ctx.word("largest", "smallest", "highest", "lowest", "biggest", "самый", "самая", "самое", "наибольш*", "наимен*") && !ctx.word("per", "each", "by", "по", "в разрезе", "among", "среди", "of"))
+      val limitOne = limitNumber.isEmpty && (ctx.word("only the first", "the first one", "только перв*") || !grouped && (ctx.word("the row", "which of", "the one", "строка", "у какого") ||
+        ctx.word("largest", "smallest", "highest", "lowest", "biggest", "самый", "самая", "самое", "наибольш*", "наимен*") && !ctx.word("per", "each", "by", "по", "в разрезе", "among", "среди", "of")))
       val d: Dist = ty match
         case Ty.TableT =>
           // named in the question — not by a word that is a column of another table ("by customer", "по клиенту");
@@ -87,12 +93,18 @@ object Fill:
           def columnElsewhere(n: String) = ctx.schema.tables.values.exists(t => t.name != n && t.columns.exists(c =>
             c.equalsIgnoreCase(n.dropRight(1)) && singularOnly(n) ||
               !named(n) && !ruWhole(n) && Phrase.Russian.columns.get(c).exists((nom, _, _) => Phrase.Russian.tables.get(n).exists(_._1.dropRight(1) == nom))))
-          val names = cs.filter(n => (named(n) || ruTable(n)) && !columnElsewhere(n))
+          // whole names first ("customers", "клиентов"); a singular ("order") only when no table is named whole — "in descending
+          // order" must not name orders beside customers
+          def wholeNamed(n: String) = q.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*") || ruWhole(n)
+          val whole = cs.filter(n => wholeNamed(n) && !columnElsewhere(n))
+          val names = if whole.nonEmpty then whole else cs.filter(n => (named(n) || ruTable(n)) && !columnElsewhere(n))
           // no table named: the tables whose columns are named — one, or two linked (the rows are the link's from table)
           val byColumn = if names.nonEmpty then Vector.empty else cs.filter(n => ctx.schema.tables(n).columns.exists(c => named(c) || ruColumn(c)))
           val byColumnOne = if byColumn.size == 1 then byColumn
             else if byColumn.size == 2 then ctx.schema.links.filter(l => byColumn.contains(l.from) && byColumn.contains(l.to)).map(_.from).distinct else Vector.empty
-          val negated = names.filter(n => q.matches(s"(?U).*\\b(no|without|без|нет)\\s+(${java.util.regex.Pattern.quote(n.toLowerCase)}|${Phrase.Russian.tables.get(n).map(_._1.dropRight(1)).getOrElse("§")}\\p{L}{0,5})\\b.*"))
+          // (in an absence, the other table is also the one after "in"/"в": "customers that never appear in orders")
+          val negationWords = ctx.term match { case Con(_, "Absent", _) => "no|without|без|нет|in|в"; case _ => "no|without|без|нет" }
+          val negated = names.filter(n => q.matches(s"(?U).*\\b($negationWords)\\s+(${java.util.regex.Pattern.quote(n.toLowerCase)}|${Phrase.Russian.tables.get(n).map(_._1.dropRight(1)).getOrElse("§")}\\p{L}{0,5})\\b.*"))
           val targets = if negated.nonEmpty && names.size > negated.size then names.filterNot(negated.contains) else names
           if targets.size == 2 then one(ctx.schema.links.filter(l => targets.contains(l.from) && targets.contains(l.to)).map(_.from).distinct)
           else if targets.nonEmpty then one(targets) else one(byColumnOne)
@@ -101,8 +113,10 @@ object Fill:
           else Vector(("none", 0.0))
         case Ty.ColumnT(ts, Role.Where, optional) =>
           // a value of a column written in the question names the column; "none" when no value and no column is written
+          // (on a linked table, a value the own table also has is the own table's: "customer dee" is orders.customer)
+          val own = ts.headOption.exists(t => ctx.term match { case Con(_, "Rows", args) => args.headOption.contains(Leaf(Ty.TableT, t)); case _ => true })
           val valued = cs.filter(c => c != "none" && ts.exists(t => ctx.schema.tables.get(t).exists(tb => tb.column(c).exists(i =>
-            tb.rows.map(_(i).text).distinct.exists(v => v.length >= 3 && !v.forall(_.isDigit) && grams(v.toLowerCase) ||
+            tb.rows.map(_(i).text).distinct.filter(v => own || !ownValues(v)).exists(v => v.length >= 3 && !v.forall(_.isDigit) && grams(v.toLowerCase) ||
               v.length >= 2 && v.forall(_.isUpper) && ctx.question.matches(s"(?U).*\\b$v\\b.*") ||
               ruValue(v))))))
           // a number with a comparison word: the numeric column whose range holds it
@@ -113,8 +127,10 @@ object Fill:
           else if valued.isEmpty && numbered.size == 1 then Vector((numbered.head, 0.0))
           else if valued.isEmpty && optional && !ctx.word("with", "where", "whose", "over", "above", "below", "under", "than", "с", "где", "у которых", "больше", "меньше", "за", "on", "in") then Vector(("none", 0.0))
           else Vector.empty
-        case Ty.OpT(Kind.Num) => if ctx.word("over", "above", "more than", "greater", "больше", "выше", "свыше") then Vector((">", 0.0))
-          else if ctx.word("below", "under", "less than", "меньше", "ниже") then Vector(("<", 0.0)) else Vector.empty
+        case Ty.OpT(Kind.Num) =>
+          val more = ctx.word("above", "more than", "greater", "больше", "выше", "свыше") || q.matches("(?U).*\\bover \\d.*")
+          val less = ctx.word("below", "under", "less than", "меньше", "ниже")
+          if more && !less then Vector((">", 0.0)) else if less && !more then Vector(("<", 0.0)) else Vector.empty
         case Ty.OpT(_) => one(cs)
         case Ty.ValueT(t, c) =>
           val numeric = ctx.schema.of(t).exists(x => x.name == c && x.kind == Kind.Num)
@@ -128,15 +144,24 @@ object Fill:
           if ctx.word("how many", "number of", "count", "сколько", "число", "посчитай") then Vector(("count", 0.0))
           else if ctx.word("average", "mean", "средн*") then Vector(("avg", 0.0))
           else if ctx.word("total", "sum", "summed", "итого") || ctx.word("сумм*") && !sumIsColumn then Vector(("sum", 0.0))
-          else if limitNumber.isDefined || limitOne then Vector(("none", 0.0))
-          else if ctx.word("which", "show", "list", "какие", "покажи", "выведи", "список") || q.matches(s"(?U)^(the )?(${cs.mkString("|")}|\\p{L}+)\\b.*") && !ctx.word("largest", "smallest", "highest", "lowest", "maximum", "minimum", "наибольш*", "наимен*", "максим*", "миним*") then Vector(("none", 0.0))
-          else if ctx.word("minimum", "smallest", "least", "минимум", "наимен*") && !ctx.word("row", "which of", "строка", "у какого") then Vector(("min", 0.0))
-          else if ctx.word("maximum", "максимум") then Vector(("max", 0.0))
-          else Vector.empty
+          else if (limitNumber.isDefined || limitOne) && !grouped && !ctx.word("per", "each", "by", "по", "в разрезе") then Vector(("none", 0.0))
+          else
+            // a question that is a noun phrase of the table ("The orders where…", "Заказы за…"): rows, no function
+            val tableWords = ctx.schema.tables.keys.toVector.flatMap(n => n +: n.dropRight(1) +: Phrase.Russian.tables.get(n).toVector.flatMap((a, b, c, d) => Vector(a, b, c, d)))
+            val sizeWords = ctx.word("largest", "smallest", "highest", "lowest", "maximum", "minimum", "наибольш*", "наимен*", "максим*", "миним*")
+            if ctx.word("which", "show", "list", "какие", "покажи", "выведи", "список") ||
+              q.matches(s"(?U)^(the )?(\\p{L}+ )?(${tableWords.map(java.util.regex.Pattern.quote).mkString("|")})\\b.*") && !sizeWords then Vector(("none", 0.0))
+            // ("smallest first, the first 5" is an order with a limit, not a minimum)
+            else if ctx.word("minimum", "smallest", "least", "минимум", "наимен*") && !ctx.word("row", "which of", "строка", "у какого", "largest", "maximum", "наибольш*", "максим*", "first", "top", "топ", "первые", "сначала") then Vector(("min", 0.0))
+            else if ctx.word("maximum", "максимум") && !ctx.word("minimum", "smallest", "минимум", "наимен*") then Vector(("max", 0.0))
+            else Vector.empty
         case Ty.OrderT(_, agg) =>
           val ordered = ctx.word("largest", "smallest", "highest", "lowest", "fastest", "slowest", "biggest", "descending", "ascending", "first", "top", "sorted", "ordered",
             "самы*", "наибольш*", "наимен*", "по убыван*", "по возраст*", "от большего", "от меньшего", "топ", "сначала", "упорядоч*")
-          if !ordered then Vector(("none", 0.0))
+          // with an aggregate and no group there is nothing to order; a size word is the function's when it is min/max
+          val explicit = ctx.word("descending", "ascending", "по убыван*", "по возраст*", "от большего", "от меньшего", "сначала", "sorted", "ordered", "упорядоч*", "first", "top", "топ", "первые")
+          val sizeIsFn = fnChosen.exists(f => f == "min" || f == "max")
+          if !ordered || sizeIsFn && !explicit || agg.isDefined && !grouped && !explicit then Vector(("none", 0.0))
           else agg match
             case Some(_) => one(cs.filter(_ != "none"))
             case None =>
@@ -159,7 +184,7 @@ object Fill:
             else if !topWords || grouped && !ctx.word("top", "топ", "первые") then Vector(("none", 0.0))
             else Vector.empty)
         case Ty.Program | Ty.KindT =>
-          val k = if ctx.word("reach*", "depend*", "lead*", "достиж*", "завис*", "вед*", "доход*") then "closure"
+          val k = if ctx.word("reach*", "depend*", "lead*", "достиж*", "достиг*", "завис*", "вед*", "доход*") then "closure"
             else if ctx.word("without", "never", "lacking", "без", "нет", "не встреча*") || q.matches("(?U).*\\bno\\b.*") then "absent" else "rows"
           Vector((if ty == Ty.Program then k.capitalize else k, 0.0))
         case Ty.DirectionT => if ctx.word("depend*", "reachable", "where does", "завис*", "достижим*", "куда") then Vector(("from", 0.0))
@@ -170,7 +195,7 @@ object Fill:
           val links = cs.filter(_ != "none")
           val needed = links.filter { l => val to = l.split("->").last
             ctx.schema.tables.get(to).exists(tb => tb.columns.exists(c => named(c) || ruColumn(c)) ||
-              tb.columns.indices.exists(i => tb.rows.map(_(i).text).distinct.exists(v => v.length >= 2 &&
+              tb.columns.indices.exists(i => tb.rows.map(_(i).text).distinct.filterNot(ownValues).exists(v => v.length >= 2 &&
                 (v.forall(_.isUpper) && ctx.question.matches(s"(?U).*\\b$v\\b.*") || v.length >= 3 && !v.forall(_.isDigit) && grams(v.toLowerCase))))) }
           if needed.size == 1 then Vector((needed.head, 0.0)) else if needed.isEmpty then Vector(("none", 0.0)) else Vector.empty
         case Ty.ReverseLinkT(_) => one(cs)

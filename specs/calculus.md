@@ -95,3 +95,42 @@ there the fact holes stay bound to the data.
 `RefineBench`: refinement with the data first and the model's tokens next (the text tier) on a model, on the
 sample (26) and on held-out pairs by constructor; the data-alone share printed apart (its law: never wrong).
 Numbers recorded in specs/data.md §26 as they come.
+
+## 7. The levels (the operator, 2026-11-07): each a calculus of its own, each described by the one below
+
+The simplification the operator asked for, done as levels. A higher level is an INSTANCE of the lower one — its
+states, moves and enabling said in the lower one's terms — and keeps its own laws. `Level0.scala`, `Level1.scala`,
+`Encode.scala`; the laws in `LevelsSuite`.
+
+**Level 0 — the choice calculus.** A state; the moves ENABLED in it (none: terminal); a STEP by a move; a CHOOSER
+that weighs the enabled moves (empty: no opinion); an OPEN state accepts any move the chooser names. The run:
+weigh, take the best, step — until terminal, or until the chooser has no opinion or two moves are within the
+margin: the run stops in a non-terminal state, a value (an abstention). Nothing about words, types, programs or
+models. Its laws: a run is bounded; the same chooser gives the same run; a run replayed by its own moves is the
+same run.
+
+**Level 1 — the word calculus.** A reading is a WORD over an alphabet that changes at every step: the state is a
+context and the word so far, `next(ctx, word)` the letters allowed after it (None: complete), an interpretation
+takes a complete word to a domain (a table, a sentence, an effect). The exact facts live in `next`: where the
+context decides a letter, `next` returns ONE letter and no chooser is asked — exactness is a property of the
+grammar, not a strategy. An instance of level 0 (moves = letters, step = append, enabled = next). Its laws: where
+`next` narrows to one letter along a gold word, it is the gold's (`narrowsRight`, with `contradiction` naming
+the place it fails); a complete word interprets.
+
+**Level 2 — typed terms with holes** (§1). Described by level 1 (`Encode`): a term IS its word — the constructors
+chosen in preorder; the tree is rebuilt by replaying the grammar (`tree(word(t)) = t`); the leftmost hole's
+candidates are the letters allowed next, narrowed by the data; a level-2 fill is a level-1 chooser; the
+denotation is the interpretation of the complete word. Its laws (§2) stay; the encoding's law: a level-2
+refinement and the level-1 reading with the same sources take the same word (checked on the sample's 26
+questions), and the level-1 oracle reaches every point.
+
+**Level 3 — the space and its phrases** (§25 of data.md): points, phrases in two languages, answers as terms.
+Described by level 2: a point is a complete word whose interpretation is the point's result. Its own law, the
+strongest so far: a point's phrase, read by the DATA ALONE (level 1 with no chooser), never contradicts the point
+— 313 points phrased twice (en, ru), 626 readings, 0 contradictions, and 460 of the 626 close to the point by the
+data alone. The remaining 166 stop at a hole only a chooser can fill.
+
+What simplifies at each step down: level 2 drops the strategies (one loop), level 1 drops the types (a type is
+the alphabet after a word) and the "exact first" strategy (a singleton alphabet), level 0 drops the words. What
+each level keeps as its own: the laws above. The bus (specs/bus.md) is a level-1 notion: the representation of
+the context from which the chooser is linear per alphabet.
