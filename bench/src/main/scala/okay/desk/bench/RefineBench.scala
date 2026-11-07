@@ -29,9 +29,12 @@ object RefineBench:
     val dir = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
     val chat = Chat.load(dir); val model = Model.load(dir, mapped = true).asInstanceOf[Qwen3]
     val reading: okay.desk.skill.Reading = ComputeReading.device.fold(MlxReading(chat, model, layer))(c => { println(s"  reading by the page's program on ${c.api}"); ComputeReading(dir, layer, c) })
+    // DESK_SOURCE=readers: the trained readers as the source between the data and the model's tokens (the vector tier)
+    val readers: Option[okay.desk.skill.Readers] = Option.when(sys.env.get("DESK_SOURCE").contains("readers")) {
+      val on = MlxReading.ready(chat, model, layer, repo, sys.error("no skill file")); println("  the readers' skill as a Weigh source"); on.readers }
     def refine(tables: Map[String, Table], question: String, exactOnly: Boolean): Refine.Done =
       val s = Space.Schema(tables); val g = new calc.Grammar(s)
-      val fill: Fill[Read] = if exactOnly then Fill.exact[Read] else Fill.first[Read](Fill.exact[Read], Fill.model[Read](tables))
+      val fill: Fill[Read] = if exactOnly then Fill.exact[Read] else Fill.first[Read]((Vector(Fill.exact[Read]) ++ readers.map(_.weigh[Read]).toVector :+ Fill.model[Read](tables))*)
       val (steps, term) = Read.run(Strategy.greedyIn[Read](g, Context(s, question, Term.Hole(Ty.Program)), fill), reading)
       term.fold(Refine.Done(steps.lastOption.map(_._2).getOrElse(Term.Hole(Ty.Program)), steps.map((ty, _) => (ty, "")).toVector, steps.lastOption.map((ty, _) => (ty, Vector.empty[String]))))(t => Refine.Done(t, Vector.empty, None))
     // the sample

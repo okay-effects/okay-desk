@@ -812,6 +812,78 @@ final class Readers:
         f"wrong above the threshold ${(n - abstained - whole) * 100.0 / n}%.1f%%; " +
         keys.filter(total.contains).map(k => f"$k ${right(k) * 100.0 / total(k)}%.0f%% (${total(k)})").mkString(", "))
 
+  /** THE READERS AS A SOURCE OF THE CALCULUS (specs/calculus.md §15) — the vector tier of `Weigh`: a `Fill` whose
+   * opinion on a hole comes from the probe or pointer that reads that constructor, at the prefix of the term so far.
+   * One prompt per question (cached: a reading asks about a dozen holes). Log-probabilities over the candidates; no
+   * opinion on a value's text, a link, a node (the data or the model's tokens fill those). The "none" of an optional
+   * slot is the constructor probe's "-"; the columns share the rest by the pointer with ask. */
+  def weigh[R[_]: Has[Read]]: calc.Fill[R] = new calc.Fill[R]:
+    import calc.{Context, Dist, Term, Ty}
+    private var cache: Option[(String, Prompted, Vector[Array[Float]], Array[Float])] = None
+    private def ready(ctx: Context): (Prompted, Vector[Array[Float]], Array[Float]) ! R = cache match
+      case Some((q, pr, ks, last)) if q == ctx.question => pure((pr, ks, last))
+      case _ =>
+        for
+          pr <- prompted(Pairs.Pair(ctx.schema.tables, ctx.question, ""))
+          ks <- keys(pr).map(_.map(z))
+          last <- Read.states(pr.ids, Vector(pr.ids.length - 1)).map(st => z(st.head))
+        yield { cache = Some((ctx.question, pr, ks, last)); (pr, ks, last) }
+    /** the table of the term so far, else the pointer's best */
+    private def tableOf(ctx: Context, pr: Prompted, ks: Vector[Array[Float]], last: Array[Float]): String =
+      ctx.term match
+        case Term.Con(_, "Rows" | "Absent", args) if args.headOption.exists(_.isInstanceOf[Term.Leaf]) => args.head.asInstanceOf[Term.Leaf].value
+        case _ =>
+          val names = ctx.schema.tables.keys.toVector.sorted
+          names(pointers("table").predict(last, names.map(n => ks(pr.indexOfTable(n)))) min (names.size - 1))
+    /** a constructor probe's log-probabilities over the candidates, `map` naming each candidate's class */
+    private def byPart(name: String, shapeQ: Array[Float], cs: Vector[String], map: String => String): Dist =
+      val probs = logSoftmax(shape.scores(shapeQ)).map(v => math.exp(v.toDouble))
+      val classes = cs.map(map).distinct
+      val mass = classes.map(c => c -> math.log(math.max(1e-9, partP(name, shapeQ, probs, _ == c)))).toMap
+      cs.map(c => (c, mass(map(c)) - math.log(cs.count(x => map(x) == map(c)).toDouble)))
+    def apply(ty: Ty, cs: Vector[String], ctx: Context): Dist ! R =
+      ready(ctx).flatMap { (pr, ks, last) =>
+        val table = tableOf(ctx, pr, ks, last)
+        def shapeQ = query(pr, prefixes.head._2(table)).map(z)
+        ty match
+          case Ty.TableT =>
+            tableBoth(pr, last, ks, cs).map(sc => cs.zip(sc.map(_.toDouble)))
+          case Ty.Program => shapeQ.map(sq => byPart("kind", sq, cs, c => if c == "Rows" then "rows" else if c == "Absent" then "absent" else "closure"))
+          case Ty.KindT => shapeQ.map(sq => byPart("kind", sq, cs, identity))
+          case Ty.DirectionT => shapeQ.map(sq => byPart("kind", sq, cs, c => if c == "from" then "closure-from" else "closure-to"))
+          case Ty.ColumnT(ts, role, _, _) =>
+            val slot = role match { case calc.Role.Where => "where"; case calc.Role.Group => "group"; case calc.Role.Agg => "agg" }
+            val part = role match { case calc.Role.Where => "where"; case calc.Role.Group => "group"; case _ => "" }
+            val prefix = prefixes.find(_._1 == slot).get._2(table)
+            val columns = cs.filter(_ != "none")
+            val owner = (c: String) => ts.find(t => ctx.schema.tables.get(t).exists(_.columns.contains(c))).getOrElse(table)
+            val cands = columns.map(c => (owner(c), c)).filter((t, c) => pr.indexOf(t, c) >= 0)
+            for
+              sq <- shapeQ
+              pNone = if cs.contains("none") && part.nonEmpty then partP(part, sq, logSoftmax(shape.scores(sq)).map(v => math.exp(v.toDouble)), _ == "-") else 0.0
+              qv <- query(pr, prefix).map(z)
+              scores <- if cands.isEmpty then pure[Array[Float], R](Array.empty) else bothScores(pr, prefix, pointers(slot), qv, ks, cands)
+            yield
+              val ls = if scores.isEmpty then Array.empty[Float] else logSoftmax(scores)
+              val some = math.log(math.max(1e-9, 1 - pNone))
+              cands.zip(ls).map((tc, l) => (tc._2, some + l.toDouble)) ++ (if cs.contains("none") then Vector(("none", math.log(math.max(1e-9, pNone)))) else Vector.empty)
+          case Ty.FnT(_) =>
+            query(pr, fnPrefix(table)).map(z).map { fq =>
+              val ps = logSoftmax(fnProbe.scores(fq)); val classes = fns :+ "-"
+              cs.flatMap(c => classes.indexOf(if c == "none" then "-" else c) match { case -1 => None; case i => Some((c, ps(i).toDouble)) }) }
+          case Ty.OpT(_) =>
+            val column = ctx.term match
+              case Term.Con(_, _, args) => args.reverse.collectFirst { case Term.Con(Ty.ColumnT(_, calc.Role.Where, _, _), c, inner) if inner.isEmpty => c }.getOrElse("")
+              case _ => ""
+            query(pr, opPrefix(table, column)).map(z).map { oq =>
+              val ps = logSoftmax(op.scores(oq))
+              cs.flatMap(c => ops.indexOf(c) match { case -1 => None; case i => Some((c, ps(i).toDouble)) }) }
+          case Ty.DirT => shapeQ.map(sq => byPart("dir", sq, cs, identity))
+          case Ty.OrderT(_, _, _) => shapeQ.map(sq => byPart("order", sq, cs, c => if c == "none" then "-" else "order"))
+          case Ty.LimitT(_) => shapeQ.map(sq => byPart("limit", sq, cs, c => if c == "none" then "-" else "limit"))
+          case _ => pure(Vector.empty)
+      }
+
   /** the readers measured on held-out pairs, slot by slot: the pointer alone against the pointer with ask — so a
    * change is judged on 200 pairs, not on the bench's 12 questions */
   def measure[R[_]: Has[Read]](pairs: Vector[Pairs.Pair]): Unit ! R =

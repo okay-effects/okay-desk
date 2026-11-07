@@ -312,3 +312,45 @@ model), codes only in capitals, "none" only when nothing is written.
 The Russian gap is the data's own words ("Украины", "ВВП"): the sibling's `Words` dictionary, to be plugged into
 the exact fill when committed. The data alone never errs in English; its one Russian error is a country's name
 it cannot read, so it closes on the year alone — `Words` closes that too.
+
+## 15. The sources joined: the data's words, the trained readers (2026-11-07, after the sibling's commits)
+
+- **`Context.words`**: the exact fill reads a dataset's own names (`skill.Words`, data.md §29 — the sibling agent's
+  dictionary made once per dataset by a generating model) where it read the generator's `Phrase.Russian`; `Words`
+  falls back to the generator's by itself. The Russian gap on real data was exactly these names.
+- **`Readers.weigh`**: the trained readers as a `Fill` — the VECTOR TIER of `Weigh`, one public method added to the
+  sibling's `Readers`: the hole's type picks the probe or pointer that reads that constructor (the kind probe for
+  `Program`, the two table readers for `TableT`, the role's pointer with ask for a column with the constructor
+  probe's "-" as the mass of `none`, the function probe, the op probe, the direction, the order and the limit
+  probes); one prompt per question cached; no opinion on a value's text, a link, a node. So the three sources of
+  the design are now real handlers of one operation: the data, the readers, the model's tokens — in that order
+  (`Fill.first`), each asked only where the one before was silent.
+- The benches take `DESK_SOURCE=readers` (the readers between the data and the tokens) and `DESK_WORDS=<file>`
+  (RealRefine). Numbers below as they come.
+
+**Measured (2026-11-07, evening).** The three sources in order — the data, the trained readers (`Readers.weigh`),
+the model's tokens — on cut19, the JVM by the page's program on MLX:
+
+| | held-out 100 (the grammar's pairs) | the sample | real GDP, with `Words` (en / ru, right / refused / wrong of 19) |
+|---|---|---|---|
+| the data alone | 68% whole, 32% open, 0 wrong | 26/26 | 11/8/0 — 9/10/0 |
+| data, tokens | 65% (§13) | 13/13, 13/13 | 12/6/1 — 10/6/3 |
+| data, readers, tokens | **91%** whole, 2 open | 13/13, 13/13 | 12/6/1 — 10/6/3 |
+| the readers alone, §25 | 57% | 13/13, 13/13 | §28: 16/3/0 — 12/3/4 |
+
+And on the TEACHER'S pairs (`TeacherRefine`: 242 pairs of natural wording in en, ru, uk, specs/teacher.md, none of
+them seen by anything here; right / open / wrong):
+
+| | en (84) | ru (83) | uk (75) |
+|---|---|---|---|
+| the data alone | 38 / 38 / 8 | 27 / 42 / 14 | 3 / 64 / 8 |
+| data, tokens | 51 / 6 / 27 | 37 / 4 / 42 | 9 / 0 / 66 |
+| data, readers, tokens | **66** / 4 / 14 | **39** / 3 / 41 | **25** / 0 / 50 |
+| (the sibling's readers alone, teacher.md) | 63% | 25% | 16% |
+
+What it says: on natural wording the law "the data alone never errs" does NOT hold — "Сколько всего денег"
+(how much money: a sum, the rule says count), "посчитай среднее" (compute the average: the rule says count),
+"Клиент с именем gleb" (a value both tables hold) — 30 wrong of 242; these are the exact rules' limits on
+people's wording, a number now, by language. The readers as the middle source lift English to 79% and Ukrainian
+from 12% to 33% with no Ukrainian anywhere in their training (the words of a question are not what they read).
+Ukrainian has no dictionary and no pairs: the teacher's pairs are the way for it.

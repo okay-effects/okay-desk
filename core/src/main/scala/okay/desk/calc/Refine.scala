@@ -7,12 +7,14 @@ import okay.scala3.*
 import Term.*
 
 /** THE CONTEXT a hole is filled from: the tables, the question, the term so far */
-final case class Context(schema: Schema, question: String, term: Term):
+/** `words`: the data's own names in another language (skill.Words, §29 of data.md) — the dictionary the exact fill reads
+ * tables, columns and values by; it falls back to the generator's (`Phrase.Russian`) by itself */
+final case class Context(schema: Schema, question: String, term: Term, words: okay.desk.skill.Words = okay.desk.skill.Words.none):
   lazy val lower: String = question.toLowerCase
   /** the question's words, and their runs of up to four (a value of several words), lowercased — computed once per
    * question, not per hole (a reading asks for them at every hole) */
-  lazy val words: Vector[String] = "(?U)[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*".r.findAllIn(question).map(_.replaceAll("[.'-]+$", "")).toVector
-  lazy val grams: Set[String] = (1 to 4).flatMap(k => if words.size >= k then words.sliding(k).map(_.mkString(" ").toLowerCase) else Nil).toSet
+  lazy val tokens: Vector[String] = "(?U)[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*".r.findAllIn(question).map(_.replaceAll("[.'-]+$", "")).toVector
+  lazy val grams: Set[String] = (1 to 4).flatMap(k => if tokens.size >= k then tokens.sliding(k).map(_.mkString(" ").toLowerCase) else Nil).toSet
   def word(ws: String*): Boolean = ws.exists(w => lower.matches(s"(?U).*\\b${w.stripSuffix("*")}${if w.endsWith("*") then "\\w*" else ""}\\b.*"))
 
 /** a distribution over a hole's candidates: constructor → score (a log-probability where the source has one);
@@ -68,9 +70,9 @@ object Fill:
         val ws = c.split("[\\s_]+").filter(_.length >= 4).map(_.toLowerCase)
         ws.exists { w => q.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(w)}(s|es)?\\b.*") &&
           !ctx.schema.cols.exists(o => o.name != c && !o.name.toLowerCase.matches(".*\\b(code|id|key)\\b.*") && o.name.split("[\\s_]+").map(_.toLowerCase).contains(w)) }
-      def ruTable(n: String): Boolean = Phrase.Russian.tables.get(n).exists((nom, _, _, _) => q.matches(s"(?U).*\\b${nom.dropRight(1)}\\p{L}{0,5}\\b.*"))
+      def ruTable(n: String): Boolean = ctx.words.table(n).exists((nom, _, _, _) => q.matches(s"(?U).*\\b${nom.dropRight(1)}\\p{L}{0,5}\\b.*"))
       // (a whole form of the dictionary — дню — or the stem)
-      def ruColumn(n: String): Boolean = Phrase.Russian.columns.get(n).exists((nom, gen, dat) => Vector(nom, gen, dat).exists(f => q.matches(s"(?U).*\\b$f\\b.*")) ||
+      def ruColumn(n: String): Boolean = ctx.words.column(n).exists((nom, gen, dat) => Vector(nom, gen, dat).exists(f => q.matches(s"(?U).*\\b$f\\b.*")) ||
         q.matches(s"(?U).*\\b${if nom.length <= 3 then nom else nom.dropRight(if nom.length > 4 then 2 else 1)}\\p{L}{0,5}\\b.*"))
       // the values the term's own conditions already use, and the own table's values (a linked table's are others')
       val ownValues: Set[String] = ctx.term match
@@ -79,8 +81,9 @@ object Fill:
       def one(xs: Vector[String]): Dist = if xs.size == 1 then Vector((xs.head, 0.0)) else Vector.empty
       // a value's Russian form from the dictionary, by its stem: a negated form ("не оплачено", "неоплаченные") only as
       // negated, the plain form not inside the negated one
-      def ruStem(w: String) = if w.length <= 3 then w else w.dropRight(if w.length > 4 then 2 else 1)
-      def ruValue(v: String): Boolean = Phrase.Russian.values.get(v).exists { form =>
+      // (a stem long enough that "Самоа" is not in "самый": two letters off a long word, one off a short)
+      def ruStem(w: String) = if w.length <= 3 then w else w.dropRight(if w.length > 6 then 2 else 1)
+      def ruValue(v: String): Boolean = ctx.words.value(v).exists { form =>
         val stem = form.split(" ").map(ruStem).mkString(" ")
         val pattern = s"(?U).*\\b$stem\\p{L}{0,5}\\b.*"
         if form.startsWith("не ") then q.matches(pattern) || q.matches(pattern.replace("не ", "не"))
@@ -107,10 +110,10 @@ object Fill:
           // the English singular in the question (and not the plural) while another table has that column; or a Russian
           // stem shared with another table's column while no whole form of the table's name is in the question
           def singularOnly(n: String) = q.matches(s"(?U).*\\b${n.toLowerCase.dropRight(1)}\\b.*") && !q.matches(s"(?U).*\\b${n.toLowerCase}\\b.*")
-          def ruWhole(n: String) = Phrase.Russian.tables.get(n).exists((a, b, c, d) => Vector(a, b, c, d).exists(f => q.matches(s"(?U).*\\b$f\\b.*")))
+          def ruWhole(n: String) = ctx.words.table(n).exists((a, b, c, d) => Vector(a, b, c, d).exists(f => q.matches(s"(?U).*\\b$f\\b.*")))
           def columnElsewhere(n: String) = ctx.schema.tables.values.exists(t => t.name != n && t.columns.exists(c =>
             c.equalsIgnoreCase(n.dropRight(1)) && singularOnly(n) ||
-              !named(n) && !ruWhole(n) && Phrase.Russian.columns.get(c).exists((nom, _, _) => Phrase.Russian.tables.get(n).exists(_._1.dropRight(1) == nom))))
+              !named(n) && !ruWhole(n) && ctx.words.column(c).exists((nom, _, _) => ctx.words.table(n).exists(_._1.dropRight(1) == nom))))
           // whole names first ("customers", "клиентов"); a singular ("order") only when no table is named whole — "in descending
           // order" must not name orders beside customers
           def wholeNamed(n: String) = q.matches(s"(?U).*\\b${java.util.regex.Pattern.quote(n.toLowerCase)}\\b.*") || ruWhole(n)
@@ -122,7 +125,7 @@ object Fill:
             else if byColumn.size == 2 then ctx.schema.links.filter(l => byColumn.contains(l.from) && byColumn.contains(l.to)).map(_.from).distinct else Vector.empty
           // (in an absence, the other table is also the one after "in"/"в": "customers that never appear in orders")
           val negationWords = ctx.term match { case Con(_, "Absent", _) => "no|without|без|нет|in|в"; case _ => "no|without|без|нет" }
-          val negated = names.filter(n => q.matches(s"(?U).*\\b($negationWords)\\s+(${java.util.regex.Pattern.quote(n.toLowerCase)}|${Phrase.Russian.tables.get(n).map(_._1.dropRight(1)).getOrElse("§")}\\p{L}{0,5})\\b.*"))
+          val negated = names.filter(n => q.matches(s"(?U).*\\b($negationWords)\\s+(${java.util.regex.Pattern.quote(n.toLowerCase)}|${ctx.words.table(n).map(_._1.dropRight(1)).getOrElse("§")}\\p{L}{0,5})\\b.*"))
           val targets = if negated.nonEmpty && names.size > negated.size then names.filterNot(negated.contains) else names
           if targets.size == 2 then one(ctx.schema.links.filter(l => targets.contains(l.from) && targets.contains(l.to)).map(_.from).distinct)
           else if targets.nonEmpty then one(targets) else one(byColumnOne)
@@ -151,8 +154,19 @@ object Fill:
             { val vs = ctx.schema.tables(t).rows.flatMap(_(ctx.schema.tables(t).columns.indexOf(c)).num); vs.nonEmpty && vs.min <= x && x <= vs.max }))))
           // the columns something is written for, in the TABLE'S order — the canonical order of two conditions: the first slot
           // takes the first, the second slot the next (its candidates exclude the columns up to the first's)
-          val written = (valued ++ numbered).distinct.sortBy(c => ts.flatMap(t => ctx.schema.tables.get(t).toVector.flatMap(tb => Option.when(tb.columns.contains(c))(tb.columns.indexOf(c)))).headOption.getOrElse(99))
-          if written.nonEmpty then Vector((written.head, 0.0))
+          // a value written that several columns hold ("green" in kind and in name): the column the question NAMES has it;
+          // none named — ambiguous, no opinion (the same value is never two conditions)
+          def valuesOf(c: String): Set[String] = ts.flatMap(t => ctx.schema.tables.get(t).toVector.flatMap(tb => tb.column(c).toVector.flatMap(i => tb.rows.map(_(i).text)))).toSet
+          val writtenValues: Set[String] = valued.flatMap(c => valuesOf(c).filter(v => !usedVals(v) && (years.contains(v) || v.length >= 3 && !v.forall(_.isDigit) && !(v.length <= 3 && v.forall(_.isUpper)) && grams(v.toLowerCase) ||
+            v.length >= 2 && v.forall(_.isUpper) && ctx.question.matches(s"(?U).*\\b$v\\b.*") || ruValue(v)))).toSet
+          val byValue = writtenValues.toVector.map(v => v -> valued.filter(c => valuesOf(c)(v)))
+          val ambiguous = byValue.exists((_, cols) => cols.size > 1 && !cols.exists(c => named(c) || ruColumn(c) || namedByWord(c)))
+          val settled = byValue.flatMap((_, cols) => if cols.size == 1 then cols else cols.filter(c => named(c) || ruColumn(c) || namedByWord(c)))
+          val valuedSettled = settled.distinct // (a column with no unused written value is not a condition again)
+          val written = if ambiguous then Vector.empty else (valuedSettled ++ numbered).distinct.sortBy(c => ts.flatMap(t => ctx.schema.tables.get(t).toVector.flatMap(tb => Option.when(tb.columns.contains(c))(tb.columns.indexOf(c)))).headOption.getOrElse(99))
+          if ambiguous then Vector.empty
+          else if written.nonEmpty then Vector((written.head, 0.0))
+          else if usedVals.nonEmpty && valued.nonEmpty then Vector(("none", 0.0)) // the written value is the first condition's
           // (no value, no number, no year written, and — for a first condition — no word of a condition: no condition; a
           // second condition's words were the first's)
           else if years.isEmpty && optional && (usedVals.nonEmpty || !ctx.word("with", "where", "whose", "over", "above", "below", "under", "than", "с", "где", "у которых", "больше", "меньше")) then Vector(("none", 0.0))
@@ -176,7 +190,7 @@ object Fill:
             one(vs.filter(v => v.length >= 2 && (grams(v.toLowerCase) || ruValue(v))).sortBy(-_.length).take(1))
         case Ty.FnT(_) =>
           // ("сумма" is also the Russian name of a column called amount: then the word says nothing about the function)
-          val sumIsColumn = ctx.schema.cols.exists(c => Phrase.Russian.columns.get(c.name).exists(_._1 == "сумма")) && !ctx.word("сумма заказов", "сумма продаж", "итого")
+          val sumIsColumn = ctx.schema.cols.exists(c => ctx.words.column(c.name).exists(_._1 == "сумма")) && !ctx.word("сумма заказов", "сумма продаж", "итого")
           // ("count" is also a column's name in the pairs: then the word alone says nothing about the function)
           val countIsColumn = ctx.schema.cols.exists(_.name == "count")
           if ctx.word("how many", "number of", "сколько", "число", "посчитай") || ctx.word("count") && !countIsColumn then Vector(("count", 0.0))
@@ -185,12 +199,14 @@ object Fill:
           else if (limitNumber.isDefined || limitOne) && !grouped && !ctx.word("per", "each", "by", "по", "в разрезе") then Vector(("none", 0.0))
           else
             // a question that is a noun phrase of the table ("The orders where…", "Заказы за…"): rows, no function
-            val tableWords = ctx.schema.tables.keys.toVector.flatMap(n => n +: n.dropRight(1) +: Phrase.Russian.tables.get(n).toVector.flatMap((a, b, c, d) => Vector(a, b, c, d)))
+            val tableWords = ctx.schema.tables.keys.toVector.flatMap(n => n +: n.dropRight(1) +: ctx.words.table(n).toVector.flatMap((a, b, c, d) => Vector(a, b, c, d)))
             val sizeWords = ctx.word("largest", "smallest", "highest", "lowest", "maximum", "minimum", "наибольш*", "наимен*", "максим*", "миним*")
             // (a question that starts with a column's word in the plural — "Countries with…" for Country Name — lists rows)
             val columnWords = ctx.schema.cols.flatMap(_.name.split("[\\s_]+")).filter(_.length >= 4).map(_.toLowerCase).toSet
-            val startsWithColumn = q.split("[^\\p{L}]+").headOption.exists(w => columnWords(w) || w.endsWith("ies") && columnWords(w.dropRight(3) + "y") || w.endsWith("s") && columnWords(w.dropRight(1)))
-            if ctx.word("which", "show", "list", "какие", "покажи", "выведи", "список") || q.matches("(?U)^(what (was|is|were|are) the|какой (был|была|было)|каков)\\b.*") && !sizeWords || startsWithColumn && !sizeWords && !ctx.word("how many", "number of", "average", "total", "sum", "mean") ||
+            val ruColumnStems = ctx.schema.cols.flatMap(c => ctx.words.column(c.name).toVector.flatMap((nom, gen, dat) => Vector(nom, gen, dat))).map(ruStem).toSet
+            val startsWithColumn = q.split("[^\\p{L}]+").headOption.exists(w => columnWords(w) || w.endsWith("ies") && columnWords(w.dropRight(3) + "y") || w.endsWith("s") && columnWords(w.dropRight(1)) ||
+              ruColumnStems.exists(st => st.length >= 4 && w.startsWith(st)))
+            if ctx.word("which", "show", "list", "какие", "покажи", "выведи", "список") || q.matches("(?U)^(what (was|is|were|are) the|какой (был|была|было)|каков)\\b.*") && !sizeWords || startsWithColumn && !sizeWords && !ctx.word("how many", "number of", "average", "total", "sum", "mean", "count", "сколько", "число", "сумм*", "итого", "средн*", "максим*", "миним*", "наибольш*", "наимен*") ||
               q.matches(s"(?U)^(the )?(\\p{L}+ )?(${tableWords.map(java.util.regex.Pattern.quote).mkString("|")})\\b.*") && !sizeWords then Vector(("none", 0.0))
             // ("smallest first, the first 5" is an order with a limit, not a minimum)
             else if ctx.word("minimum", "smallest", "least", "минимум", "наимен*") && !ctx.word("row", "which of", "строка", "у какого", "largest", "maximum", "наибольш*", "максим*", "first", "top", "топ", "первые", "сначала") then Vector(("min", 0.0))
@@ -206,9 +222,10 @@ object Fill:
           else agg match
             case Some(_) => one(cs.filter(_ != "none"))
             case None =>
+              // (a column a condition already uses is not the order's: "в 2023 году" is the condition, the order is the measure)
               val namedCols = cs.filter(c => c != "none" && (named(c) || ruColumn(c)))
               // "the largest X" with no column named: a size word orders by the one numeric column
-              val numeric = cs.filter(c => c != "none" && ctx.schema.cols.exists(x => x.name == c && x.kind == Kind.Num))
+              val numeric = cs.filter(c => c != "none" && !used(c) && ctx.schema.cols.exists(x => x.name == c && x.kind == Kind.Num))
               if namedCols.nonEmpty then one(namedCols)
               else if ctx.word("largest", "smallest", "biggest", "highest", "lowest", "больш*", "мал*", "высок*", "низк*") then one(numeric)
               else Vector.empty
@@ -237,7 +254,7 @@ object Fill:
           // a link when the question names a column of the linked table or a value of it; none when nothing of it is named
           val links = cs.filter(_ != "none")
           val needed = links.filter { l => val to = l.split("->").last
-            ctx.schema.tables.get(to).exists(tb => tb.columns.exists(c => named(c) || ruColumn(c)) ||
+            ctx.schema.tables.get(to).exists(tb => tb.columns.exists(c => !ctx.schema.tables.get(ctx.term match { case Con(_, "Rows", args) => args.headOption.collect { case Leaf(_, t) => t }.getOrElse(""); case _ => "" }).exists(_.columns.contains(c)) && (named(c) || ruColumn(c))) ||
               tb.columns.indices.exists(i => tb.rows.map(_(i).text).distinct.filterNot(ownValues).exists(v => v.length >= 2 &&
                 (v.forall(_.isUpper) && ctx.question.matches(s"(?U).*\\b$v\\b.*") || v.length >= 3 && !v.forall(_.isDigit) && grams(v.toLowerCase))))) }
           if needed.size == 1 then Vector((needed.head, 0.0)) else if needed.isEmpty then Vector(("none", 0.0)) else Vector.empty

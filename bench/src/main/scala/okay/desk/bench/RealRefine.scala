@@ -29,9 +29,14 @@ object RealRefine:
     val layer = sys.env.getOrElse("DESK_LAYER", "19").toInt
     val chat = Chat.load(dir); val model = Model.load(dir, mapped = true).asInstanceOf[Qwen3]
     val reading: okay.desk.skill.Reading = ComputeReading.device.fold(MlxReading(chat, model, layer))(c => { println(s"  reading by the page's program on ${c.api}"); ComputeReading(dir, layer, c) })
+    // the data's own words (§29) when DESK_WORDS names their file; the readers as a source when DESK_SOURCE=readers
+    val words = sys.env.get("DESK_WORDS").map(p => okay.desk.skill.Words.parse(java.nio.file.Files.readString(java.nio.file.Path.of(p))).fold(e => sys.error(e), identity)).getOrElse(okay.desk.skill.Words.none)
+    if !words.isEmpty then println(s"  the data's own words: ${words.tables.size} tables, ${words.columns.size} columns, ${words.values.size} values")
+    val readers: Option[okay.desk.skill.Readers] = Option.when(sys.env.get("DESK_SOURCE").contains("readers")) {
+      val on = MlxReading.ready(chat, model, layer, repo, sys.error("no skill file")); on.readers.words = words; println("  the readers' skill as a Weigh source"); on.readers }
     def refine(text: String, exactOnly: Boolean): Option[Term] =
-      val fill: Fill[Read] = if exactOnly then Fill.exact[Read] else Fill.first[Read](Fill.exact[Read], Fill.model[Read](tables))
-      Read.run(Strategy.greedyIn[Read](g, Context(s, text, Term.Hole(Ty.Program)), fill), reading)._2
+      val fill: Fill[Read] = if exactOnly then Fill.exact[Read] else Fill.first[Read]((Vector(Fill.exact[Read]) ++ readers.map(_.weigh[Read]).toVector :+ Fill.model[Read](tables))*)
+      Read.run(Strategy.greedyIn[Read](g, Context(s, text, Term.Hole(Ty.Program), words), fill), reading)._2
     for arm <- Vector("the data alone", "the data, then the model's tokens") do
       val zero = Map("en" -> 0, "ru" -> 0); var right = zero; var refused = zero; var wrong = zero
       for (q, i) <- RealBench.questions.zipWithIndex; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) do
