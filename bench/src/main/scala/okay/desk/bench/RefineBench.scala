@@ -28,7 +28,7 @@ object RefineBench:
     val layer = scala.sys.env.getOrElse("DESK_LAYER", "19").toInt
     val dir = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
     val chat = Chat.load(dir); val model = Model.load(dir, mapped = true).asInstanceOf[Qwen3]
-    val reading = MlxReading(chat, model, layer)
+    val reading: okay.desk.skill.Reading = ComputeReading.device.fold(MlxReading(chat, model, layer))(c => { println(s"  reading by the page's program on ${c.api}"); ComputeReading(dir, layer, c) })
     def refine(tables: Map[String, Table], question: String, exactOnly: Boolean): Refine.Done =
       val s = Space.Schema(tables); val g = new calc.Grammar(s)
       val fill: Fill[Read] = if exactOnly then Fill.exact[Read] else Fill.first[Read](Fill.exact[Read], Fill.model[Read](tables))

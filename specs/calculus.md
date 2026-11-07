@@ -196,3 +196,33 @@ greedy with a uniform weigh is the first wording. 29 laws for the calculus.
 What the model does here: it chooses WORDS, never facts. The model-weighed wording (the sentence so far as the
 prefix, the wordings as candidates — the same `Fill.model` with a renderer for answer terms) is the next bench;
 the answer's phrase is the `Phrase` of §3 in the other direction, the same adjunction.
+
+## 11. The device stack, reviewed (the operator, 2026-11-07): one forward, four handlers
+
+The operator asked where `OnMlx` was. It was not: on the JVM the forward was mlx-scala's own (`MlxReading`), a
+second implementation beside okay-llm's `Qwen3Compute` (and `Qwen3Forward`, a third, the plain-Scala reference)
+— the law "the page equals the JVM" bridged two programs. Now okay-llm has `OnMlx` (module `mlx`, artifact
+okay-llm-qwen-mlx): `Compute` on Apple's GPU through mlx-scala, thin — quantized matmul in MLX's layout,
+rms_norm, rope, matmul + softmax with the causal mask of the positions. Its law: `Qwen3Compute` on MLX equals it
+on the CPU (states within 1e-3 of their scale, the same next token; the cached prefix then the rest equals the
+whole). And okay-desk's `ComputeReading` answers `Read` on the JVM by the page's own `OnQwen` over
+`Qwen3Compute(OnMlx())` — the same forward, the same prefix cache, the same template as the browser: the sample
+read by it on Apple's GPU, 13/13 en, 13/13 ru (`DESK_DEVICE=mlx`, or `cpu`).
+
+The stack, each layer an effect or a trait with handlers and a conformance law:
+
+| layer | the operation | handlers | the law |
+|---|---|---|---|
+| `Weigh` | a hole weighed | the data, the model's tokens, a reader of states, a person, an oracle | §2, §8, §9 |
+| `Read` | states at positions, logits, tokens, the prompt | `OnQwen` over any `Compute`; `MlxReading` (mlx-scala's forward, for training and the teacher) | the readers' kit; the page == the JVM |
+| `Compute` | the tensor ops of a layer | `OnCpu` (the reference), `OnWebGpu`, `OnWebGl2`, `OnMlx` | each == `OnCpu` |
+
+The calculus never sees a device; a device never sees a term. "Any hardware" = a handler of `Compute`; "any model
+with logits" = the text tier of `Weigh`; "any model with states" = the vector tier after the bus's kit.
+
+What is still to simplify and generalize, in order: `Qwen3Forward` is a third copy of the forward (keep `OnCpu` as
+the reference, drop it); the three loops of refinement (`Refine.greedy`, `Weigh.refine`, `Strategy.program`) are
+one — keep the one on the standard effects; `Compute`'s ops are Qwen3's (`headNormRope`, `swiglu`) — an
+architecture as DATA (q/k norms or not, the activation, the rope, tied embeddings, biases) over a smaller set of
+ops gives Llama, Gemma, Qwen2.5 on the same four handlers; training stays on MLX (autograd) — the boundary is
+inference hardware-neutral, training not yet.
