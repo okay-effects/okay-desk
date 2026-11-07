@@ -711,3 +711,20 @@ a number against the wrong column), the order (78%), the aggregate (82%). The cl
 singular names the table unless it is a column of another table; the Russian stem likewise against the
 dictionary's column stems): cut19 en 13/13, ru 13/13; the CORE (the teacher's skill, not retrained on it) en
 13/13, ru 13/13 (was 13/13, 7/13 over §24's thirteen), by constructor on the core whole 54%, abstained 2.
+
+## 26. The calculus (specs/calculus.md), measured (2026-11-07)
+
+Typed terms with holes; the one operation is a fill; the denotation exact. The bench `RefineBench` on cut19,
+refinement with the DATA first (`Fill.exact`) and the model's OWN TOKENS next (the text tier, no trained reader):
+
+| source | sample en | ru | held-out whole | open | wrong closed |
+|---|---|---|---|---|---|
+| the data alone | 13/13 | 13/13 | 54% | 46% | 0 (the law) |
+| the data, then the model's tokens | 13/13 | 13/13 | 65% | 5 | — |
+| (for reference: the trained readers by constructor, §25) | 13/13 | 13/13 | 57% | 0 | — |
+
+By constructor with the tokens: table 100%, join 98%, group 91%, agg 89%, order 90%, limit 93%, where 78%,
+closures 100%. The whole assembler with its rules turned out to be one greedy strategy of the calculus; the
+calculus with no trained reader at all reads more of the held-out than the readers did, and what the data decides
+it decides without error. The vector tier (the readers as fills) is the next source to plug in, when `Readers`
+gets a public surface for its probes and pointers; the kit then measures per type how far a linear fill carries.
