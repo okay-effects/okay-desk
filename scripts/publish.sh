@@ -25,6 +25,8 @@ sed -i "" "s#src=\"main.js\"#src=\"main.js?v=$v\"#" "$out/index.html"
 rm -rf "$out/sample" && cp -r web/page/sample "$out/"
 # the data's own words (§29), a file a table: the examples'
 rm -rf "$out/words" && cp -r web/page/words "$out/"
+# the languages loaded on demand (calculus.md §18): lang/<code>.json
+rm -rf "$out/lang" && cp -r web/page/lang "$out/"
 mkdir -p "$out/model"
 cp "$MODEL_DIR/config.json" "$MODEL_DIR/tokenizer.json" "$out/model/" && cp "$SKILL" "$out/model/readers.skill"
 # the weights as safetensors files of a few layers each (manifest.json lists them): read one by one as one

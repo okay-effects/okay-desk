@@ -56,11 +56,17 @@ object Strategy:
     val all: List[Term] ! (Pure + Writer % Step) = Choose.all(weighed)
     run(Writer.run[Step, Pure + Writer % Step, Pure, List[Term]](all))._2
 
-  /** GREEDY IN A ROW: the same as `greedy`, the source effectful (the model's tokens need `Read`) — the program over
-   * the standard effects plus the row, the handlers applied, the row left */
-  def greedyIn[R[_]](g: Rules, ctx: Context, fill: Fill[R], margin: Double = 0.0): (List[Step], Option[Term]) ! R =
-    type Row[X] = (Choose + Weigh + Writer % Step + R)[X]
+  /** the row a source lives in when the reading runs in `R`: the row's effects first, the reading's after (`Weigh`
+   * handled out of it) — the caller builds its fills here, concretely, so no evidence is summoned for an abstract
+   * row (that was the page's `Place.Last` mismatch: a `Sub` for an abstract `R` taken for a row of one effect) */
+  type Rest[R[_]] = [X] =>> (R + Choose + Writer % Step)[X]
+
+  /** GREEDY IN A ROW: the same as `greedy`, the source effectful (the model's tokens need `Read`): the row's own
+   * effects come FIRST and the reading's last; a handler of an effect that is not the first takes it out of the row
+   * as written, so after the three handlers the row is `R` again, with no renaming */
+  def greedyIn[R[_]](g: Rules, ctx: Context, fill: Fill[Rest[R]], margin: Double = 0.0): (List[Step], Option[Term]) ! R =
+    type Row[X] = (R + Choose + Weigh + Writer % Step)[X]
     val p: Term ! Row = program[Row](g, ctx, margin)
-    val weighed: Term ! (Choose + Writer % Step + R) = handle(p, Weigh.by[Choose + Writer % Step + R, Term](Fill.in(fill)))
-    val first: Option[Term] ! (Pure + Writer % Step + R) = Choose.first(weighed)
-    Writer.run[Step, Pure + Writer % Step + R, Pure + R, Option[Term]](first).into[R]
+    val weighed: Term ! (R + Choose + Writer % Step) = handle(p, Weigh.by[R + Choose + Writer % Step, Term](fill))
+    val first: Option[Term] ! (R + Writer % Step) = Choose.first(weighed)
+    Writer.run[Step, R + Writer % Step, R, Option[Term]](first)

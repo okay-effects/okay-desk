@@ -409,3 +409,19 @@ On the teacher's natural-wording pairs, the languages loaded on demand (no train
 
 A language file alone moved Ukrainian from 33% to 48% on people's wording; the readers never saw a Ukrainian
 word. What a file cannot give is the data's own names and the values people use — that is `Words` and the teacher.
+
+## 19. The calculus on the page (2026-11-07, evening)
+
+The page reads by the calculus now: the data first, the readers' skill next, the model's own tokens last
+(`Engine.readByCalculus`), the data's words and the languages a question's script asks for fetched on demand
+(`lang/<code>.json`); an open term is "not sure how to read the <hole> — ask again naming it". `?assembler` in
+the address keeps the old way for comparison. The self-test (the sample, WebGPU, the core): 13/13 en, 13/13 ru —
+and most questions close by the data alone in 0.0 s, no forward run at all; the model is asked only where the
+data is silent.
+
+Found on the way, a law of okay's rows: a `Sub` summoned for an ABSTRACT row `R` resolves to the instance for a row
+of one effect, and when `R` is two effects (`Async + Read`, the page) a `Last` place meets `Sub.one` at runtime —
+a `MatchError` the JVM benches never hit because `R` was one effect there. So `Strategy.greedyIn` takes the fill
+already in the concrete row (`Strategy.Rest[R]`), summons nothing for an abstract row, and keeps the row's own
+effects first so the reading's handlers take theirs out without renaming. `PageRowSuite` runs the program in
+`Async + Read` with a source that performs a `Read` at every hole, on the JVM and on Scala.js.

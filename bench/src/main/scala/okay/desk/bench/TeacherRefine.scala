@@ -33,7 +33,7 @@ object TeacherRefine:
       val byKey = scala.collection.mutable.Map.empty[String, (Int, Int)].withDefaultValue((0, 0))
       for t <- taught do
         val tables = Teacher.schema(t.seed); val s = Space.Schema(tables); val g = new calc.Grammar(s)
-        val fill: Fill[Read] = if arm == "the data alone" then Fill.exact[Read] else Fill.first[Read]((Vector(Fill.exact[Read]) ++ readers.map(_.weigh[Read]).toVector :+ Fill.model[Read](tables))*)
+        val fill: Fill[Strategy.Rest[Read]] = if arm == "the data alone" then Fill.exact[Strategy.Rest[Read]] else Fill.first[Strategy.Rest[Read]]((Vector(Fill.exact[Strategy.Rest[Read]]) ++ readers.map(_.weigh[Strategy.Rest[Read]]).toVector :+ Fill.model[Strategy.Rest[Read]](tables))*)
         val term = Read.run(Strategy.greedyIn[Read](g, Context(s, t.question, Term.Hole(Ty.Program), languages = Languages.forQuestion(t.question)), fill), reading)._2
         val gold = Query.parse(t.program).flatMap(q => run(tables, q)).toOption
         val got = term.flatMap(x => Den.run(s, x).toOption)

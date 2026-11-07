@@ -72,7 +72,7 @@ object Main:
     }.map {
       case Right(line) => say(s"readers in the page on ${Engine.on.api}: $line"); say("selftest: done")
       case Left(why) => say(s"selftest: failed: $why")
-    }.recover { case t => say(s"selftest: failed: $t") }
+    }.recover { case t => say(s"selftest: failed: $t\n" + t.getStackTrace.take(14).mkString("\n")) }
 
 /** the look: okay-ui's calm skin, and the marks of the desk — the top bar, the tables, the conversation's lines */
 object Look:

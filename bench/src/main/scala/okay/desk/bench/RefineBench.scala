@@ -34,7 +34,7 @@ object RefineBench:
       val on = MlxReading.ready(chat, model, layer, repo, sys.error("no skill file")); println("  the readers' skill as a Weigh source"); on.readers }
     def refine(tables: Map[String, Table], question: String, exactOnly: Boolean): Refine.Done =
       val s = Space.Schema(tables); val g = new calc.Grammar(s)
-      val fill: Fill[Read] = if exactOnly then Fill.exact[Read] else Fill.first[Read]((Vector(Fill.exact[Read]) ++ readers.map(_.weigh[Read]).toVector :+ Fill.model[Read](tables))*)
+      val fill: Fill[Strategy.Rest[Read]] = if exactOnly then Fill.exact[Strategy.Rest[Read]] else Fill.first[Strategy.Rest[Read]]((Vector(Fill.exact[Strategy.Rest[Read]]) ++ readers.map(_.weigh[Strategy.Rest[Read]]).toVector :+ Fill.model[Strategy.Rest[Read]](tables))*)
       val (steps, term) = Read.run(Strategy.greedyIn[Read](g, Context(s, question, Term.Hole(Ty.Program)), fill), reading)
       term.fold(Refine.Done(steps.lastOption.map(_._2).getOrElse(Term.Hole(Ty.Program)), steps.map((ty, _) => (ty, "")).toVector, steps.lastOption.map((ty, _) => (ty, Vector.empty[String]))))(t => Refine.Done(t, Vector.empty, None))
     // the sample
