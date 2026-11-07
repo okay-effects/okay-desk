@@ -24,7 +24,8 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     ensure(ids).flatMap(_ => forward(ids, at, withLogits))
   private def forward(ids: Array[Int], at: Seq[Int], withLogits: Boolean): Future[(Vector[Array[Float]], Array[Float])] =
     cached match
-      case Some((prefix, cache)) if ids.length >= prefix.length && ids.startsWith(prefix) =>
+      // (the cached sequence itself asked again: run whole — the cache holds no final state for its last row)
+      case Some((prefix, cache)) if ids.length > prefix.length && ids.startsWith(prefix) =>
         model.run(ids, layer, at, withLogits, Some(cache), keep = false).map((s, l, _) => (s, l))
       case _ =>
         cached.foreach(_._2.free()); cached = None

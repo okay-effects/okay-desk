@@ -4,8 +4,8 @@ import okay.scala3.*
 
 /**
  * THE ONE OPERATION AS AN EFFECT (specs/calculus.md §8): a hole is a pending operation `Of` — "a distribution
- * over these candidates of this type, from this context" — and a reading is a program of `Weigh`: the leftmost
- * hole picked until the term is closed or the pick is empty or too close. The SOURCES are handlers of `Of`: the
+ * over these candidates of this type, from this context" — and a reading is a program that performs it
+ * (`Strategy.program`, on the standard effects) until the term is closed or the weigh is empty or too close. The SOURCES are handlers of `Of`: the
  * data, the model's own tokens, a reader of states, the oracle, a person. A handler with no opinion FORWARDS the
  * operation to the handler outside it — the composition of sources is the nesting of handlers, nothing else. So
  * the calculus is the okay rule itself: the model's output is data (a term), the handlers run it.
@@ -16,25 +16,6 @@ enum Weigh[X]:
 object Weigh:
   def pick[R[_]](ty: Ty, candidates: Vector[String], ctx: Context)(using In[Weigh, R]): Dist ! R =
     perform[Weigh](Of(ty, candidates, ctx))
-
-  /** REFINEMENT AS A PROGRAM: the same loop as `Refine.greedy`, the pick performed instead of a fill called */
-  def refine[R[_]: Has[Weigh]](g: Grammar, ctx0: Context, margin: Double = 0.0, limit: Int = 40): Refine.Done ! R =
-    def loop(ctx: Context, steps: Vector[(Ty, String)], n: Int): Refine.Done ! R =
-      g.nextHole(ctx.term) match
-        case None => pure(Refine.Done(ctx.term, steps, None))
-        case Some(_) if n >= limit => pure(Refine.Done(ctx.term, steps, None))
-        case Some((ty, _, put)) =>
-          val cs = g.constructors(ty)
-          if cs.isEmpty then pure(Refine.Done(ctx.term, steps, Some((ty, cs))))
-          else if cs.size == 1 then loop(ctx.copy(term = put(g(ty, cs.head))), steps :+ (ty, cs.head), n + 1)
-          else pick(ty, cs, ctx).flatMap { d =>
-            if d.isEmpty then pure(Refine.Done(ctx.term, steps, Some((ty, cs))))
-            else
-              val sorted = d.sortBy(-_._2)
-              if sorted.size >= 2 && sorted(0)._2 - sorted(1)._2 < margin then pure(Refine.Done(ctx.term, steps, Some((ty, sorted.take(2).map(_._1)))))
-              else loop(ctx.copy(term = put(g(ty, sorted.head._1))), steps :+ (ty, sorted.head._1), n + 1)
-          }
-    loop(ctx0, Vector.empty, 0)
 
   /** a source as the LAST handler: its opinion is the answer, empty included (the reading stops there) */
   def by[R[_], A](fill: Fill[R]): Handler[Weigh, R, A, A] =

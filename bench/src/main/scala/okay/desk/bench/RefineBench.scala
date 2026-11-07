@@ -32,7 +32,8 @@ object RefineBench:
     def refine(tables: Map[String, Table], question: String, exactOnly: Boolean): Refine.Done =
       val s = Space.Schema(tables); val g = new calc.Grammar(s)
       val fill: Fill[Read] = if exactOnly then Fill.exact[Read] else Fill.first[Read](Fill.exact[Read], Fill.model[Read](tables))
-      Read.run(Refine.greedy[Read](g, fill, Context(s, question, Term.Hole(Ty.Program))), reading)
+      val (steps, term) = Read.run(Strategy.greedyIn[Read](g, Context(s, question, Term.Hole(Ty.Program)), fill), reading)
+      term.fold(Refine.Done(steps.lastOption.map(_._2).getOrElse(Term.Hole(Ty.Program)), steps.map((ty, _) => (ty, "")).toVector, steps.lastOption.map((ty, _) => (ty, Vector.empty[String]))))(t => Refine.Done(t, Vector.empty, None))
     // the sample
     val s = Space.Schema(Sample.tables); val g = new calc.Grammar(s)
     var right = Map("en" -> 0, "ru" -> 0); var open = 0

@@ -249,3 +249,35 @@ transition system; `Choose.all` of it over the small schema gives 3655 complete 
 3652 points of `Space.enumerate` (three words are spellings of the same point). So the space is reached from the
 choice calculus alone, with no typed grammar in the statement — the typed grammar is what makes `next` say the
 right letters.
+
+## 13. The simplifications done (the operator: "реализуй все", 2026-11-07)
+
+- **One forward.** okay-llm's `Qwen3Forward` (the third copy) is gone; `OnCpu` is the reference and `OnMlx` the
+  independent implementation it is checked against (states within 1e-3 of their scale, the same next token). The
+  config lives in `Qwen3Config.scala`: the architecture as data is what config.json says (sizes, rope, eps) plus
+  what the FILE says — a layer's attention or MLP present or not, the head tied to the embedding or its own
+  `lm_head` (new, with the law: an untied head that copies the embedding gives the tied head's logits, on the
+  device and on the CPU head, diff 0.0). The q/k norms stay Qwen3's: making them optional means a change in all
+  four handlers' shaders, and there is no model in the cache to check it against — not done, said.
+- **One loop.** `Weigh.refine` is gone. `Strategy.program` on the standard effects is THE reading; `Refine.greedy`
+  stays as the function-form reference the laws compare it with. `Strategy.greedyIn[R]` runs the same program in
+  a wider row (the model's tokens need `Read`); the bench reads through it. The sources' laws (`WeighSuite`) are
+  now the one program with handlers nested around it.
+- **Once per question.** The question's words and their runs (`Context.words`, `Context.grams`) are computed once
+  per question, not at every hole; OnMlx keeps its causal masks per shape.
+- **The JVM by the page's program.** `ComputeReading` (OnQwen over Qwen3Compute on OnMlx or OnCpu) answers `Read`
+  on the JVM; the law `ForwardSuite` is now "the page's program on MLX equals mlx-scala's forward" (states at every
+  position, the next token, the template's tokens). `OnQwen`'s prefix cache no longer answers the cached sequence
+  itself from the cache (it holds no final state for its last row): it runs it whole.
+- **Not done, and why.** `Reading` (the sync interface) beside `Read` (the effect): removing it touches
+  `Readers.On`, a sibling agent's file in flight. CUDA/ROCm: another handler of `Compute`, when there is such a
+  machine. The architecture as fully general data (activation, rope kind, biases): needs a model of another family
+  to hold a law against; the cache has Qwen3 only.
+
+31 laws in okay-desk's core, 8 in okay-llm (6 qwen, 2 mlx), all passing.
+
+**Measured after the simplifications (2026-11-07, the JVM by the page's program on OnMlx, `DESK_DEVICE=mlx`):**
+the sample 13/13 en, 13/13 ru; held-out 100: the data alone 55% whole / 44% open / 1 wrong ("The smallest count
+among items": a column named `count` — fixed: the word alone no longer names the function when a column is called
+count), data + the model's tokens 65% whole, order 91%, limit 94%, group 91%, agg 86%, where 78%. OnMlx frees an
+op's intermediates at once (the bench of a hundred questions was killed at 137 before).

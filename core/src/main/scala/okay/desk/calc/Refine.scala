@@ -9,6 +9,10 @@ import Term.*
 /** THE CONTEXT a hole is filled from: the tables, the question, the term so far */
 final case class Context(schema: Schema, question: String, term: Term):
   lazy val lower: String = question.toLowerCase
+  /** the question's words, and their runs of up to four (a value of several words), lowercased — computed once per
+   * question, not per hole (a reading asks for them at every hole) */
+  lazy val words: Vector[String] = "(?U)[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*".r.findAllIn(question).map(_.replaceAll("[.'-]+$", "")).toVector
+  lazy val grams: Set[String] = (1 to 4).flatMap(k => if words.size >= k then words.sliding(k).map(_.mkString(" ").toLowerCase) else Nil).toSet
   def word(ws: String*): Boolean = ws.exists(w => lower.matches(s"(?U).*\\b${w.stripSuffix("*")}${if w.endsWith("*") then "\\w*" else ""}\\b.*"))
 
 /** a distribution over a hole's candidates: constructor → score (a log-probability where the source has one);
@@ -26,6 +30,10 @@ trait Fill[R[_]]:
   def apply(ty: Ty, candidates: Vector[String], ctx: Context): Dist ! R
 
 object Fill:
+  /** a source of a row in a wider row (the same program, more effects beside it) */
+  def in[R[_], S[_]](f: Fill[R])(using Sub[R, S]): Fill[S] = new Fill[S]:
+    def apply(ty: Ty, cs: Vector[String], ctx: Context): Dist ! S = f(ty, cs, ctx).into[S]
+
   /** a pure source in any row */
   def lift[R[_]](f: Fill[Pure]): Fill[R] = new Fill[R]:
     def apply(ty: Ty, cs: Vector[String], ctx: Context): Dist ! R = pure(run(f(ty, cs, ctx)))
@@ -69,9 +77,7 @@ object Fill:
         val pattern = s"(?U).*\\b$stem\\p{L}{0,5}\\b.*"
         if form.startsWith("не ") then q.matches(pattern) || q.matches(pattern.replace("не ", "не"))
         else q.matches(pattern) && !q.matches(s"(?U).*\\bне ?$stem\\p{L}{0,5}\\b.*") }
-      def grams: Set[String] =
-        val ws = "(?U)[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*".r.findAllIn(ctx.question).map(_.replaceAll("[.'-]+$", "")).toVector
-        (1 to 4).flatMap(k => if ws.size >= k then ws.sliding(k).map(_.mkString(" ").toLowerCase) else Nil).toSet
+      val grams: Set[String] = ctx.grams
       // the limit the words say: a number with top/first words, 1 for "the row/which of/the largest X" without groups
       val topWords = ctx.word("top", "first", "largest", "smallest", "highest", "lowest", "biggest", "топ", "первые", "самы*", "наибольш*", "наимен*")
       val limitNumber: Option[String] =
@@ -145,7 +151,9 @@ object Fill:
         case Ty.FnT(_) =>
           // ("сумма" is also the Russian name of a column called amount: then the word says nothing about the function)
           val sumIsColumn = ctx.schema.cols.exists(c => Phrase.Russian.columns.get(c.name).exists(_._1 == "сумма")) && !ctx.word("сумма заказов", "сумма продаж", "итого")
-          if ctx.word("how many", "number of", "count", "сколько", "число", "посчитай") then Vector(("count", 0.0))
+          // ("count" is also a column's name in the pairs: then the word alone says nothing about the function)
+          val countIsColumn = ctx.schema.cols.exists(_.name == "count")
+          if ctx.word("how many", "number of", "сколько", "число", "посчитай") || ctx.word("count") && !countIsColumn then Vector(("count", 0.0))
           else if ctx.word("average", "mean", "средн*") then Vector(("avg", 0.0))
           else if ctx.word("total", "sum", "summed", "итого") || ctx.word("сумм*") && !sumIsColumn then Vector(("sum", 0.0))
           else if (limitNumber.isDefined || limitOne) && !grouped && !ctx.word("per", "each", "by", "по", "в разрезе") then Vector(("none", 0.0))

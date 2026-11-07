@@ -55,3 +55,12 @@ object Strategy:
     val weighed: Term ! (Choose + Writer % Step) = handle(p, Weigh.by[Choose + Writer % Step, Term](Fill.lift(uniform)))
     val all: List[Term] ! (Pure + Writer % Step) = Choose.all(weighed)
     run(Writer.run[Step, Pure + Writer % Step, Pure, List[Term]](all))._2
+
+  /** GREEDY IN A ROW: the same as `greedy`, the source effectful (the model's tokens need `Read`) — the program over
+   * the standard effects plus the row, the handlers applied, the row left */
+  def greedyIn[R[_]](g: Rules, ctx: Context, fill: Fill[R], margin: Double = 0.0): (List[Step], Option[Term]) ! R =
+    type Row[X] = (Choose + Weigh + Writer % Step + R)[X]
+    val p: Term ! Row = program[Row](g, ctx, margin)
+    val weighed: Term ! (Choose + Writer % Step + R) = handle(p, Weigh.by[Choose + Writer % Step + R, Term](Fill.in(fill)))
+    val first: Option[Term] ! (Pure + Writer % Step + R) = Choose.first(weighed)
+    Writer.run[Step, Pure + Writer % Step + R, Pure + R, Option[Term]](first).into[R]
