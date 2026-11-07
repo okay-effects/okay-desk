@@ -414,8 +414,10 @@ final class Readers:
         c.length >= 3 && !t.columns.contains(c) && lower.matches(s"(?U).*\\b${c.toLowerCase}\\b.*")))
           .map(c => (o, c))).headOption)
     // a word (or a stem ending in *) at a word boundary: "count" must not match "country"
+    // a star is any letters, inside a phrase too: "самы* высок*" is "самым высоким" (a regex star after "ы" had made the
+    // phrase match nothing, and the readers decided the direction — right on the JVM, wrong on WebGPU)
     def wordsIn(text: String, ws: Seq[String]): Boolean =
-      ws.exists(w => text.matches(s"(?U).*\\b${w.stripSuffix("*")}${if w.endsWith("*") then "\\w*" else ""}\\b.*"))
+      ws.exists(w => text.matches(s"(?U).*\\b${w.replace("*", "\\p{L}*")}\\b.*"))
     def word(ws: String*): Boolean = wordsIn(lower, ws)
     // the joinable tables' columns are candidates too (a translated column may be theirs: "по странам" → country): a
     // choice among them brings the join

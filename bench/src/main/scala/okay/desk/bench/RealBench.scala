@@ -92,7 +92,10 @@ object RealBench:
     Model.load(dir, mapped = true) match
       case q3: mlx.llm.Qwen3 =>
         val layer = sys.env.getOrElse("DESK_LAYER", "19").toInt
-        val readers = MlxReading.ready(chat, q3, layer, repo, sys.error("no skill file: train it with DeskBench first"))
+        val skill = MlxReading.ready(chat, q3, layer, repo, sys.error("no skill file: train it with DeskBench first"))
+        // read by the page's own forward when DESK_DEVICE names a device (the browser's program on the JVM)
+        val readers = ComputeReading.device.fold(skill) { c => println(s"  reading by the page's program on ${c.api}")
+          Readers.On(skill.readers, ComputeReading(dir, layer, c)) }
         // the data's own words (§29), when DESK_WORDS names their file
         for p <- sys.env.get("DESK_WORDS") do
           readers.readers.words = Words.parse(java.nio.file.Files.readString(java.nio.file.Path.of(p))).fold(e => sys.error(e), identity)

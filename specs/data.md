@@ -854,3 +854,22 @@ listens on 8734 (`lsof -iTCP:8734 -sTCP:LISTEN`).
 What is not done: words for a person's own file. The page has no model that generates by default; the dictionary is
 made offline for the examples. A page could make it with a generating model on demand, or ask the person for the
 names it cannot read (§30's dialogue).
+
+## 30. The abstention as a dialogue (2026-11-07)
+
+The operator's step 4. Until now "not sure: customers or orders" (§25's abstention) ended the question. Now the
+page offers the readings as buttons ("Table customers", "Таблица customers"); the person's choice is written into
+the question — "Which were added in 2025 — customers": a table named in the question is the table, an exact fact for
+the rules — and the question is read again. The choice is the person's, the rest is the same reading: no new path,
+no model asked differently.
+
+Each answered clarification is kept on the disk (`Clarified.file`, the Disk effect: the browser's Cache API on the
+page, a map in the tests): a JSON line — the question as asked, the choice, the program. These are pairs judged by a
+person: the data §13's learning from use reads (a later `Train` over them, the readers retrained with the pairs the
+page collected). Names with the `okay-desk:` prefix on the disk are not tables (the next visit does not open them).
+
+`ClarifySuite` (ui): the readers not sure between two tables → two buttons → "Table customers" → the question read
+again → the customers since 2025 on the screen → the pair on the disk.
+
+Not yet: a dialogue for the other hesitations (a column, a value) — the readers abstain only on the table so far;
+the refusals outside the fragment (§28) offer no choice, only the reason.
