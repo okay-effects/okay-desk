@@ -20,12 +20,7 @@ final class ComputeReading(dir: java.nio.file.Path, layer: Int, c: Compute) exte
   private val config = Qwen3Config.parse(java.nio.file.Files.readString(dir.resolve("config.json")))
   private val tok = Tokenizer.fromJson(okay.effects.json.Json.fromText(java.nio.file.Files.readString(dir.resolve("tokenizer.json"))))
   private val on = OnQwen(Qwen3Compute(c, st, config), tok, layer)
-  private def now[X](op: Read[X]): X = Await.result(on.answer(op), 10.minutes)
-  def states(ids: Array[Int], at: Vector[Int]): Vector[Array[Float]] = now(Read.States(ids, at))
-  def logits(ids: Array[Int]): Array[Float] = now(Read.Logits(ids))
-  def encode(text: String): Array[Int] = now(Read.Encode(text))
-  def decode(ids: Seq[Int]): String = now(Read.Decode(ids))
-  def prompt(system: String, user: String): Array[Int] = now(Read.Prompt(system, user))
+  def answer[X](op: Read[X]): X = Await.result(on.answer(op), 10.minutes)
 
 object ComputeReading:
   /** the device named by DESK_DEVICE: mlx (Apple's GPU) or cpu; None for mlx-scala's own forward */

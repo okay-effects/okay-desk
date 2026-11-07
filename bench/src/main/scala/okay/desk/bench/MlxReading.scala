@@ -3,7 +3,7 @@ package okay.desk.bench
 import mlx.{Arr, Dtype, Scope}
 import mlx.Mlx.*
 import mlx.llm.{Chat, Model, Qwen3, Qwen35}
-import okay.desk.skill.{Pairs, Readers, Reading}
+import okay.desk.skill.{Pairs, Read, Readers, Reading}
 
 /** THE JVM'S READING: mlx-scala's Qwen3 or Qwen3.5/3.6 (the teacher, 35B) on Apple's GPU — the residual after `layer`
  * by the hook, the logits by the model, the tokenizer and the chat template of the model's directory */
@@ -36,6 +36,14 @@ final class MlxReading(chat: Chat, model: Model, layer: Int) extends Reading:
     def msg(role: String, content: String) = okay.effects.json.Json.obj("role" -> okay.effects.json.Json.Str(role),
       "content" -> okay.effects.json.Json.Str(content))
     chat.prompt(Vector(msg("system", system), msg("user", user)), Nil, Map("enable_thinking" -> false))
+  /** the operation answered: `Read`'s one list of what a skill needs, this backend's way */
+  def answer[X](op: Read[X]): X = op match
+    case Read.States(ids, at) => states(ids, at)
+    case Read.Logits(ids) => logits(ids)
+    case Read.Encode(text) => encode(text)
+    case Read.Decode(ids) => decode(ids)
+    case Read.Prompt(system, user) => prompt(system, user)
+    case Read.Note(_) => ()
 
 object MlxReading:
   /** the readers for a model and a layer: loaded from the cache when there (DESK_RETRAIN=1 trains again) */

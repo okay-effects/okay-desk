@@ -354,3 +354,13 @@ What it says: on natural wording the law "the data alone never errs" does NOT ho
 people's wording, a number now, by language. The readers as the middle source lift English to 79% and Ukrainian
 from 12% to 33% with no Ukrainian anywhere in their training (the words of a question are not what they read).
 Ukrainian has no dictionary and no pairs: the teacher's pairs are the way for it.
+
+## 16. `Reading` merged into `Read` (2026-11-07)
+
+There were two lists of what a skill needs of a model: the effect `Read` (its operations: states at positions,
+logits, encode, decode, prompt, a note) and the JVM's sync interface `Reading` with the same five methods. Now one:
+`Reading` is a handler of `Read` in place — one method, `answer[X](op: Read[X]): X`; `Read.sync` wraps it,
+`Read.run` runs a program on it; every call site (`Readers.On`, the benches) is unchanged. The backends:
+`MlxReading` answers by its own MLX methods, `ComputeReading` by the page's `OnQwen` awaited — one line. The
+browser's `OnQwen` was a `Read` handler already (futures through `Async`); so a model is a handler of `Read` on
+every platform, and nothing else.

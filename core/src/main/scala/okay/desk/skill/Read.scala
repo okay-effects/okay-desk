@@ -41,13 +41,7 @@ object Read:
 
   /** answered in place by a `Reading` — the JVM's mlx-scala */
   def sync[R[_], A](r: Reading): Handler[Read, R, A, A] =
-    Handler.tail[Read, R, A, A](pure)([X] => (op: Read[X]) => op match
-      case States(ids, at) => r.states(ids, at)
-      case Logits(ids) => r.logits(ids)
-      case Encode(text) => r.encode(text)
-      case Decode(ids) => r.decode(ids)
-      case Prompt(system, user) => r.prompt(system, user)
-      case Note(_) => ())
+    Handler.tail[Read, R, A, A](pure)([X] => (op: Read[X]) => r.answer(op))
   /** a program of `Read` alone, run on a `Reading` */
   def run[A](p: A ! Read, r: Reading): A = okay.scala3.run(handle(p, sync[Pure, A](r)))
 
