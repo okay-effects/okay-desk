@@ -19,3 +19,7 @@ effects (`Model`, okay-http's `Fetch`) answered by the browser — or by a test 
 
 A proof of concept of okay-inlay `specs/assistant.md` (the "data" pack): what a small model does well — understand,
 write a program, phrase — and what it never does — compute. [specs/data.md](specs/data.md).
+
+**The calculus of readings** — how a question becomes an exact answer, and why the whole of it is one small
+calculus: [docs/calculus.md](docs/calculus.md) (the document); [specs/calculus.md](specs/calculus.md) (the diary,
+with every measurement).
