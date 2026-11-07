@@ -20,14 +20,16 @@ enum Ty:
   /** a link INTO the table (another table's column naming its rows): an absence's other side */
   case ReverseLinkT(table: String)
   /** a column of one of the tables in a role: a condition's, a group's, an aggregate's; `none` allowed when optional */
-  case ColumnT(tables: Vector[String], role: Role, optional: Boolean)
+  case ColumnT(tables: Vector[String], role: Role, optional: Boolean, except: Vector[String] = Vector.empty)
   case OpT(kind: Kind)
   case ValueT(table: String, column: String)
-  case FnT
+  /** an aggregate function; required when a group was chosen (a group without an aggregate says nothing) */
+  case FnT(required: Boolean)
   /** an order: none, or by what, in a direction */
-  case OrderT(table: String, aggregate: Option[String])
+  case OrderT(table: String, aggregate: Option[String], grouped: Boolean)
   case DirT
-  case LimitT
+  /** a limit; only after an order (a limit of unordered rows is arbitrary) */
+  case LimitT(ordered: Boolean)
   case NodeT(edges: String)
   case DirectionT
 
@@ -72,18 +74,20 @@ final class Grammar(val schema: Schema):
     case Ty.LinkT(t) => "none" +: schema.links.filter(_.from == t).map(l => s"${l.column}->${l.to}")
     case Ty.ReverseLinkT(t) => schema.links.filter(_.to == t).map(l => s"${l.from}.${l.column}")
     // (an aggregate's column is optional exactly when the function needs none — count, or no aggregate: then it IS none)
-    case Ty.ColumnT(_, Role.Agg, true) => Vector("none")
-    case Ty.ColumnT(ts, role, optional) => (if optional then Vector("none") else Vector.empty) ++ columns(ts, role).distinct
+    case Ty.ColumnT(_, Role.Agg, true, _) => Vector("none")
+    case Ty.ColumnT(ts, role, optional, except) => (if optional then Vector("none") else Vector.empty) ++ columns(ts, role).distinct.filterNot(except.contains)
     case Ty.OpT(Kind.Num) => Vector("<", ">")
     case Ty.OpT(_) => Vector("=")
     case Ty.ValueT(t, c) => schema.of(t).find(_.name == c).toVector.flatMap(schema.values).map(_.text)
-    case Ty.FnT => Vector("none", "count", "sum", "avg", "min", "max")
-    case Ty.OrderT(t, agg) => "none" +: (agg match
+    case Ty.FnT(required) => (if required then Vector.empty else Vector("none")) ++ Vector("count", "sum", "avg", "min", "max")
+    case Ty.OrderT(_, Some(_), false) => Vector("none")
+    case Ty.OrderT(t, agg, _) => "none" +: (agg match
       case Some("count") => Vector("n")
       case Some(fn) => Vector(fn)
       case None => schema.of(t).filter(c => c.kind == Kind.Num || c.kind == Kind.Time).map(_.name))
     case Ty.DirT => Vector("desc", "asc")
-    case Ty.LimitT => Vector("none", "1", "3", "5", "10")
+    case Ty.LimitT(false) => Vector("none")
+    case Ty.LimitT(true) => Vector("none", "1", "3", "5", "10")
     case Ty.NodeT(e) => schema.tables(e).rows.flatten.map(_.text).distinct
     case Ty.DirectionT => Vector("from", "to")
 
@@ -95,8 +99,8 @@ final class Grammar(val schema: Schema):
   /** whether a constructor opens arguments (a node) or is an atom (a leaf) */
   def opens(ty: Ty, con: String): Boolean = ty match
     case Ty.Program => true
-    case Ty.ColumnT(_, Role.Where, _) => con != "none" // a condition: the column, then its op and value
-    case Ty.OrderT(_, _) => con != "none"              // an order: by what, then its direction
+    case Ty.ColumnT(_, Role.Where, _, _) => con != "none" // a condition: the column, then its op and value
+    case Ty.OrderT(_, _, _) => con != "none"              // an order: by what, then its direction
     case Ty.LinkT(_) => false
     case _ => false
 
@@ -113,11 +117,13 @@ final class Grammar(val schema: Schema):
           case 1 => t.map(Ty.LinkT.apply)
           case 2 => t.map(x => Ty.ColumnT(Vector(x), Role.Where, optional = true))
           case 3 => Some(Ty.ColumnT(other.toVector, Role.Where, optional = true))
-          case 4 => t.map(x => Ty.ColumnT(x +: other.toVector, Role.Group, optional = true))
-          case 5 => Some(Ty.FnT)
+          case 4 =>
+            val used = args.slice(2, 4).collect { case Con(_, c, _) => c }
+            t.map(x => Ty.ColumnT(x +: other.toVector, Role.Group, optional = true, except = used))
+          case 5 => Some(Ty.FnT(required = leaf(4).exists(_ != "none")))
           case 6 => t.flatMap(x => leaf(5).map(fn => Ty.ColumnT(Vector(x), Role.Agg, optional = fn == "none" || fn == "count")))
-          case 7 => t.flatMap(x => leaf(5).map(fn => Ty.OrderT(x, Option.when(fn != "none")(fn))))
-          case 8 => Some(Ty.LimitT)
+          case 7 => t.flatMap(x => leaf(5).map(fn => Ty.OrderT(x, Option.when(fn != "none")(fn), grouped = leaf(4).exists(_ != "none"))))
+          case 8 => Some(Ty.LimitT(ordered = args.lift(7).exists { case Leaf(_, "none") => false; case _ => true }))
           case _ => None
       case (Ty.Program, "Absent") => args.size match
         case 0 => Some(Ty.TableT)
@@ -128,13 +134,13 @@ final class Grammar(val schema: Schema):
         case 0 => Some(Ty.DirectionT)
         case 1 => schema.edgeLike.headOption.map(Ty.NodeT.apply)
         case _ => None
-      case (Ty.ColumnT(ts, Role.Where, _), c) =>
+      case (Ty.ColumnT(ts, Role.Where, _, _), c) =>
         val t = ts.find(x => schema.of(x).exists(_.name == c)).getOrElse(ts.head)
         args.size match
           case 0 => Some(Ty.OpT(kindOf(t, c)))
           case 1 => Some(Ty.ValueT(t, c))
           case _ => None
-      case (Ty.OrderT(_, _), _) => args.size match
+      case (Ty.OrderT(_, _, _), _) => args.size match
         case 0 => Some(Ty.DirT)
         case _ => None
       case _ => None

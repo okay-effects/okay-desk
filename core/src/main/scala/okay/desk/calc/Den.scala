@@ -20,7 +20,7 @@ object Den:
 
   private def cond(s: Schema, t: Term): Either[String, Option[(Col, String, Value)]] = t match
     case Leaf(_, "none") => Right(None)
-    case Con(Ty.ColumnT(ts, _, _), c, Vector(Leaf(_, op), Leaf(_, v))) => col(s, ts, c).map(cc => Some((cc, op, Value.of(v))))
+    case Con(Ty.ColumnT(ts, _, _, _), c, Vector(Leaf(_, op), Leaf(_, v))) => col(s, ts, c).map(cc => Some((cc, op, Value.of(v))))
     case other => Left(s"an unfinished condition: ${other.show}")
 
   /** a closed term's point of the space */
@@ -66,12 +66,12 @@ object Den:
         Leaf(Ty.TableT, from),
         Leaf(Ty.LinkT(from), link.map(l => s"${l.column}->${l.to}").getOrElse("none")),
         condOf(Vector(from), own), condOf(other, oth),
-        Leaf(Ty.ColumnT(from +: other, Role.Group, optional = true), group.map(_.name).getOrElse("none")),
-        Leaf(Ty.FnT, fn),
+        Leaf(Ty.ColumnT(from +: other, Role.Group, optional = true, except = where.map(_._1.name)), group.map(_.name).getOrElse("none")),
+        Leaf(Ty.FnT(required = group.isDefined), fn),
         Leaf(Ty.ColumnT(Vector(from), Role.Agg, optional = fn == "none" || fn == "count"), agg.flatMap(_._2).map(_.name).getOrElse("none")),
-        order.fold(Leaf(Ty.OrderT(from, Option.when(fn != "none")(fn)), "none"))((by, desc) =>
-          Con(Ty.OrderT(from, Option.when(fn != "none")(fn)), by, Vector(Leaf(Ty.DirT, if desc then "desc" else "asc")))),
-        Leaf(Ty.LimitT, limit.map(_.toString).getOrElse("none"))))
+        order.fold(Leaf(Ty.OrderT(from, Option.when(fn != "none")(fn), group.isDefined), "none"))((by, desc) =>
+          Con(Ty.OrderT(from, Option.when(fn != "none")(fn), group.isDefined), by, Vector(Leaf(Ty.DirT, if desc then "desc" else "asc")))),
+        Leaf(Ty.LimitT(ordered = order.isDefined), limit.map(_.toString).getOrElse("none"))))
     case Program.Absent(target, l, where) =>
       val w = where.headOption.fold(Leaf(Ty.ColumnT(Vector(target), Role.Where, optional = true), "none")) { (cc, op, v) =>
         Con(Ty.ColumnT(Vector(target), Role.Where, optional = true), cc.name, Vector(Leaf(Ty.OpT(cc.kind), op), Leaf(Ty.ValueT(cc.table, cc.name), v.text))) }

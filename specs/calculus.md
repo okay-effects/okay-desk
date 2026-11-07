@@ -151,3 +151,27 @@ Laws (`ChooseSuite`): the data as the only handler gives the same term and the s
 in function form on the sample's 26 questions; the data first with the oracle outside closes every question to
 its point, and the oracle is asked exactly when the data alone leaves the term open; no source at all is never
 wrong. 26 laws in all for the calculus.
+
+## 9. On the standard effects (the operator, 2026-11-07): one new operation, the rest known
+
+The operator's point: single out the special effect, build it on simpler, known ones. okay-scala's standard
+effects are the known ones — `Choose.among` (multi-shot nondeterminism, with `first` and `all`), `Writer`,
+`Reader`, `Fail` — and the calculus's ONE new operation is `Weigh.Of(type, candidates, context): Dist` (the former
+`Pick`, renamed: it weighs, it does not choose). `Strategy.scala`: the reading is ONE program — the leftmost
+hole, its candidates, their weighing, `among` them in the weighed order, a `tell` of each step; an abstention is
+`Choose.none` (no way on). The STRATEGY is the handler of `Among`:
+
+- `Choose.first` — greedy: the best-weighed way (`Strategy.greedy`); the law: the same term as `Refine.greedy`
+  with the same source, and when open, the same hole (StrategySuite);
+- `Choose.all` with a uniform weigh — every way: THE ENUMERATION OF THE SPACE by the reading itself
+  (`Strategy.every`); the law: the same set of points as `Space.enumerate` (3652 = 3652 over orders). This law
+  found three constraints the space had and the grammar lacked (a group without an aggregate, an order on one
+  aggregate without groups, a limit without an order); they are now in the grammar's types (`FnT(required)`,
+  `OrderT(…, grouped)`, `LimitT(ordered)`, a group's `except`), so the space is DERIVED from the grammar and the
+  nondeterminism handler, not written twice;
+- a beam is a third handler of the same program; a dialogue is `first` with the person as the outer weigh.
+
+So the stack is: level 0 = the free monad over `Among` (known); level 1 = words with `Weigh` inside `next`
+(the one new thing); level 2 = the typed program above; level 3 = the space, which is level 2 under `all`. The
+sources of `Weigh` are handlers (§8): the data, the model's tokens, a reader of states, a person, an oracle —
+`by`, `first` (forwards when silent), `nobody`. 28 laws for the calculus, all passing.

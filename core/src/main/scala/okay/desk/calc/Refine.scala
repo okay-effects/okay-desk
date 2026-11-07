@@ -26,6 +26,10 @@ trait Fill[R[_]]:
   def apply(ty: Ty, candidates: Vector[String], ctx: Context): Dist ! R
 
 object Fill:
+  /** a pure source in any row */
+  def lift[R[_]](f: Fill[Pure]): Fill[R] = new Fill[R]:
+    def apply(ty: Ty, cs: Vector[String], ctx: Context): Dist ! R = pure(run(f(ty, cs, ctx)))
+
   /** the first source with an opinion */
   def first[R[_]](fills: Fill[R]*): Fill[R] = new Fill[R]:
     def apply(ty: Ty, cs: Vector[String], ctx: Context): Dist ! R =
@@ -76,7 +80,7 @@ object Fill:
         if (n ++ words).size == 1 && topWords then Some((n ++ words).head) else None
       // the columns the term's conditions already use (a group on one says nothing), and the function chosen
       val used: Set[String] = ctx.term match
-        case Con(_, "Rows", args) => args.collect { case Con(Ty.ColumnT(_, Role.Where, _), c, _) => c }.toSet
+        case Con(_, "Rows", args) => args.collect { case Con(Ty.ColumnT(_, Role.Where, _, _), c, _) => c }.toSet
         case _ => Set.empty
       val fnChosen: Option[String] = ctx.term match { case Con(_, "Rows", args) => args.lift(5).collect { case Leaf(_, f) => f }; case _ => None }
       val grouped = ctx.term match { case Con(_, "Rows", args) => args.lift(4).exists { case Leaf(_, "none") => false; case Leaf(_, _) => true; case _ => false }; case _ => false }
@@ -108,10 +112,10 @@ object Fill:
           val targets = if negated.nonEmpty && names.size > negated.size then names.filterNot(negated.contains) else names
           if targets.size == 2 then one(ctx.schema.links.filter(l => targets.contains(l.from) && targets.contains(l.to)).map(_.from).distinct)
           else if targets.nonEmpty then one(targets) else one(byColumnOne)
-        case Ty.ColumnT(_, Role.Group, _) =>
+        case Ty.ColumnT(_, Role.Group, _, _) =>
           if ctx.word("per", "each", "by", "по кажд*", "в кажд*", "кажд*", "в разрезе", "по") then one(cs.filter(c => c != "none" && !used(c) && (named(c) || ruColumn(c))))
           else Vector(("none", 0.0))
-        case Ty.ColumnT(ts, Role.Where, optional) =>
+        case Ty.ColumnT(ts, Role.Where, optional, _) =>
           // a value of a column written in the question names the column; "none" when no value and no column is written
           // (on a linked table, a value the own table also has is the own table's: "customer dee" is orders.customer)
           val own = ts.headOption.exists(t => ctx.term match { case Con(_, "Rows", args) => args.headOption.contains(Leaf(Ty.TableT, t)); case _ => true })
@@ -138,7 +142,7 @@ object Fill:
           else
             val vs = ctx.schema.tables(t).column(c).toVector.flatMap(i => ctx.schema.tables(t).rows.map(_(i).text).distinct)
             one(vs.filter(v => v.length >= 2 && (grams(v.toLowerCase) || ruValue(v))).sortBy(-_.length).take(1))
-        case Ty.FnT =>
+        case Ty.FnT(_) =>
           // ("сумма" is also the Russian name of a column called amount: then the word says nothing about the function)
           val sumIsColumn = ctx.schema.cols.exists(c => Phrase.Russian.columns.get(c.name).exists(_._1 == "сумма")) && !ctx.word("сумма заказов", "сумма продаж", "итого")
           if ctx.word("how many", "number of", "count", "сколько", "число", "посчитай") then Vector(("count", 0.0))
@@ -155,7 +159,7 @@ object Fill:
             else if ctx.word("minimum", "smallest", "least", "минимум", "наимен*") && !ctx.word("row", "which of", "строка", "у какого", "largest", "maximum", "наибольш*", "максим*", "first", "top", "топ", "первые", "сначала") then Vector(("min", 0.0))
             else if ctx.word("maximum", "максимум") && !ctx.word("minimum", "smallest", "минимум", "наимен*") then Vector(("max", 0.0))
             else Vector.empty
-        case Ty.OrderT(_, agg) =>
+        case Ty.OrderT(_, agg, _) =>
           val ordered = ctx.word("largest", "smallest", "highest", "lowest", "fastest", "slowest", "biggest", "descending", "ascending", "first", "top", "sorted", "ordered",
             "самы*", "наибольш*", "наимен*", "по убыван*", "по возраст*", "от большего", "от меньшего", "топ", "сначала", "упорядоч*")
           // with an aggregate and no group there is nothing to order; a size word is the function's when it is min/max
@@ -178,7 +182,7 @@ object Fill:
           else if fnChosen.exists(f => f == "min" || f == "max") then Vector.empty
           else if ctx.word("smallest", "slowest", "lowest", "least", "наимен*", "мал*", "низк*", "медленн*") then Vector(("asc", 0.0))
           else if ctx.word("largest", "fastest", "highest", "most", "biggest", "top", "наибольш*", "больш*", "высок*", "быстр*", "топ") then Vector(("desc", 0.0)) else Vector.empty
-        case Ty.LimitT =>
+        case Ty.LimitT(_) =>
           limitNumber.map(n => Vector((n, 0.0))).getOrElse(
             if limitOne then Vector(("1", 0.0))
             else if !topWords || grouped && !ctx.word("top", "топ", "первые") then Vector(("none", 0.0))
@@ -231,15 +235,15 @@ object Render:
       Some(hole match
         case Ty.TableT => "```json\n{\"from\": \""
         case Ty.LinkT(_) => start + ", \"join\": {\"table\": \""
-        case Ty.ColumnT(_, Role.Where, _) => start + ", \"where\": [{\"column\": \""
+        case Ty.ColumnT(_, Role.Where, _, _) => start + ", \"where\": [{\"column\": \""
         case Ty.OpT(_) => start + s""", "where": [{"column": "${args.lift(2).flatMap(leaf).getOrElse("")}", "op": """"
         case Ty.ValueT(_, c) => start + s""", "where": [{"column": "$c", "op": "${args.lift(2).collect { case Con(_, _, Vector(Leaf(_, op))) => op }.getOrElse("=")}", "value": """"
-        case Ty.ColumnT(_, Role.Group, _) => start + ", \"group\": [\""
-        case Ty.FnT => start + ", \"aggregate\": [{\"fn\": \""
-        case Ty.ColumnT(_, Role.Agg, _) => start + s""", "aggregate": [{"fn": "${args.lift(5).flatMap(leaf).getOrElse("sum")}", "column": """"
-        case Ty.OrderT(_, _) => start + ", \"order\": [\""
+        case Ty.ColumnT(_, Role.Group, _, _) => start + ", \"group\": [\""
+        case Ty.FnT(_) => start + ", \"aggregate\": [{\"fn\": \""
+        case Ty.ColumnT(_, Role.Agg, _, _) => start + s""", "aggregate": [{"fn": "${args.lift(5).flatMap(leaf).getOrElse("sum")}", "column": """"
+        case Ty.OrderT(_, _, _) => start + ", \"order\": [\""
         case Ty.DirT => start + ", \"order\": [\""
-        case Ty.LimitT => start + ", \"limit\": "
+        case Ty.LimitT(_) => start + ", \"limit\": "
         case _ => start)
     case Con(Ty.Program, "Closure", _) => Some("```json\n{\"datalog\": \"reach(X, Y) :- edges(X, Y). reach(X, Z) :- edges(X, Y), reach(Y, Z).\", \"goal\": \"reach(")
     case _ => None
@@ -247,10 +251,10 @@ object Render:
   def candidate(ty: Ty, c: String, term: Term): String = ty match
     case Ty.KindT => if c == "rows" then "from" else "datalog"
     case Ty.LinkT(_) => if c == "none" then "}" else c.split("->").last
-    case Ty.ColumnT(_, _, _) if c == "none" => "]"
-    case Ty.FnT if c == "none" => "]"
-    case Ty.OrderT(_, _) if c == "none" => "]"
-    case Ty.LimitT if c == "none" => "}"
+    case Ty.ColumnT(_, _, _, _) if c == "none" => "]"
+    case Ty.FnT(_) if c == "none" => "]"
+    case Ty.OrderT(_, _, _) if c == "none" => "]"
+    case Ty.LimitT(_) if c == "none" => "}"
     case Ty.DirT => if c == "desc" then "-" else term match { case Con(_, _, args) => args.lift(7).flatMap(leaf).getOrElse("x"); case _ => "x" }
     case Ty.DirectionT => if c == "from" then "X" else "\""
     case _ => c

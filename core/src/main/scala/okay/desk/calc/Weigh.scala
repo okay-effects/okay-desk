@@ -3,22 +3,22 @@ package okay.desk.calc
 import okay.scala3.*
 
 /**
- * THE ONE OPERATION AS AN EFFECT (specs/calculus.md §8): a hole is a pending operation `Pick` — "a distribution
- * over these candidates of this type, from this context" — and a reading is a program of `Choose`: the leftmost
- * hole picked until the term is closed or the pick is empty or too close. The SOURCES are handlers of `Pick`: the
+ * THE ONE OPERATION AS AN EFFECT (specs/calculus.md §8): a hole is a pending operation `Of` — "a distribution
+ * over these candidates of this type, from this context" — and a reading is a program of `Weigh`: the leftmost
+ * hole picked until the term is closed or the pick is empty or too close. The SOURCES are handlers of `Of`: the
  * data, the model's own tokens, a reader of states, the oracle, a person. A handler with no opinion FORWARDS the
  * operation to the handler outside it — the composition of sources is the nesting of handlers, nothing else. So
  * the calculus is the okay rule itself: the model's output is data (a term), the handlers run it.
  */
-enum Choose[X]:
-  case Pick(ty: Ty, candidates: Vector[String], ctx: Context) extends Choose[Dist]
+enum Weigh[X]:
+  case Of(ty: Ty, candidates: Vector[String], ctx: Context) extends Weigh[Dist]
 
-object Choose:
-  def pick[R[_]](ty: Ty, candidates: Vector[String], ctx: Context)(using In[Choose, R]): Dist ! R =
-    perform[Choose](Pick(ty, candidates, ctx))
+object Weigh:
+  def pick[R[_]](ty: Ty, candidates: Vector[String], ctx: Context)(using In[Weigh, R]): Dist ! R =
+    perform[Weigh](Of(ty, candidates, ctx))
 
   /** REFINEMENT AS A PROGRAM: the same loop as `Refine.greedy`, the pick performed instead of a fill called */
-  def refine[R[_]: Has[Choose]](g: Grammar, ctx0: Context, margin: Double = 0.0, limit: Int = 40): Refine.Done ! R =
+  def refine[R[_]: Has[Weigh]](g: Grammar, ctx0: Context, margin: Double = 0.0, limit: Int = 40): Refine.Done ! R =
     def loop(ctx: Context, steps: Vector[(Ty, String)], n: Int): Refine.Done ! R =
       g.nextHole(ctx.term) match
         case None => pure(Refine.Done(ctx.term, steps, None))
@@ -37,15 +37,15 @@ object Choose:
     loop(ctx0, Vector.empty, 0)
 
   /** a source as the LAST handler: its opinion is the answer, empty included (the reading stops there) */
-  def by[R[_], A](fill: Fill[R]): Handler[Choose, R, A, A] =
-    Handler.general[Choose, R, A, A](pure)([X] => (op: Choose[X], k: X => A ! R) => op match
-      case Pick(ty, cs, ctx) => fill(ty, cs, ctx).flatMap(k))
+  def by[R[_], A](fill: Fill[R]): Handler[Weigh, R, A, A] =
+    Handler.general[Weigh, R, A, A](pure)([X] => (op: Weigh[X], k: X => A ! R) => op match
+      case Of(ty, cs, ctx) => fill(ty, cs, ctx).flatMap(k))
 
   /** a source FIRST: its opinion when it has one, else the operation forwarded to the handler outside */
-  def first[R[_]: Has[Choose], A](fill: Fill[R]): Handler[Choose, R, A, A] =
-    Handler.general[Choose, R, A, A](pure)([X] => (op: Choose[X], k: X => A ! R) => op match
-      case p @ Pick(ty, cs, ctx) => fill(ty, cs, ctx).flatMap(d => if d.nonEmpty then k(d) else perform[Choose](p).flatMap(k)))
+  def first[R[_]: Has[Weigh], A](fill: Fill[R]): Handler[Weigh, R, A, A] =
+    Handler.general[Weigh, R, A, A](pure)([X] => (op: Weigh[X], k: X => A ! R) => op match
+      case p @ Of(ty, cs, ctx) => fill(ty, cs, ctx).flatMap(d => if d.nonEmpty then k(d) else perform[Weigh](p).flatMap(k)))
 
   /** no source at all: every pick empty — the data's narrowing alone (level 1 with no chooser) */
-  def nobody[R[_], A]: Handler[Choose, R, A, A] =
-    Handler.tail[Choose, R, A, A](pure)([X] => (op: Choose[X]) => op match { case Pick(_, _, _) => (Vector.empty: Dist) })
+  def nobody[R[_], A]: Handler[Weigh, R, A, A] =
+    Handler.tail[Weigh, R, A, A](pure)([X] => (op: Weigh[X]) => op match { case Of(_, _, _) => (Vector.empty: Dist) })
