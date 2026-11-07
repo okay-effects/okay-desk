@@ -113,7 +113,10 @@ object Fill:
         case _ => Set.empty
       val fnChosen: Option[String] = ctx.term match { case Con(_, "Rows", args) => args.lift(6).collect { case Leaf(_, f) => f }; case _ => None }
       val grouped = ctx.term match { case Con(_, "Rows", args) => args.lift(5).exists { case Leaf(_, "none") => false; case Leaf(_, _) => true; case _ => false }; case _ => false }
-      val limitOne = limitNumber.isEmpty && (ctx.has("onlyFirst") || !grouped && (ctx.has("one") || ctx.has("size") && !ctx.has("group") && !ctx.has("among")))
+      // ("of Poland" — a name after "of" — is a condition, not "the largest of the orders": no among-word for the limit)
+      val among = ctx.languages.exists(l => l.list("among").exists(w => w != "of" && ctx.word(w))) ||
+        ctx.word("of") && !ctx.question.matches("(?U)(?s).*\\bof\\s+\\p{Lu}.*")
+      val limitOne = limitNumber.isEmpty && (ctx.has("onlyFirst") || !grouped && (ctx.has("one") || ctx.has("size") && !ctx.has("group") && !among))
       val d: Dist = ty match
         case Ty.TableT =>
           // named in the question — not by a word that is a column of another table ("by customer", "по клиенту");
