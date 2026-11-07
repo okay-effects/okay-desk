@@ -23,3 +23,4 @@ Chat with your data in the browser, offline (README, specs/data.md). Scala 3, li
   `Model.Ask` / `Model.Thought` polled as the loading; `scripts/thinking.scala` watches them in the page.
 - The rule: the model writes programs, handlers compute; a number the engine did not produce is never shown.
 - Commits: plain messages, no attribution trailers.
+- Plans: `BACKLOG.md` (what is not built, with the spec that holds each design); a spec's "built" section records what landed.
