@@ -899,3 +899,32 @@ order" as a row or a maximum) — measured with and without the states, the gain
 Next for the bus: such a set (from the space: points whose phrasing names neither the table nor the columns), the
 map and the control on it, then Qwen3.5-0.8B (another family: another tokenizer — the reading points mapped by
 characters, specs/bus.md L0).
+
+## 32. The bus on the hard set: the teacher's pairs (2026-11-08)
+
+§31's measure was too easy (the control read 91%). The hard set: the 388 held-out teacher pairs (specs/teacher.md
+§5 — people's wording in en, ru, uk, the values in their own words), the reference skill file UNCHANGED, `BusAdapter`
+with TEACHER_PAIRS (DESK_ADAPTER_REFERENCE, DESK_ADAPTER_CONTROL, the map). Stated before the run: the reference
+~40%, the control 20–30%, the map 5–10 points under the reference.
+
+| 388 held-out teacher pairs | whole | abstained | wrong when answered | table | where | group | agg | order |
+|---|---|---|---|---|---|---|---|---|
+| cut19 itself (bus v1) | 41.8% | 18 | 53.6% | 85% | 77% | 75% | 67% | 74% |
+| CONTROL: the states a constant | 29.4% | 119 | 39.9% | 88% | 79% | 83% | 64% | 73% |
+| Qwen3-1.7B through the ridge map (R² 0.905) | **43.0%** | 3 | 56.2% | 77% | 70% | 81% | 75% | 75% |
+
+(By constructor, the percentages are over the pairs answered.) Three readings:
+
+- **The bus matters here**: 12.4 points of whole answers between the reference and no state at all, and the states
+  turn 101 abstentions into answers (with no state the two best tables tie and the reading says "not sure"). On the
+  generator's pairs the same gap was 6 points.
+- **A linear map carries it within the family**: Qwen3-1.7B through one matrix, the skill trained on another model
+  untouched, reads as well as the reference (43.0 against 41.8%, within noise) — the prediction "fine readings do not
+  carry" is NOT borne out here: the map loses on the table (77 against 85%) and the condition (70 against 77%) and
+  gains on the group and the aggregate (the larger model's states, mapped). Within one family, the compatibility
+  layer can be a matrix.
+- **The weak part is the reading, not the bus**: the reference itself is wrong on 53.6% of people's questions it
+  answers. Teaching the readers people's wording (the teacher's pairs, the book of a dataset) is what moves this
+  number; the bus is the part that carries it to another model.
+
+Next: Qwen3.5-0.8B (another family, another tokenizer: the reading points mapped by characters, specs/bus.md L0).
