@@ -60,6 +60,12 @@ and leave this file. The operator decides the order; the numbers that motivate e
 23. **Product chat over a shop's data** (okay-mall, okay-shop): the shop's frequent wordings as organs, the model
     for the rare ones, the person's buttons for the ambiguous; a query costs nothing.
 
+## C'. Taught (2026-11-08)
+
+- **Code through symdex** — built: `okay.desk.code.Code` (specs/organs.md §9); next: the ambiguous symbol as a
+  question of the dialogue, the organ in symdex's MCP as a `ask` tool (a question in words → the Datalog goal), the
+  Ukrainian and Polish phrases, the facts fetched live from `symdex serve` instead of a dump.
+
 ## D. Learning on purpose (specs/organs.md §9, the operator's question «может ли модель учиться, читая книги или
 методом проб и ошибок»)
 

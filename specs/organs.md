@@ -127,3 +127,30 @@ answers — and 27 refusals into wrong ones. So v0's organs are a real source an
 is the organ's SILENCE where its cue is thin (a cue's held-out precision as its weight, and the margin gate of the
 dialogue over it), and v1 — the model authoring cues where the readers fail, measured against these induced ones.
 Everything here ran in seconds on the JVM with no model loaded.
+
+## 9. The second domain taught: code, through symdex (2026-11-08)
+
+BACKLOG C, the operator: «научи 2». `core/src/main/scala/okay/desk/code/Code.scala` — an `okay.inlay.domain.Domain`:
+a point is a RELATION of symdex's Datalog prelude (callers, calls, implementers, up, affects, tests_for,
+defined_in, kind, in_module) and a SYMBOL copied from the question; the exact engine is the same prelude on the
+facts symdex dumps (`query goal=… format=json`), evaluated by okay-datalog in process; phrases in English and
+Russian; the copier finds the symbol by its two-segment name (`Dialogue.read`), or the short name when it is
+capitalized and names one symbol (a type stands for its companion); an organ induced from pairs reads the
+relation. `CodeSuite`: the engine by hand (callers transitive, a change affects through dispatch, the tests for a
+change), the round trip, every phrase names its symbol, the organ never wrong where it speaks (900 pairs: 94% read,
+0 wrong). `bench/CodeBench` on okay-desk's own index (2,325 symbols, 1,194 asked about, 28,740 facts; 1,200 pairs,
+an organ from the even half, 35 cues over 38 stems, the law on all 1,200):
+
+| 600 held-out pairs | whole | unread | wrong when answered |
+|---|---|---|---|
+| the rules alone (hand-written words) | 84% | 15 | 82 (13.7%) |
+| the rules, then the organ | 84% | 15 | 82 (13.7%) |
+| the organ, then the rules | 97% | 15 | 6 (1.0%) |
+| the organ alone | 93% | 41 | 0 |
+
+The relation slot: 99% with the organ first; the symbol slot 98% — the misses are two-segment names that name two
+symbols (`Reach.forward` in two enums): a question for the dialogue, not a guess. Natural questions about this very
+codebase, answered by the engine: "What breaks if I change Fill.exact?" → 30 symbols; "Which tests cover
+Strategy.greedyIn?" → DialogueSuite, OrganSuite, PageRowSuite; «Что переопределяет Grammar.next?» → Rules.next;
+«Где определён Claims.of?» → calc/Claims.scala; "Who implements Rules?" → not read (two symbols named Rules — ask).
+The model's part is reading which relation and which symbol; the answer is symdex's, exact, with proofs available.

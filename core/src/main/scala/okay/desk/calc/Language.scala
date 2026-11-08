@@ -49,7 +49,7 @@ object Language:
     catch case e: Exception => Left(e.getMessage)
 
   /** the built-in languages by code; others from `load` */
-  val builtIn: Map[String, Language] = Map("en" -> En.language, "ru" -> Ru.language)
+  def builtIn: Map[String, Language] = Map("en" -> En.language, "ru" -> Ru.language)
 
   /** a language's file on the JVM: the resources `lang/<code>.json` */
   def load(code: String): Option[Language] =
