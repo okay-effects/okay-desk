@@ -38,8 +38,9 @@ library is readable.
    in `bench/OrganBench`.*
 2. **The model does not yet write organs itself.** Organs are induced by a procedure. v1: the text tier writes a
    cue as JSON where the readers keep failing; the induced organ is the reference; the law and the oracle gate it.
-   Without this the title "a model grows itself" is not literal. *Built 2026-11-08: `learn.Author`, `bench/AuthorBench`
-   (needs a model); the checks have laws without one.*
+   Without this the title "a model grows itself" is not literal. *Built 2026-11-08: `learn.Author`, `bench/AuthorBench`;
+   measured on Qwen3-1.7B: 3 of 40 proposals accepted by the law and the oracle, none wrong got in — the loop is
+   real, the author is weak; next: examples in the prompt, several proposals per hole.*
 3. **Learning on the page is not closed.** A person's correction refines the term but is not remembered, and organs
    are not induced locally. The closest items to the product. *Built 2026-11-08: lessons — a choice at a hole is a
    cue of the person's organ, asked first, kept in the browser; «не запоминай» takes it back.*

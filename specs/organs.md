@@ -232,3 +232,14 @@ width 3 reads as the greedy strategy: the readers' second candidate is rarely th
 nothing — a beam needs a better scorer than the sources' own weights (a validity check of the partial term, or
 the person). The model as an author on the CUT model (no generation) proposed nothing parseable in 40 asks — the
 author needs a model that generates; measured on the uncut 1.7B below.
+
+**The model as an author, on the uncut Qwen3-1.7B (2026-11-08; 40 asks, the holes where the data's reading and
+the gold part, on the training half of 242 pairs):** 37 of 40 proposals parsed as cues; 3 accepted by the law and the
+oracle — `{"words": ["don", "have", "invoice"], "unless": ["exists"]}` for an absence, twice, and one for a
+"cheapest price per category" wording; the rest were refused by the oracle (they fire on pairs meaning otherwise:
+`{"words": ["no"], "unless": ["got"]}`, `{"words": ["customer"]}`) or put the question's own words in `unless` so
+the cue cannot fire («без» for a question about customers without invoices). On the held-out 111: the induced
+organ 36 / 62 / 13, the authored one 36 / 65 / 10 — it fixes nothing yet and breaks nothing. What this says: the
+loop is real (the model writes, the law and the oracle judge, nothing unverified gets in), the model is a poor
+author at 1.7B with no examples in the prompt, and the next step is the prompt with the induced cues as
+examples and a few proposals per hole (the oracle picks), measured again.
