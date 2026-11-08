@@ -119,11 +119,14 @@ object App:
         val q = question.trim
         // THE ACT FIRST (Пилот's act layer, specs/pilot.md §3.2): thanks, a yes or a no to the pending question, a
         // correction naming an option — none of them a question about the data
-        val turn = Turn.State(s.asking.map(_._1), s.asking.map((_, cs) => (Ty.Program, cs)), Vector.empty)
+        val lastQuestion = s.asking.map(_._1).orElse(s.log.reverse.collectFirst { case e if e.role == "user" && !e.text.startsWith("I mean") && !e.text.startsWith("Я имею") => e.text })
+        val turn = Turn.State(lastQuestion, s.asking.map((_, cs) => (Ty.Program, cs)), Vector.empty)
         val act = Turn.decide(turn, q, Language.builtIn.values.toVector)
         act match
           case Turn.Action.Acknowledge => pure(cleared.copy(log = cleared.log :+ Entry("user", q) :+ Entry("model", Clarified.welcome(q))))
           case Turn.Action.Nothing => pure(cleared.copy(log = cleared.log :+ Entry("user", q) :+ Entry("model", Clarified.nothingPending(q))))
+          case Turn.Action.Forget(last) => Model.forget[R](last).map(n => cleared.copy(asking = None, hole = None,
+            log = cleared.log :+ Entry("user", q) :+ Entry("model", Clarified.forgot(q, n))))
           case Turn.Action.Answer(pending, answers) => step[R](s, Msg.Clarify(pending, answers.last._2))
           case Turn.Action.Correct(corrected, _) => step[R](s.copy(asking = None, hole = None), Msg.Ask(corrected))
           case Turn.Action.Read(_) =>

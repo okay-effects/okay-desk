@@ -11,8 +11,10 @@ import okay.scala3.*
  * value, a number, a name) stay the data's. An organ is induced from pairs (v0, `induce`) or written by the model
  * (v1); either way it serves only after the law.
  */
-/** a cue: these words present, those absent → at this PATH of the term, this constructor */
-final case class Cue(words: Set[String], unless: Set[String], path: String, constructor: String)
+/** a cue: these words present, those absent → at this PATH of the term, this constructor; `sure`: right on nine of
+ * ten held-out pairs it fired on AND it fired on some — an unverified or thin cue is a MAYBE, and a maybe is silence
+ * where the reading decides (BACKLOG B 10: the organ's silence where its cue is thin) */
+final case class Cue(words: Set[String], unless: Set[String], path: String, constructor: String, sure: Boolean = true)
 
 /** the term's constructors by path (`Organs.key`): `"" → Rows`, `6 → count`, … — a PARTIAL reading */
 final case class Template(parts: Map[String, String]):
@@ -29,6 +31,7 @@ final case class Organ(name: String, vocabulary: Vector[String], cues: Vector[Cu
   private def consOf(path: String) = paths.find(_._1 == path).map(_._2).getOrElse(Vector.empty)
   private val cueField: Vector[Cat] = cues.zipWithIndex.map((c, i) => Cat(s"c$i", consOf(c.path)))
   private val said: Vector[(String, Many)] = paths.map((p, cs) => p -> Many(s"t:$p", cs))
+  private val sureSaid: Vector[(String, Many)] = paths.map((p, cs) => p -> Many(s"s:$p", cs))
 
   /** THE PROGRAM: the words gathered into a set at every position (one head); a rule per cue writing its own
    * field; the fields of a path joined into the SET of constructors proposed there — one is a decision, more is
@@ -38,7 +41,8 @@ final case class Organ(name: String, vocabulary: Vector[String], cues: Vector[Cu
     val decide = Layer(rules = cues.zip(cueField).map((c, f) => Rule(
       c.words.toVector.sorted.map(w => Guard.In(seen, w)) ++ c.unless.toVector.sorted.map(w => Guard.NotIn(seen, w)),
       Seq(Write.To(f, c.constructor)))))
-    val join = Layer(rules = said.map((p, m) => Rule(Nil, Seq(Write.Union(m, cues.zip(cueField).collect { case (c, f) if c.path == p => f })))))
+    val join = Layer(rules = said.map((p, m) => Rule(Nil, Seq(Write.Union(m, cues.zip(cueField).collect { case (c, f) if c.path == p => f })))) ++
+      sureSaid.map((p, m) => Rule(Nil, Seq(Write.Union(m, cues.zip(cueField).collect { case (c, f) if c.path == p && c.sure => f })))))
     Program(Seq(word, one), Seq(gather, decide, join), maxLen = Organ.MaxWords + 1)
 
   lazy val weights = Compile(program)
@@ -47,18 +51,23 @@ final case class Organ(name: String, vocabulary: Vector[String], cues: Vector[Cu
   def inputs(words: Vector[String]): Vector[Interpret.Record] =
     words.take(Organ.MaxWords).map(w => Map("word" -> Val.C(Some(if vocabulary.contains(w) then w else Organ.Other)), "one" -> Val.C(Some("1"))))
 
-  private def read(rs: Vector[Interpret.Record]): Option[Template] =
+  /** a path's set of constructors proposed (all cues, or the sure ones): one is a decision; the sure one is said
+   * only when every cue that fired agrees (a sure cue and a maybe disagreeing is silence too) */
+  private def read(rs: Vector[Interpret.Record], sureOnly: Boolean): Option[Template] =
     rs.lastOption.map { r =>
-      Template(said.flatMap((p, m) => r.get(m.name) match
-        case Some(Val.M(vs)) if vs.size == 1 => Some(p -> vs.head)
-        case _ => None).toMap)
+      Template(said.zip(sureSaid).flatMap { case ((p, all), (_, sure)) => (r.get(all.name), r.get(sure.name)) match
+        case (Some(Val.M(vs)), Some(Val.M(ss))) if vs.size == 1 && (!sureOnly || ss.size == 1) => Some(p -> vs.head)
+        case _ => None }.toMap)
     }.filter(_.parts.nonEmpty)
-  /** the reference: the interpreter */
+  /** the reference: the interpreter — the sure decisions */
   def interpret(words: Vector[String]): Option[Template] =
-    if words.isEmpty || cues.isEmpty then None else try read(Interpret.run(program, inputs(words))) catch case _: okay.inlay.Inexact => None
-  /** the block: the weights compiled from the program */
+    if words.isEmpty || cues.isEmpty then None else try read(Interpret.run(program, inputs(words)), sureOnly = true) catch case _: okay.inlay.Inexact => None
+  /** the block: the weights compiled from the program — the sure decisions */
   def forward(words: Vector[String]): Option[Template] =
-    if words.isEmpty || cues.isEmpty then None else try read(Forward.run(program, weights, inputs(words))) catch case _: okay.inlay.Inexact => None
+    if words.isEmpty || cues.isEmpty then None else try read(Forward.run(program, weights, inputs(words)), sureOnly = true) catch case _: okay.inlay.Inexact => None
+  /** every decision, the maybes too — for the measure of what silence costs */
+  def forwardAll(words: Vector[String]): Option[Template] =
+    if words.isEmpty || cues.isEmpty then None else try read(Forward.run(program, weights, inputs(words)), sureOnly = false) catch case _: okay.inlay.Inexact => None
 
 object Organ:
   val Other = "other"
@@ -104,13 +113,35 @@ object Organ:
               case _ => n = Vector.empty
             p = p.filter(holds); n = n.filter(holds)
           val fires = hold.filter((ws, _) => holds(ws))
-          val precise = fires.isEmpty || fires.count((_, t) => t.parts.get(path).contains(con)) * 10 >= fires.size * 9
+          val rightOnHeld = fires.count((_, t) => t.parts.get(path).contains(con))
+          val precise = fires.isEmpty || rightOnHeld * 10 >= fires.size * 9
+          // sure: verified on the held-out third and never wrong there; a cue the held-out pairs never exercised, or
+          // one wrong once in ten, is a maybe — kept (it votes with the others) but silent alone
+          // (no held-out pairs at all — `prune = false`, the caller vouches: every cue sure)
+          val sure = if hold.isEmpty then true else fires.nonEmpty && rightOnHeld == fires.size
           if n.isEmpty && p.size >= minCover && in.nonEmpty && precise then
-            cues += Cue(in, out, path, con)
+            cues += Cue(in, out, path, con, sure)
             pos = pos.filterNot(holds)
           else pos = Vector.empty
     val all = cues.result()
     Organ(name, all.flatMap(c => c.words ++ c.unless).distinct.sorted, all)
+
+object OrganSource:
+  /** THE ORGANS AS A PURE SOURCE (the page, where no `Organs` effect is in the row): the first organ with a sure
+   * opinion on the question decides each hole of its template along the term's path — the block run directly */
+  def source[R[_]](organs: => Vector[Organ]): Fill[R] = new Fill[R]:
+    private var cache: Option[(String, Option[Template])] = None
+    def apply(ty: Ty, cs: Vector[String], ctx: Context): Dist ! R =
+      if ty.isInstanceOf[Ty.ValueT] then pure(Vector.empty)
+      else
+        val t = cache match
+          case Some((q, t)) if q == ctx.question => t
+          case _ =>
+            val lang = ctx.languages.headOption.getOrElse(Language.En.language)
+            val ws = Organ.words(ctx.question, lang)
+            val found = organs.iterator.map(_.forward(ws)).collectFirst { case Some(t) => t }
+            cache = Some((ctx.question, found)); found
+        pure(t.flatMap(_.parts.get(Organs.key(Organs.pathOf(ctx.term)))).filter(cs.contains).map(c => Vector((c, 0.0))).getOrElse(Vector.empty))
 
 /** THE EFFECT: an organ called by name with the question's words; the handlers run the interpreter or the weights */
 enum Organs[X]:
@@ -171,7 +202,7 @@ object OrganFile:
     def strs(xs: Iterable[String]) = Json.Arr(xs.toVector.sorted.map(Json.Str(_)))
     Json.print(Json.obj("name" -> Json.Str(o.name), "vocabulary" -> strs(o.vocabulary),
       "cues" -> Json.Arr(o.cues.map(c => Json.obj("words" -> strs(c.words), "unless" -> strs(c.unless),
-        "path" -> Json.Str(c.path), "constructor" -> Json.Str(c.constructor))))))
+        "path" -> Json.Str(c.path), "constructor" -> Json.Str(c.constructor), "sure" -> Json.Bool(c.sure))))))
   def parse(text: String): Either[String, Organ] =
     def strs(j: Option[Json]): Vector[String] = j match { case Some(Json.Arr(xs)) => xs.collect { case Json.Str(s) => s }.toVector; case _ => Vector.empty }
     def str(j: Option[Json]): String = j match { case Some(Json.Str(s)) => s; case _ => "" }
@@ -180,7 +211,8 @@ object OrganFile:
         val m = fs.toMap
         val cues = m.get("cues") match
           case Some(Json.Arr(cs)) => cs.toVector.collect { case Json.Obj(f) =>
-            val c = f.toMap; Cue(strs(c.get("words")).toSet, strs(c.get("unless")).toSet, str(c.get("path")), str(c.get("constructor"))) }
+            val c = f.toMap; Cue(strs(c.get("words")).toSet, strs(c.get("unless")).toSet, str(c.get("path")), str(c.get("constructor")),
+              c.get("sure") match { case Some(Json.Bool(b)) => b; case _ => true }) }
           case _ => Vector.empty
         Right(Organ(str(m.get("name")), strs(m.get("vocabulary")), cues))
       case _ => Left("an object expected")

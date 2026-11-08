@@ -31,6 +31,7 @@ object Clarified:
   def saying(q: String, choice: String): String = if russian(q) then s"Я имею в виду $choice" else s"I mean $choice"
   /** what the page says to thanks, and to a yes or no with nothing pending */
   def welcome(q: String): String = if russian(q) then "Пожалуйста. Спрашивайте ещё." else "You're welcome. Ask on."
+  def forgot(q: String, n: Int): String = if russian(q) then (if n > 0 then s"Забыл: $n." else "Нечего забывать.") else (if n > 0 then s"Forgotten: $n." else "Nothing to forget.")
   def nothingPending(q: String): String = if russian(q) then "Ничего не ожидает ответа — задайте вопрос о данных." else "Nothing is pending — ask about the data."
   def prompt(q: String, asked: Option[String] = None): String = asked.getOrElse(
     if russian(q) then "Не уверен, о какой таблице вопрос — выберите:" else "Not sure which table the question means — choose:")

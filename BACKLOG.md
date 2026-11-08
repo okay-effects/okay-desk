@@ -5,6 +5,8 @@ and leave this file. The operator decides the order; the numbers that motivate e
 
 ## A. The dialogue and the sources (specs/pilot.md, docs/calculus.md §10)
 
+(1, 2, 10, 12 in part, 15 at the calculus level: written 2026-11-08 — specs/organs.md §11; their numbers pending.)
+
 1. **Lessons per person** («надо было: по странам», Okay!Chat's `Support.Remembered`): the pair phrase → the hole's
    choice kept on the disk beside `Clarified.keep`; the next question of the same person, the same words (or a typo
    away) decide the same hole ahead of the rules. A `Weigh` handler first in the chain, one file. Measure: the

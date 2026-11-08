@@ -207,11 +207,30 @@ object Engine:
   // to this question so far — a choice answers the pending hole; the reading runs again with the answers as its first
   // source and refines the same term; a different question starts afresh
   private var dialogue: (String, Vector[(Ty, String)]) = ("", Vector.empty)
-  private var pending: Option[(Ty, Vector[String])] = None
+  private var pending: Option[(Ty, Term, Vector[String])] = None
+  // THE PERSON'S LESSONS (docs/learning.md, BACKLOG A 1): a choice at a hole is a lesson — the question's words → at
+  // this path, this constructor; the lessons are an organ asked FIRST, kept in the browser's storage as an organ file
+  private val lessonsKey = "okay-desk:lessons"
+  private var lessons: Vector[okay.desk.learn.Lessons.Lesson] =
+    Option(dom.window.localStorage.getItem(lessonsKey)).map(okay.desk.learn.Lessons.parse).getOrElse(Vector.empty)
+  private var lessonsOrgan: Vector[okay.desk.organ.Organ] = Vector(okay.desk.learn.Lessons.organ(lessons))
+  private def keepLessons(): Unit =
+    lessonsOrgan = Vector(okay.desk.learn.Lessons.organ(lessons))
+    try dom.window.localStorage.setItem(lessonsKey, okay.desk.learn.Lessons.json(lessons)) catch case _: Throwable => ()
+  /** «не запоминай» / "forget that": the lessons of this question's words taken back */
+  def forget(question: String): Int =
+    val before = lessons.size
+    lessons = okay.desk.learn.Lessons.forget(lessons, question, Language.detect(question).headOption.flatMap(Language.builtIn.get).getOrElse(Language.En.language))
+    keepLessons(); before - lessons.size
   private def answersFor(question: String, choice: Option[String]): Vector[(Ty, String)] =
     val kept = if dialogue._1 == question then dialogue._2 else Vector.empty
-    val answers = choice.zip(pending).filter((c, p) => p._2.contains(c) || p._1.isInstanceOf[Ty.ValueT]).map((c, p) => (p._1, c))
+    val answers = choice.zip(pending).filter((c, p) => p._3.contains(c) || p._1.isInstanceOf[Ty.ValueT]).map((c, p) => (p._1, c))
       .fold(kept)(a => kept :+ a)
+    // the choice remembered as a lesson (a value hole is the data's: not a lesson)
+    for c <- choice; (ty, at, _) <- pending if !ty.isInstanceOf[Ty.ValueT] do
+      val lang = Language.detect(question).headOption.flatMap(Language.builtIn.get).getOrElse(Language.En.language)
+      lessons = (lessons :+ okay.desk.learn.Lessons.of(question, lang, at, c)).distinct
+      keepLessons()
     dialogue = (question, answers); pending = None
     answers
   /** THE ASK of an open hole, as the page's words: the question in the person's language, then the options (the
@@ -228,12 +247,12 @@ object Engine:
     def noting(f: Fill[S]): Fill[S] = new Fill[S]:
       def apply(ty: Ty, cs: Vector[String], ctx: Context) =
         Read.note[S](s"deciding ${ty.toString.takeWhile(_ != '(')} among ${cs.take(5).mkString(", ")}${if cs.size > 5 then "…" else ""}").flatMap(_ => f(ty, cs, ctx))
-    // the person's answers first (the dialogue), then the data, the readers, the model's tokens
-    val fill = noting(Fill.first[S](Dialogue.decided[S](answers), Fill.exact[S], skill.weigh[S], Fill.model[S](tables)))
+    // the person's answers first (the dialogue), the person's lessons, then the data, the readers, the model's tokens
+    val fill = noting(Fill.first[S](Dialogue.decided[S](answers), okay.desk.organ.OrganSource.source[S](lessonsOrgan), Fill.exact[S], skill.weigh[S], Fill.model[S](tables)))
     Dialogue.read[R](g, Context(s, question, Term.Hole(Ty.Program), words, languages), fill, margin).map {
       case Dialogue.Outcome.Closed(t) => Den.run(s, t).map((q, _) => Query.print(q))
-      case Dialogue.Outcome.Open(ty, _, cs, _) =>
-        pending = Some((ty, cs))
+      case Dialogue.Outcome.Open(ty, at, cs, _) =>
+        pending = Some((ty, at, cs))
         Left(asked(ty, cs, languages))
     }
   private var said = Vector.empty[String]
@@ -312,6 +331,7 @@ object Engine:
         case Model.Ask(tables, question, retry, choice) => ask(tables, question, retry, choice); Future.unit
         case Model.Thought() => thought()
         case Model.Summary(question, q, result) => summary(question, q, result).recover { case _ => None }
+        case Model.Forget(question) => Future.successful(forget(question))
       Async.fromFuture[X, Rest](f).flatMap(k)))
 
 /** THE DISK: `Disk` by the browser's Cache API — every file opened kept under `data/<name>` (its text a response),

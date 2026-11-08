@@ -57,6 +57,12 @@ object Fill:
       fills.foldLeft(pure[Dist, R](Vector.empty))((acc, f) => acc.flatMap(d => if d.nonEmpty then pure(d) else f(ty, cs, ctx)))
   /** a source's explicit REFUSAL: this candidate means "not this grammar" — the reading stops open, no source after is asked */
   val refuse: String = "?"
+  /** a source's explicit QUESTION (BACKLOG A 2, the data's silence on ambiguous wording): this candidate beside two or
+   * more others means "one of these, I cannot tell" — the reading stops open with THEM as its options; no source after
+   * is asked (the words are disputed; a reader's guess would be the wrong closed term this marker exists to prevent) */
+  val ask: String = "??"
+  /** the candidates of a distribution, the markers taken out */
+  def options(d: Dist): Vector[String] = d.map(_._1).filter(c => c != refuse && c != ask)
 
   /** the oracle: the gold term's constructor at the hole's path — the law `read ∘ phrase = id` with a perfect source */
   def oracle[R[_]](grammar: Grammar, gold: Term): Fill[R] = new Fill[R]:
@@ -293,7 +299,15 @@ object Fill:
           if needed.size == 1 then Vector((needed.head, 0.0)) else if needed.isEmpty then Vector(("none", 0.0)) else Vector.empty
         case Ty.ReverseLinkT(_) => one(cs)
         case _ => Vector.empty
-      pure(d)
+      // THE DISPUTED WORDS (BACKLOG A 2): a language's `ask:<kind>:<a>|<b>` lists — a word that means either; where
+      // one is written the data offers both and asks, instead of deciding by a rule that is right half the time
+      val kind = Dialogue.kind(ty)
+      val disputed: Vector[String] = ctx.languages.flatMap(_.lists.collect {
+        case (key, ws) if key.startsWith(s"ask:$kind:") && ctx.word(ws*) => key.stripPrefix(s"ask:$kind:").split('|').toVector }).flatten.distinct
+      val asked: Dist = disputed.filter(cs.contains) match
+        case two if two.size >= 2 && d.size <= 1 => (Fill.ask, 0.0) +: two.map(c => (c, 0.0))
+        case _ => Vector.empty
+      pure(if asked.nonEmpty then asked else d)
 
   /** THE MODEL'S OWN TOKENS (the text tier): the term so far rendered as the program's JSON up to the hole, the
    * candidates scored by the model's next-token log-probabilities at that prefix. Any model with logits serves. */

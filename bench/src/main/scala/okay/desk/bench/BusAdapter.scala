@@ -125,6 +125,10 @@ object BusAdapter:
     val skill = MlxReading.ready(tChat, tModel, 19, teacherRepo, sys.error("no skill file for the reference"))
     // THE CONTROL (DESK_ADAPTER_CONTROL=1): the states replaced by one constant vector — what the exact rules and the
     // model's own logits (ask) read with no state at all; the map's gain is the difference
+    // THE REFERENCE ITSELF (DESK_ADAPTER_REFERENCE=1): the skill on the model it was trained on
+    if sys.env.contains("DESK_ADAPTER_REFERENCE") then
+      evaluate(skill, MlxReading(tChat, tModel, 19), s"$teacherRepo itself")
+      return
     if sys.env.contains("DESK_ADAPTER_CONTROL") then
       val (sChat, sModel) = load(sourceRepo)
       val zero = Ridge(Array.fill(2048)(0.0), Array.fill(1024)(0.0), Array.fill(2048, 1024)(0.0))
@@ -170,4 +174,11 @@ object BusAdapter:
       else println(s"  [$lang ${i + 1}] ${got.fold(e => s"($e)", identity)}")
     println(s"$what, the skill unchanged | en: ${right("en")}/${Sample.questions.size} | " +
       s"ru: ${right("ru")}/${Sample.questions.size}")
-    mapped.measureByConstructor(Pairs.many(44, sys.env.getOrElse("DESK_CONSTRUCTORS", "300").toInt))
+    if sys.env.getOrElse("DESK_CONSTRUCTORS", "300").toInt > 0 then
+      mapped.measureByConstructor(Pairs.many(44, sys.env.getOrElse("DESK_CONSTRUCTORS", "300").toInt))
+    // THE HARD SET (§32): the teacher's held-out pairs — people's wording in en, ru, uk, which the exact rules decide
+    // less of: where a good adapter and none should part
+    for path <- sys.env.get("TEACHER_PAIRS") do
+      val held = TeacherBench.load(java.nio.file.Path.of(path)).filter(_.seed % 5 == 0)
+      println(s"$what — ${held.size} held-out teacher pairs:")
+      mapped.measureByConstructor(held.map(TeacherBench.pair))

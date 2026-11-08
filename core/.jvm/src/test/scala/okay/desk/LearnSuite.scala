@@ -2,12 +2,13 @@ package okay.desk
 
 import okay.desk.calc.*
 import okay.desk.learn.{Book, Paradigm}
-import okay.desk.organ.{Organ, OrganFile}
+import okay.desk.organ.{Organ, OrganFile, Template}
 
 /** LEARNING ON PURPOSE (BACKLOG D): a book's dictionary read into a language the data uses at once; its examples
  * into pairs and questions; the organ of the pairs; the paradigm block equals the table; an organ survives its file */
 class LearnSuite extends munit.FunSuite:
   val s = Space.Schema(Sample.tables)
+  val g = new Grammar(s)
   val book = Book.parse("""
     # the sample
     table orders: purchases, deals; ru: покупки, сделки
@@ -63,3 +64,28 @@ class LearnSuite extends munit.FunSuite:
     for _ <- 1 to 60 do
       val ws = Vector.fill(1 + rnd.nextInt(8))((organ.vocabulary :+ "x")(rnd.nextInt(organ.vocabulary.size + 1)))
       assertEquals(back.forward(ws), organ.forward(ws), ws.mkString(" "))
+
+  test("the person's lessons: a choice at a hole decides the same wording next time before the data; forgotten on request"):
+    import okay.desk.learn.Lessons
+    val q = "Show the first 3 orders"
+    val ctx = Context(s, q, Term.Hole(Ty.Program))
+    // the reading stops at the order column; the person chooses amount
+    val stopped = okay.scala3.run(Dialogue.read[okay.scala3.Pure](g, ctx, Fill.exact[Strategy.Rest[okay.scala3.Pure]])) match
+      case Dialogue.Outcome.Open(ty, at, cs, _) => assert(ty.isInstanceOf[Ty.OrderT], s"stopped at $ty with $cs"); assert(cs.contains("amount"), s"$ty: $cs"); at
+      case other => fail(other.toString)
+    val lessons = Vector(Lessons.of(q, Language.En.language, stopped, "amount"))
+    assertEquals(Lessons.decides(lessons, q, Language.En.language), Some(Template(Map("8" -> "amount"))))
+    assertEquals(Lessons.decides(lessons, "Show the first 3 orders now", Language.En.language), Some(Template(Map("8" -> "amount"))))
+    assertEquals(Lessons.decides(lessons, "Show orders", Language.En.language), None)
+    // as the first source: the same question now closes, ordered by amount
+    type P[X] = Strategy.Rest[okay.scala3.Pure][X]
+    val fill = Fill.first[P](okay.desk.organ.OrganSource.source[P](Vector(Lessons.organ(lessons))), Fill.exact[P])
+    // the lesson decided the order column; the direction is the NEXT question — the dialogue goes on from there
+    okay.scala3.run(Dialogue.read[okay.scala3.Pure](g, ctx, fill)) match
+      case Dialogue.Outcome.Open(ty, at, _, _) => assertEquals(ty, Ty.DirT); assert(Encode.word(at).contains("amount"), Encode.word(at).toString)
+      case other => fail(other.toString)
+    val back = Lessons.parse(Lessons.json(lessons))
+    assertEquals(back, lessons)
+    assertEquals(Lessons.forget(lessons, q, Language.En.language), Vector.empty)
+    assertEquals(Dialogue.Act.of("не запоминай", Vector(Language.Ru.language)), Dialogue.Act.Forget)
+    assertEquals(Dialogue.Act.of("forget that", Vector(Language.En.language)), Dialogue.Act.Forget)

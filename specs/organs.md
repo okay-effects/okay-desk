@@ -175,3 +175,25 @@ The model's part is reading which relation and which symbol; the answer is symde
   Weights.Rules or calc.Rules?".
 - The code domain's ambiguous symbol: `Code.copier.ambiguous` gives the name and its candidates for the dialogue.
 - `LearnSuite` (3 laws), `CodeSuite` (3), `OrganSuite` (3): 51 laws on the JVM.
+
+## 11. The silences, the lessons, the author, the beam (designed and written 2026-11-08; docs/vision.md §3)
+
+- **The organ's tiers** (BACKLOG B 10): a cue is SURE when the held-out third exercised it and it was never wrong
+  there; else a MAYBE — kept, it votes with the others (`forwardAll`), but alone it is silence (`forward`). The block
+  carries both: a `t:<path>` set of every cue's constructor and an `s:<path>` set of the sure ones; a decision is
+  one constructor in both. The file keeps the tier.
+- **The data's question** (A 2): a language's `ask:<kind>:<a>|<b>` list — words that mean either («сколько денег»:
+  a count or a sum). Where one is written and the data has no other opinion, it answers `Fill.ask` beside the two;
+  the reading stops open with them as its options and no source after is asked. The dialogue's question names them.
+- **The lessons** (A 1, B 11; `learn.Lessons`): a choice at a hole is a cue of the person's organ — the question's
+  stems, all of them → at this path, this constructor; the organ is asked first; kept in the browser's storage as an
+  organ file; «не запоминай» / "forget that" takes the question's lessons back (an act, `Dialogue.Act.Forget`).
+- **The author** (B 12; `learn.Author`): the model asked, through `Read` by greedy decoding, for a cue as JSON at the
+  first hole where the data's reading and the gold part; parsed to a cue of the question's own stems; the LAW on its
+  words and the ORACLE (fires on its question, on no pair of the path meaning otherwise) decide; the accepted cues an
+  organ measured beside the induced one (`bench/AuthorBench`, a model needed).
+- **The beam** (B 15, at the level of the calculus; `Strategy.beam`): the `width` best partial terms by the sum of
+  the sources' weights; a refusal or a question ends a branch open; the best closed term wins. Width 1 is the greedy
+  reading; the sources' caches are shared, the KV cache being the continuation the branches resume from.
+- Laws: `SilenceSuite` (the disputed word asks; a maybe is silent alone; the beam of width 1 is greedy and the oracle
+  closes at every width), `LearnSuite` (the lessons), `AuthorSuite` (the proposals' checks). Numbers as they come.

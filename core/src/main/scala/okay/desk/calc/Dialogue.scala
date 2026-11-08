@@ -31,6 +31,8 @@ object Dialogue:
   def offered(g: Rules, ty: Ty, dist: Dist, limit: Int = 12): Vector[String] =
     // a source's REFUSAL (the question asks what the grammar lacks: a comparison, a share): nothing to offer
     if dist.exists(_._1 == Fill.refuse) then return Vector.empty
+    // a source's QUESTION: its options are the ones it named
+    if dist.exists(_._1 == Fill.ask) then return Fill.options(dist).distinct
     val weighed = dist.filter(_._1 != Fill.refuse).sortBy(-_._2).map(_._1)
     val cs = if weighed.size >= 2 then weighed.take(3) else g.constructors(ty).take(limit)
     cs.distinct
@@ -113,6 +115,8 @@ object Dialogue:
     case Yes, No, Thanks
     /** «не так: по странам», "no, by country" — what follows the correction word */
     case Correction(rest: String)
+    /** «не запоминай», "forget that": the last lesson taken back */
+    case Forget
     case Question
 
   object Act:
@@ -124,7 +128,8 @@ object Dialogue:
       val words = m.split("\\s+").filter(_.nonEmpty)
       def starts(key: String): Option[String] = languages.flatMap(_.list(key)).sortBy(-_.length)
         .find(p => m == p || m.startsWith(p + " ") || m.startsWith(p + ",") || m.startsWith(p + ":"))
-      starts("correction") match
+      if words.size <= 3 && starts("forget").isDefined then Forget
+      else starts("correction") match
         case Some(p) => Correction(original.drop(p.length).dropWhile(c => c == ',' || c == ':' || c == ' ').trim)
         case None =>
           if words.size <= 3 && starts("thanks").isDefined then Thanks
@@ -144,12 +149,15 @@ object Dialogue:
       /** a new question read afresh */
       case Read(question: String)
       case Acknowledge
+      /** the last question's lessons taken back */
+      case Forget(question: String)
       /** the person said yes or no and nothing is pending: nothing to do but say so */
       case Nothing
 
     def decide(s: State, message: String, languages: Vector[Language]): Action =
       Act.of(message, languages) match
         case Act.Thanks => Action.Acknowledge
+        case Act.Forget => s.question.map(Action.Forget(_)).getOrElse(Action.Nothing)
         case Act.Yes => s.pending.zip(s.question).map((p, q) => Action.Answer(q, s.answers :+ (p._1, p._2.head)))
           .getOrElse(Action.Nothing)
         case Act.No => s.pending.zip(s.question).flatMap((p, q) => p._2.lift(1).map(c => Action.Answer(q, s.answers :+ (p._1, c))))

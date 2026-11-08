@@ -29,6 +29,8 @@ enum Model[X]:
   case Thought() extends Model[Either[Vector[String], Either[String, String]]]
   /** a sentence about the result, where a model can say one; `None` where nothing is generated */
   case Summary(question: String, query: Query, result: Data) extends Model[Option[String]]
+  /** «не запоминай»: the lessons of this question's words taken back; how many */
+  case Forget(question: String) extends Model[Int]
 
 object Model:
   def begin[R[_]](name: String)(using In[Model, R]): Unit ! R = perform[Model](Begin(name))
@@ -40,6 +42,7 @@ object Model:
   def thought[R[_]](using In[Model, R]): Either[Vector[String], Either[String, String]] ! R = perform[Model](Thought())
   def summary[R[_]](question: String, query: Query, result: Data)(using In[Model, R]): Option[String] ! R =
     perform[Model](Summary(question, query, result))
+  def forget[R[_]](question: String)(using In[Model, R]): Int ! R = perform[Model](Forget(question))
 
   /** THE MODELS A PAGE OFFERS: the readers first (the thesis) — the student by default (§21: 12 layers distilled
    * toward the cut's layer-19 state, the same skill file), the cut for comparison — then the models that generate */
@@ -69,4 +72,5 @@ object Model:
       case Program(tables, question, _) => program(tables, question)
       case Ask(tables, question, _, _) => asked0 = Some((tables, question))
       case Thought() => Right(asked0.fold(Left("no question asked"))((t, q) => program(t, q)))
-      case Summary(_, _, _) => None))
+      case Summary(_, _, _) => None
+      case Forget(_) => 0))

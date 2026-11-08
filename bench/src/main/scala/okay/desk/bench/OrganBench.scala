@@ -31,7 +31,7 @@ object OrganBench:
     val organs: Map[String, Organ] = train.groupBy(_._1.lang).map { (lang, ps) =>
       val pairs = ps.map((t, g) => (Organ.words(t.question, language(lang)), Organs.templateOf(g)))
       val o = Organ.induce(s"teacher-$lang", pairs, minCover = sys.env.getOrElse("ORGAN_COVER", "2").toInt)
-      println(s"  $lang: ${o.cues.size} cues over ${o.vocabulary.size} words from ${pairs.size} pairs, ${o.weights.params} parameters, ${o.paths.size} paths")
+      println(s"  $lang: ${o.cues.size} cues (${o.cues.count(_.sure)} sure, ${o.cues.count(!_.sure)} maybe) over ${o.vocabulary.size} words from ${pairs.size} pairs, ${o.weights.params} parameters, ${o.paths.size} paths")
       lang -> o
     }
     // the law on every pair: the weights equal the interpreter
@@ -41,10 +41,13 @@ object OrganBench:
       require(o.forward(ws) == o.interpret(ws), s"the law: ${t.question}"); lawChecked += 1
     println(s"  the law held on $lawChecked pairs (the block equals the interpreter)")
     type S[X] = Strategy.Rest[Organs][X]
+    // ORGAN_BEAM=<width>: the readings by the beam instead of the greedy strategy
+    val beamWidth = sys.env.getOrElse("ORGAN_BEAM", "0").toInt
     def read(t: TeacherBench.Taught, fill: Fill[S]): Option[Term] =
       val (_, s, g) = of(t.seed)
       val ctx = Context(s, t.question, Term.Hole(Ty.Program), languages = Languages.forQuestion(t.question))
-      val (_, term) = okay.scala3.run(handle(Strategy.greedyIn[Organs](g, ctx, fill), Organs.byWeights[Pure, (List[Strategy.Step], Option[Term])](organs.values.toVector)))
+      val reading = if beamWidth > 1 then Strategy.beam[Organs](g, ctx, fill, beamWidth) else Strategy.greedyIn[Organs](g, ctx, fill)
+      val (_, term) = okay.scala3.run(handle(reading, Organs.byWeights[Pure, (List[Strategy.Step], Option[Term])](organs.values.toVector)))
       term
     val arms: Vector[(String, String => Fill[S])] = Vector(
       "the data alone" -> (_ => Fill.exact[S]),

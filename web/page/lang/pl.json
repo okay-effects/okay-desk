@@ -222,6 +222,16 @@
    "powinno być",
    "źle",
    "nie to"
+  ],
+  "ask:fn:count|sum": [
+   "ile pieniędzy",
+   "na jaką kwotę",
+   "pieniędzy"
+  ],
+  "ask:dir:desc|asc": [
+   "posortowan*",
+   "uporządkowan*",
+   "w kolejności"
   ]
  },
  "numbers": {

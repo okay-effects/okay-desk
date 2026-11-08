@@ -84,7 +84,10 @@ object Language:
         "outside" -> Vector("share", "compare*", "ratio", "percent*"), "compare" -> Vector("than that of", "faster than", "slower than", "than the"),
         // the acts (Dialogue.Act): what a message does before it is read as a question
         "yes" -> Vector("yes", "yeah", "yep", "right", "ok", "okay", "sure"), "no" -> Vector("no", "nope"),
-        "thanks" -> Vector("thanks", "thank you", "cheers", "great"), "correction" -> Vector("no,", "not that", "i mean", "i meant", "should have been", "wrong,")),
+        "thanks" -> Vector("thanks", "thank you", "cheers", "great"), "forget" -> Vector("forget that", "forget it", "don't remember", "do not remember"), "correction" -> Vector("no,", "not that", "i mean", "i meant", "should have been", "wrong,"),
+        // THE DISPUTED WORDS (BACKLOG A 2): a word that means either of two constructors — the data asks instead of deciding
+        "ask:fn:count|sum" -> Vector("how much money", "amount of money"), "ask:fn:avg|sum" -> Vector("typical"),
+        "ask:dir:desc|asc" -> Vector("sorted by", "ordered by", "in order of")),
       numbers = Map("one" -> "1", "three" -> "3", "five" -> "5", "ten" -> "10"),
       tables = Map.empty, columns = Map.empty, values = Map.empty, stemDrop = 1, pieces = Map.empty)
 
@@ -110,7 +113,9 @@ object Language:
         "growth" -> Vector("рос", "росл*", "рост*", "раст*", "выраст*", "вырос*"), "pace" -> Vector("быстрее", "медленнее", "быстр*", "медленн*"),
         "outside" -> Vector("дол*", "сравни*", "процент*"), "compare" -> Vector("чем у", "чем в", "быстрее, чем", "быстрее чем", "медленнее, чем", "медленнее чем", "по сравнению"),
         "yes" -> Vector("да", "ага", "верно", "точно", "ок", "давай"), "no" -> Vector("нет", "неа"),
-        "thanks" -> Vector("спасибо", "благодарю", "отлично", "супер"), "correction" -> Vector("не так", "нет,", "я имею в виду", "я имел в виду", "я имела в виду", "надо было", "неверно", "не то"),
+        "thanks" -> Vector("спасибо", "благодарю", "отлично", "супер"), "forget" -> Vector("не запоминай", "забудь"), "correction" -> Vector("не так", "нет,", "я имею в виду", "я имел в виду", "я имела в виду", "надо было", "неверно", "не то"),
+        "ask:fn:count|sum" -> Vector("сколько денег", "на какую сумму", "денег"), "ask:fn:avg|sum" -> Vector("обычн*", "типичн*"),
+        "ask:dir:desc|asc" -> Vector("отсортир*", "упорядочен*", "в порядке"),
         "sumPhrases" -> Vector("сумма заказов", "сумма продаж", "итого")),
       numbers = Map("один" -> "1", "одна" -> "1", "три" -> "3", "пять" -> "5", "десять" -> "10"),
       tables = okay.desk.Phrase.Russian.tables.map((k, v) => k -> t(v._1, v._2, v._3, v._4)),

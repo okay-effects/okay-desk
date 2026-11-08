@@ -25,4 +25,4 @@ calculus: [docs/calculus.md](docs/calculus.md) (the document); [specs/calculus.m
 with every measurement).
 
 
-How to use the organs, the books and the code reader: `docs/learning.md`.
+What we are building and why: `docs/vision.md`. How to use the organs, the books and the code reader: `docs/learning.md`.
