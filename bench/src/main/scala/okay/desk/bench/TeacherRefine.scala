@@ -34,7 +34,11 @@ object TeacherRefine:
       for t <- taught do
         val tables = Teacher.schema(t.seed); val s = Space.Schema(tables); val g = new calc.Grammar(s)
         val fill: Fill[Strategy.Rest[Read]] = if arm == "the data alone" then Fill.exact[Strategy.Rest[Read]] else Fill.first[Strategy.Rest[Read]]((Vector(Fill.exact[Strategy.Rest[Read]]) ++ readers.map(_.weigh[Strategy.Rest[Read]]).toVector :+ Fill.model[Strategy.Rest[Read]](tables))*)
-        val term = Read.run(Strategy.greedyIn[Read](g, Context(s, t.question, Term.Hole(Ty.Program), languages = Languages.forQuestion(t.question)), fill), reading)._2
+        // DESK_MARGIN=<nats>: the page's second gate (ln 3 there); DESK_BEAM=<width>: the beam instead of greedy
+        val margin = sys.env.get("DESK_MARGIN").map(_.toDouble).getOrElse(0.0)
+        val beam = sys.env.get("DESK_BEAM").map(_.toInt).getOrElse(0)
+        val ctx = Context(s, t.question, Term.Hole(Ty.Program), languages = Languages.forQuestion(t.question))
+        val term = Read.run(if beam > 1 then Strategy.beam[Read](g, ctx, fill, beam) else Strategy.greedyIn[Read](g, ctx, fill, margin), reading)._2
         val gold = Query.parse(t.program).flatMap(q => run(tables, q)).toOption
         val got = term.flatMap(x => Den.run(s, x).toOption)
         val ok = got.exists((_, r) => gold.exists(gd => Sample.same(r, gd)))
