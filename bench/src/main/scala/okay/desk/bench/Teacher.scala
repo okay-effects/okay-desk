@@ -7,6 +7,7 @@ import okay.desk.{Phrase, Query, Space, Table, Value}
 import okay.desk.Space.{Col, Kind, Program, Schema}
 import okay.desk.skill.Pairs
 import okay.effects.json.{Json, JsonText}
+import scala.jdk.CollectionConverters.*
 
 /**
  * THE TEACHER AS THE SOURCE OF LANGUAGE, THE ENGINE AS THE JUDGE (specs/teacher.md): a point of the space, its grammar
@@ -209,7 +210,11 @@ object Teacher:
         Files.createDirectories(Option(out.getParent).getOrElse(Path.of(".")))
         val langs = sys.env.getOrElse("TEACHER_LANGS", "ru,en,uk").split(",").toVector
         var made = 0; var kept = 0
-        for seed <- from until until do
+        // resumable: the seeds done are kept beside the pairs (a seed whose rewrites were all rejected leaves no pair)
+        val doneFile = Path.of(out.toString + ".done")
+        val done = if Files.exists(doneFile) then Files.readAllLines(doneFile).asScala.flatMap(_.trim.toLongOption).toSet
+          else Set.empty[Long]
+        for seed <- from until until if !done(seed) do
           val (tables, p) = point(seed)
           val lang = langs((seed % langs.size).toInt)
           val skeleton = Phrase.say(scala.util.Random(seed), p, Schema(tables), ru = false)
@@ -225,6 +230,7 @@ object Teacher:
                 Files.writeString(out, line + "\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND)
               case Some(r) => reasons(r) += 1
           }
+          Files.writeString(doneFile, s"$seed\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND)
           println(f"seed $seed ($lang): $kept of $made kept so far (${(System.nanoTime() - t0) / 1e9}%.0f s)")
         println(s"pairs: $kept of $made rewrites accepted; " +
           s"rejected by ${reasons.toVector.sortBy(-_._2).mkString(", ")}")
