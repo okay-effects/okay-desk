@@ -221,6 +221,8 @@ object Engine:
   def forget(question: String): Int =
     val before = lessons.size
     lessons = okay.desk.learn.Lessons.forget(lessons, question, Language.detect(question).headOption.flatMap(Language.builtIn.get).getOrElse(Language.En.language))
+    // (the dialogue's answers to that question go too: asked afresh next time)
+    if dialogue._1 == question then dialogue = ("", Vector.empty)
     keepLessons(); before - lessons.size
   private def answersFor(question: String, choice: Option[String]): Vector[(Ty, String)] =
     val kept = if dialogue._1 == question then dialogue._2 else Vector.empty

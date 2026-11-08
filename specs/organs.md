@@ -197,3 +197,21 @@ The model's part is reading which relation and which symbol; the answer is symde
   reading; the sources' caches are shared, the KV cache being the continuation the branches resume from.
 - Laws: `SilenceSuite` (the disputed word asks; a maybe is silent alone; the beam of width 1 is greedy and the oracle
   closes at every width), `LearnSuite` (the lessons), `AuthorSuite` (the proposals' checks). Numbers as they come.
+
+**Measured (2026-11-08, after the tiers).** The same 963 held-out teacher pairs; the maybes silent alone:
+
+| held-out 963 (right / open / wrong) | en | ru | uk | fixed | broken |
+|---|---|---|---|---|---|
+| the data alone (the disputed words asking) | 154 / 151 / 37 | 83 / 200 / 38 | 75 / 185 / 40 | | |
+| the organ (sure cues), then the data | 159 / 141 / 42 | 97 / 190 / 34 | 87 / 176 / 37 | 46 | 15 |
+| the data, then the organ | 163 / 137 / 42 | 89 / 189 / 43 | 79 / 179 / 42 | 19 | 0 |
+
+Against the untiered organ (67 / 29 and 34 / 0): silence halves the breaks and the fixes alike — the trade is real
+and the knob is the tier's rule (never wrong on the held-out third, and exercised there). The beam of width 3 over the
+same sources reads exactly as the greedy strategy: the data and an organ give one candidate each, so a beam only
+matters over the weighted sources (the readers, the tokens) — measured when MLX is free. The code organ with tiers:
+97% whole and 1.0% wrong with the rules behind it, 92% and 0 wrong alone (was 93%). The disputed words «сколько
+денег», «на какую сумму», "how much money" turn their readings into questions; «сколько всего» was tried and taken
+out (it cost ten right readings for three wrong ones). The lesson on the live page: «Покажи первые 5» asks the
+order, Value chosen, the direction asked, chosen — two cues of the person's organ in the browser's storage; the same
+question again is answered without a question; «не запоминай» → «Забыл: 2»; the question asks again.

@@ -44,6 +44,11 @@ Which order? Measured on 963 held-out teacher pairs (specs/organs.md §8): the o
 and breaks some; AFTER the data it never breaks a right reading and fixes less. Put it after the data unless you
 have measured otherwise on your pairs (`bench/OrganBench` is the measurement).
 
+**Tiers.** A cue is *sure* when the held-out third exercised it and it was never wrong there; else a *maybe*. A
+maybe votes with the others (`forwardAll`) but is silent alone (`forward`); as a source only the sure decisions
+count. Measured: silence halves both the breaks and the fixes (specs/organs.md §11). `prune = false` makes every
+cue sure (the caller vouches, e.g. a law on a small sample).
+
 **Keep it as a file.** `OrganFile.json(organ)` / `OrganFile.parse(text)`: the cues as data. The file is what symdex
 reads (§4) and what a page keeps beside the lessons. A file read back answers the same on every input
 (`LearnSuite`).
@@ -142,18 +147,48 @@ question about the code and checked against the index. Four claims of `docs/calc
 nine relations, and prose read as a question is read wrong more often than a question is — the number to improve
 is the reader's silence on prose, not the engine. Use it as a drift detector on sentences written as claims.
 
-## 6. The dialogue around all of it
+## 6. The person's lessons, and the data's own questions
+
+On the page a choice at a hole is a LESSON: the question's stems → at this path, this constructor — a cue of the
+person's organ (`learn.Lessons`), asked first, before the data. The same wording next time (or one that contains
+it) is read without the question. The lessons are an organ file in the browser's storage (`okay-desk:lessons`);
+«не запоминай» / "forget that" takes the last question's lessons back (`Забыл: 2`). In code:
+
+```scala
+val lesson = Lessons.of(question, language, termTheReadingStoppedAt, choice)
+val fill = Fill.first[S](OrganSource.source[S](Vector(Lessons.organ(lessons))), Fill.exact[S], …)
+```
+
+The data asks on its own where a word is DISPUTED: a language's `ask:<kind>:<a>|<b>` lists («сколько денег»: a count
+or a sum; "sorted by": which direction). The exact fill answers the `Fill.ask` marker beside both; the reading stops
+with them as the options and no reader after is asked. Adding a disputed word is one entry in `Language` (or a
+language file); the laws (`SilenceSuite`) check that the question is asked and that a plain wording still closes.
+
+## 7. The beam
+
+`Strategy.beam(g, ctx, fill, width)`: the `width` best partial terms by the sum of the sources' weights; width 1 is
+the greedy reading (a law). It matters over weighted sources only — the data, an organ and a lesson give one
+candidate each — so it is for the readers and the model's tokens.
+
+## 8. The model as an author
+
+`learn.Author.propose` asks the model (through `Read`, greedy decoding) for a cue at the hole where the data's
+reading and the gold part; the proposal is parsed to a cue of the question's own stems and checked by the LAW on its
+words and by the ORACLE (fires on its question, on no pair meaning otherwise). `bench/AuthorBench` runs it on the
+teacher's pairs beside the induced organ. The checks have laws without a model (`AuthorSuite`).
+
+## 9. The dialogue around all of it
 
 A hole no source decides — the data, an organ, the readers, the model — is a question to the person with its
 options (`Dialogue.read`, `Dialogue.question`); the answer is the first source when the reading runs again
 (`Dialogue.decided`); «да», «нет», «спасибо», «не так: …» are acts, not questions (`Dialogue.Act`, `Turn.decide`).
 The page does this (specs/pilot.md §7). The pairs a dialogue produces are the next organ's.
 
-## 7. Where the numbers live
+## 10. Where the numbers live
 
 | what | where measured | the number |
 |---|---|---|
-| organs on the teacher pairs | `bench/OrganBench`, specs/organs.md §8 | fixed 67 / broken 29 before the data; 34 / 0 after |
+| organs on the teacher pairs | `bench/OrganBench`, specs/organs.md §8, §11 | untiered: fixed 67 / broken 29 before the data, 34 / 0 after; tiered: 46 / 15, 19 / 0 |
 | the code reader | `bench/CodeBench`, specs/organs.md §9 | 97% whole, 1.0% wrong (600 held-out) |
 | the GDP book | `bench/BookBench` | 12 of 13 examples read; the 19 real questions unchanged |
 | the paradigm | `LearnSuite` | 558 forms in three languages, block == table |
