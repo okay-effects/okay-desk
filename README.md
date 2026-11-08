@@ -23,3 +23,6 @@ write a program, phrase — and what it never does — compute. [specs/data.md](
 **The calculus of readings** — how a question becomes an exact answer, and why the whole of it is one small
 calculus: [docs/calculus.md](docs/calculus.md) (the document); [specs/calculus.md](specs/calculus.md) (the diary,
 with every measurement).
+
+
+How to use the organs, the books and the code reader: `docs/learning.md`.

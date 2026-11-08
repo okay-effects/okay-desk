@@ -154,3 +154,24 @@ codebase, answered by the engine: "What breaks if I change Fill.exact?" → 30 s
 Strategy.greedyIn?" → DialogueSuite, OrganSuite, PageRowSuite; «Что переопределяет Grammar.next?» → Rules.next;
 «Где определён Claims.of?» → calc/Claims.scala; "Who implements Rules?" → not read (two symbols named Rules — ask).
 The model's part is reading which relation and which symbol; the answer is symdex's, exact, with proofs available.
+
+## 10. The books, built (2026-11-08) — `docs/learning.md` is how to use them
+
+- **The book of a dataset** (`okay.desk.learn.Book`): a data dictionary (names' forms in any language) and example
+  questions → a `Language` record the exact fill uses at once, the examples closed by the data as PAIRS (gold by
+  construction), the open ones as QUESTIONS (curiosity), an organ of the pairs. The GDP book (`web/page/books/gdp.md`):
+  12 of 13 examples read, the 13th a refusal (a comparison); the 19 real questions unchanged by it (30/8/0 with the
+  data's words), as they do not use its words — a book helps where people use ITS words.
+- **The paradigm** (`okay.desk.learn.Paradigm`): a language's forms compiled into a block; the law block == table on
+  180 (ru), 189 (uk), 189 (pl) forms.
+- **The organ as a file** (`OrganFile`): the cues as JSON; read back it answers the same on every input; symdex reads
+  it with an evaluator of its own.
+- **The book about itself** (`bench/SelfRead`): the docs' sentences that name two symbols read against the index —
+  4 claims verified; most sentences are not claims of the nine relations and prose read as a question is read
+  wrong; the number to improve is the reader's silence on prose.
+- **symdex `ask`** (symdex, unreleased): a question in words → the organ file → the relation; the symbol by the
+  index's resolver (two of a name asked back) → the `query` tool. "Who calls Dialogue.read?", «Какие тесты
+  покрывают Dialogue.decided?», «Где определён Claims.of?» answered exactly; "Who implements Rules?" → "which:
+  Weights.Rules or calc.Rules?".
+- The code domain's ambiguous symbol: `Code.copier.ambiguous` gives the name and its candidates for the dialogue.
+- `LearnSuite` (3 laws), `CodeSuite` (3), `OrganSuite` (3): 51 laws on the JVM.

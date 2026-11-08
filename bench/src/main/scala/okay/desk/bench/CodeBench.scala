@@ -36,6 +36,11 @@ object CodeBench:
     val organ = Code.induce(train, lang)
     println(s"  the organ: ${organ.cues.size} cues over ${organ.vocabulary.size} stems, ${organ.weights.params} parameters")
     organ.cues.take(12).foreach(c => println(s"    ${c.words.toVector.sorted.mkString(" ")}${if c.unless.nonEmpty then " ¬" + c.unless.toVector.sorted.mkString(" ") else ""} → ${c.constructor}"))
+    // THE ORGAN AS A FILE: for symdex's `ask` tool (its own evaluator of the same cues) and for the page
+    val organFile = Bench.root.resolve("web/page/organs/code.json")
+    java.nio.file.Files.createDirectories(organFile.getParent)
+    java.nio.file.Files.writeString(organFile, okay.desk.organ.OrganFile.json(organ))
+    println(s"  the organ written to $organFile")
     val law = pairs.forall(p => { val ws = Organ.words(p.question, lang(p.language)); organ.forward(ws) == organ.interpret(ws) })
     println(s"  the law (the block equals the interpreter) on ${pairs.size} pairs: $law")
     val byOrgan = Code.ByOrgan(organ, lang)

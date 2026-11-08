@@ -161,3 +161,27 @@ object Organs:
       case Term.Con(_, name, args) => (key(path), name) +: args.zipWithIndex.flatMap((a, i) => walk(a, path :+ i))
       case Term.Hole(_) => Vector.empty
     Template(walk(term, Vector.empty).toMap)
+
+/** AN ORGAN AS A FILE (specs/organs.md, BACKLOG 16: a portable artifact — the cues are data; symdex reads the same
+ * file with an evaluator of its own, the law being that the two agree): `{"name", "vocabulary", "cues": [{"words",
+ * "unless", "path", "constructor"}]}` */
+object OrganFile:
+  import okay.effects.json.Json
+  def json(o: Organ): String =
+    def strs(xs: Iterable[String]) = Json.Arr(xs.toVector.sorted.map(Json.Str(_)))
+    Json.print(Json.obj("name" -> Json.Str(o.name), "vocabulary" -> strs(o.vocabulary),
+      "cues" -> Json.Arr(o.cues.map(c => Json.obj("words" -> strs(c.words), "unless" -> strs(c.unless),
+        "path" -> Json.Str(c.path), "constructor" -> Json.Str(c.constructor))))))
+  def parse(text: String): Either[String, Organ] =
+    def strs(j: Option[Json]): Vector[String] = j match { case Some(Json.Arr(xs)) => xs.collect { case Json.Str(s) => s }.toVector; case _ => Vector.empty }
+    def str(j: Option[Json]): String = j match { case Some(Json.Str(s)) => s; case _ => "" }
+    try Json.fromText(text) match
+      case Json.Obj(fs) =>
+        val m = fs.toMap
+        val cues = m.get("cues") match
+          case Some(Json.Arr(cs)) => cs.toVector.collect { case Json.Obj(f) =>
+            val c = f.toMap; Cue(strs(c.get("words")).toSet, strs(c.get("unless")).toSet, str(c.get("path")), str(c.get("constructor"))) }
+          case _ => Vector.empty
+        Right(Organ(str(m.get("name")), strs(m.get("vocabulary")), cues))
+      case _ => Left("an object expected")
+    catch case e: Exception => Left(e.getMessage)

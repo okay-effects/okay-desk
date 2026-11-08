@@ -62,9 +62,13 @@ and leave this file. The operator decides the order; the numbers that motivate e
 
 ## C'. Taught (2026-11-08)
 
-- **Code through symdex** — built: `okay.desk.code.Code` (specs/organs.md §9); next: the ambiguous symbol as a
-  question of the dialogue, the organ in symdex's MCP as a `ask` tool (a question in words → the Datalog goal), the
-  Ukrainian and Polish phrases, the facts fetched live from `symdex serve` instead of a dump.
+- **Code through symdex** — built: `okay.desk.code.Code` (specs/organs.md §9), the ambiguous symbol's candidates,
+  symdex's `ask` tool over the organ file, Ukrainian and Polish phrases; next: the facts fetched live from
+  `symdex serve` instead of a dump; the ask tool's fallback words made silent where unsure.
+- **The books** (D 24, 26 in part) — built: the dataset's book (`Book`), the paradigm block, the organ file, the
+  self-read of the docs (specs/organs.md §10, docs/learning.md); next: a claim grammar for prose (the self-read's
+  silence), the model authoring a book's dictionary offline (`MakeWords` extended to forms and examples), the open
+  examples asked on the page.
 
 ## D. Learning on purpose (specs/organs.md §9, the operator's question «может ли модель учиться, читая книги или
 методом проб и ошибок»)

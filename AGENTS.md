@@ -24,3 +24,4 @@ Chat with your data in the browser, offline (README, specs/data.md). Scala 3, li
 - The rule: the model writes programs, handlers compute; a number the engine did not produce is never shown.
 - Commits: plain messages, no attribution trailers.
 - Plans: `BACKLOG.md` (what is not built, with the spec that holds each design); a spec's "built" section records what landed.
+- Learning on purpose: organs (`okay.desk.organ`), books and the paradigm (`okay.desk.learn`), the code domain (`okay.desk.code`) — `docs/learning.md`, `specs/organs.md`.

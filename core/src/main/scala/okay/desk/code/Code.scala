@@ -105,8 +105,20 @@ object Code extends Domain:
     Rel.Module -> Map("en" -> Vector("which module is {X} in?", "what module holds {X}", "the module of {X}", "in which module does {X} live"),
       "ru" -> Vector("в каком модуле {X}?", "какой модуль содержит {X}", "модуль {X}", "где по модулям {X}")))
 
+  /** Ukrainian and Polish: two wordings per relation (more in a language file later) */
+  val more: Map[Rel, Map[String, Vector[String]]] = Map(
+    Rel.Callers -> Map("uk" -> Vector("хто викликає {X}?", "звідки викликається {X}"), "pl" -> Vector("kto wywołuje {X}?", "skąd jest wywoływane {X}")),
+    Rel.Calls -> Map("uk" -> Vector("що викликає {X}?", "які методи викликає {X}"), "pl" -> Vector("co wywołuje {X}?", "jakie metody wywołuje {X}")),
+    Rel.Implementers -> Map("uk" -> Vector("що реалізує {X}?", "нащадки {X}"), "pl" -> Vector("co implementuje {X}?", "podtypy {X}")),
+    Rel.Up -> Map("uk" -> Vector("що перевизначає {X}?", "батьки {X}"), "pl" -> Vector("co nadpisuje {X}?", "rodzice {X}")),
+    Rel.Affects -> Map("uk" -> Vector("що зламається, якщо змінити {X}?", "на що впливає зміна {X}"), "pl" -> Vector("co się zepsuje, jeśli zmienię {X}?", "na co wpływa zmiana {X}")),
+    Rel.Tests -> Map("uk" -> Vector("які тести покривають {X}?", "тести для {X}"), "pl" -> Vector("które testy pokrywają {X}?", "testy dla {X}")),
+    Rel.DefinedIn -> Map("uk" -> Vector("де визначено {X}?", "у якому файлі {X}"), "pl" -> Vector("gdzie jest zdefiniowane {X}?", "w którym pliku {X}")),
+    Rel.Kind -> Map("uk" -> Vector("що таке {X}: клас, об'єкт, метод?", "якого роду {X}"), "pl" -> Vector("czym jest {X}: klasą, obiektem, metodą?", "jakiego rodzaju jest {X}")),
+    Rel.Module -> Map("uk" -> Vector("у якому модулі {X}?", "який модуль містить {X}"), "pl" -> Vector("w którym module jest {X}?", "który moduł zawiera {X}")))
+
   def say(rnd: scala.util.Random, p: Point, s: Schema, language: String): String =
-    val ws = phrases(p.rel).getOrElse(language, phrases(p.rel)("en"))
+    val ws = phrases(p.rel).get(language).orElse(more(p.rel).get(language)).getOrElse(phrases(p.rel)("en"))
     // the two-segment name, or the short one where it names one symbol
     val name = if s.names.exists((n, ss) => n == p.symbol.short && ss.size == 1) && rnd.nextBoolean() then p.symbol.short else p.symbol.qualified
     ws(rnd.nextInt(ws.size)).replace("{X}", name)
@@ -118,9 +130,15 @@ object Code extends Domain:
 
   /** THE COPIER: the symbol named in the question — the longest known name written there, one symbol */
   object copier extends Kit.Copier[Schema]:
+    private def written(question: String, n: String) = question.matches(s"(?s).*(^|[^\\w.])${java.util.regex.Pattern.quote(n)}([^\\w.]|$$).*")
     def copy(question: String, s: Schema, slot: Slot): Option[String] =
       if slot.name != "symbol" then None
-      else s.names.collectFirst { case (n, Vector(one)) if question.matches(s"(?s).*(^|[^\\w.])${java.util.regex.Pattern.quote(n)}([^\\w.]|$$).*") => one.symbol }
+      else s.names.collectFirst { case (n, Vector(one)) if written(question, n) => one.symbol }
+    /** THE QUESTION where a written name names several symbols (the dialogue's: "Rules — calc.Rules or
+     * Weights.Rules?"): the name and its candidates, when no name written names exactly one */
+    def ambiguous(question: String, s: Schema): Option[(String, Vector[Sym])] =
+      if copy(question, s, Slot("symbol", Vector.empty, copied = true)).isDefined then None
+      else s.names.collectFirst { case (n, ss) if ss.size > 1 && written(question, n) => (n, ss) }
 
   /** THE DATA'S READER: a relation by its words (one per language), the first that fires in a fixed order */
   object rules extends Kit.Reader[Schema]:
