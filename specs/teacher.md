@@ -60,3 +60,29 @@ Russian, 16% in Ukrainian — the grammar's pairs and the sample's 13 (12/13) di
 the constructors a little (table, group, aggregate) and not the answers; at 50 held-out pairs that is within noise.
 The way is the same, at scale: thousands of teacher pairs (≈ 13 s an accepted pair here, so a night for 2,000), the
 held-out teacher pairs as the standing test of language — they replace the dictionary as the measure.
+
+## 5. At scale (2026-11-07/08)
+
+**The pairs**: seeds 121–861 more (resumable: `teacher-pairs.jsonl.done`; stopped at 861 of 1,100 on purpose, the
+GPU shared with another run), 1,945 in all — en 700, ru 631, uk 614; 78% of the rewrites accepted. Held out by
+seed % 5 == 0: 388 (en 137, ru 120, uk 131); trained on 1,557.
+
+**The readers** (cut19, layer 19, `TeacherBench`; A trained 5,305 s, B 5,764 s under the contention):
+
+| on 388 held-out teacher pairs | A: the space × the phrases (1,500) | B: + the teacher's 1,557, twice (4,614) |
+|---|---|---|
+| right, the whole point | 154 (39.7%) | 127 (32.7%) |
+| abstained ("not sure: A or B") | 9 | 120 |
+| wrong when answered | 225 (58.0%) | 141 (36.3%) |
+| answered as the program: en / ru / uk | 83/137, 54/120, 34/131 | 85/137, 45/120, 11/131 |
+| by constructor, where answered: table, where, group, agg, order | 79, 73, 75, 67, 74% | 86, 77, 81, 69, 75% |
+| the sample: en / ru | 12/13, 12/13 | 12/13, 11/13 |
+
+What it says. The teacher's pairs did not lift the language; they made the readers CAREFUL: 84 fewer wrong answers,
+111 more abstentions, 27 fewer right. Where B answers, every constructor is better (the table +7, the group +6). The
+abstentions gather in Ukrainian (34 → 11 answered as the program): the two best tables fall within the margin
+(`Readers.abstainMargin` 0.3) — trained on the teacher's words in three languages, the table's readers are less
+peaked, and the margin turns that into "not sure". Two readings of it, to separate next: the margin is now too wide
+for the less peaked readers (measure B with the margin swept — the right/abstained/wrong frontier), or the Ukrainian
+table names are genuinely not read (measure the table pointer alone on uk). As a test of language the 388 stand:
+English 61%, Russian 45%, Ukrainian 26% answered as the program with the grammar's readers.
