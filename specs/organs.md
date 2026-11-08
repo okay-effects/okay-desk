@@ -215,3 +215,20 @@ matters over the weighted sources (the readers, the tokens) — measured when ML
 out (it cost ten right readings for three wrong ones). The lesson on the live page: «Покажи первые 5» asks the
 order, Value chosen, the direction asked, chosen — two cues of the person's organ in the browser's storage; the same
 question again is answered without a question; «не запоминай» → «Забыл: 2»; the question asks again.
+
+**Measured with the readers (2026-11-08, MLX, the cut model, 242 teacher pairs; `TeacherRefine`, the sources in
+order: the data, the readers, the tokens):**
+
+| right / open / wrong | en (84) | ru (83) | uk (75) |
+|---|---|---|---|
+| the data alone (the disputed words asking) | 37 / 39 / 8 | 26 / 46 / 11 | 14 / 51 / 10 |
+| the sources, margin 0 | 58 / 10 / 16 | 37 / 10 / 36 | 31 / 7 / 37 |
+| the sources, margin ln 3 (the page's) | 50 / 19 / 15 | 33 / 31 / 19 | 24 / 34 / 17 |
+| the sources, the beam of width 3, margin 0 | 58 / 10 / 16 | 37 / 10 / 36 | 30 / 7 / 38 |
+
+The margin halves the wrong readings in Russian and Ukrainian (36 → 19, 37 → 17) for a fifth of the right ones
+turned into questions; in English it changes little (the readers are sure there, right or wrong). The beam of
+width 3 reads as the greedy strategy: the readers' second candidate is rarely the gold's, so carrying it buys
+nothing — a beam needs a better scorer than the sources' own weights (a validity check of the partial term, or
+the person). The model as an author on the CUT model (no generation) proposed nothing parseable in 40 asks — the
+author needs a model that generates; measured on the uncut 1.7B below.

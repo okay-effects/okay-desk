@@ -53,7 +53,8 @@ library is readable.
    only, not the model's states — the next frontier: cues over readers, so an organ reads meaning and the law stays.
    *Built 2026-11-08, at the level of the calculus: `Strategy.beam`; the cache sharing is the prefix cache's.*
 7. **Not measured with the readers on the teacher's pairs** (MLX was busy): the margin ln 3 is measured on the
-   sample and the GDP 19 only.
+   sample and the GDP 19 only. *Measured 2026-11-08: the margin halves the wrong readings in Russian and Ukrainian
+   for a fifth of the right ones turned into questions; the beam of width 3 reads as greedy (specs/organs.md §11).*
 
 ## 4. What to do, in order
 
