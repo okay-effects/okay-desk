@@ -189,11 +189,35 @@ span F1 0; the corpus is exact with span F1 1.
 No model is measured here: this is the interface and its laws, not a fidelity number. The heads, the corpus of
 paraphrases and the backend agreement remain M3's open part.
 
+## 5.3 M3 corpus: task texts with their models (built)
+
+`core/src/main/scala/okay/desk/logic/Corpus.scala` is the teacher side of the reading: it generates task texts from
+formal models and keeps the gold program of each, so a held-out text is not a training text with another constant.
+
+- Four families, the grammar's: `planning` (a reachable set over `initial`/`edge`), `numbers` (comparisons over
+  `age`), `kinship` (a family: parent, sibling, grandparent, ancestor, uncle, childless), `data` (questions over the
+  sample's tables: dependency closure, reverse reachability, unpaid orders from `UA`, customers with no orders).
+- Three splits — Train, Validate, Test — each with its own sentence patterns AND its own names, so a split law can
+  check the sets are disjoint (`Corpus.templates`). The numbers family asks five question kinds (adult, minor,
+  between, older, same age), the kinship family five (grandparent, ancestor, uncle, sibling, no child), the data
+  family four; each kind has a distinct question pattern per split.
+- `items(split, count, seed)` is deterministic: the same seed gives the same items. A generator writes the text and
+  the gold program as data; the law is that `Extract.gold` recovers the program from the text.
+
+Six laws in `LogicCorpusSuite`: every split carries the four families, eight items each; every generated text is a
+point of the grammar and its gold reading replays to its term, every copied span saying its constant; every constant
+is copied from the text, except the threshold `18` the ontology knows (and only in the numbers family); every answer
+is the engine's and no question is empty; the splits share no sentence pattern; generation is deterministic.
+
+The corpus is data, not a fidelity number: it says the reading heads have something to learn from and be measured on,
+not that any head can read it yet.
+
 ## 6. M0 baseline and current numbers
 
 M0 (2026-11-09): `sbt -batch coreJVM/test` passed 132 tests before this work. After M1: 140 tests pass, including
 the 8 laws above. After M2: 144 tests pass, the 20 tasks adding 4 laws. After the extraction contract: 153 tests
-pass. The product numbers this path must not regress are in `data.md` and `understanding.md`: data +
+pass. After the corpus: 159 tests pass. The product numbers this path must not regress are in `data.md` and
+`understanding.md`: data +
 readers + exact facts 12/12 en and 9/12 ru; readers on held-out pairs 97–99% whole with 1–3% wrong; the 28-layer
 generative control 12/12 short mutation but 0/8 longer held-out. The logic fragment is a core addition; no page or
 model path changes yet, so those numbers are unchanged.
@@ -211,14 +235,17 @@ model path changes yet, so those numbers are unchanged.
 - `core/.../skill/Extract.scala`: the extraction contract — reading, evidence, replay, stages, span F1, the corpus'
   gold reading.
 - `core/src/test/.../LogicExtractSuite.scala`: the contract's 9 laws over six tasks.
+- `core/.../logic/Corpus.scala`: the four families, three splits with disjoint patterns and names, deterministic
+  generation of task texts and their gold programs.
+- `core/src/test/.../LogicCorpusSuite.scala`: the corpus' 6 laws.
 
 ## 8. Not built
 
 The rest of the plan (`~/.opencode/plan/okay-desk-datalog-neuro.md`) is open and recorded in `BACKLOG.md` §E:
 
-- **M3 (heads):** the extraction heads trained on the space generator and the paraphrase corpora, the stage metrics
-  on held-out phrasings, and backend agreement on WebGPU, WebGL2 and CPU. The contract they must fill is built
-  (§5.2).
+- **M3 (heads):** the extraction heads trained on the corpus of §5.3, the stage metrics on held-out phrasings, and
+  backend agreement on WebGPU, WebGL2 and CPU. The contract they must fill (§5.2) and the corpus they learn from and
+  are measured on (§5.3) are built; no head is trained yet.
 - **M4:** open holes as questions, lessons per person, the "second time not asked" law.
 - **M5:** proof replay, grounded answers, the independent Horn check where the fragment fits inlay.
 - **M6:** the phone: WebGL2, the texture budget, latency, offline reload; the capacity decision only if a gate
@@ -234,4 +261,5 @@ sbt coreJVM/test                                          # the core laws, inclu
 sbt "coreJVM/testOnly okay.desk.LogicGrammarSuite"        # the 8 logic laws
 sbt "coreJVM/testOnly okay.desk.LogicTasksSuite"          # the 20 tasks of §5.1
 sbt "coreJVM/testOnly okay.desk.LogicExtractSuite"        # the extraction contract's 9 laws
+sbt "coreJVM/testOnly okay.desk.LogicCorpusSuite"         # the corpus' 6 laws
 ```

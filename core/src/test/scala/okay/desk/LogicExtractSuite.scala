@@ -2,7 +2,7 @@ package okay.desk
 
 import okay.desk.calc.{Encode, Term, Ty}
 import okay.desk.calc.Term.*
-import okay.desk.logic.{Compile, LogicGrammar, Ontology, Predicate}
+import okay.desk.logic.{Compile, Corpus, LogicGrammar, Ontology}
 import okay.desk.skill.Extract
 import okay.desk.skill.Extract.{Choice, Evidence, Reading, Span}
 import okay.datalog.{Atom, Parse, Program}
@@ -16,37 +16,13 @@ import okay.datalog.{Atom, Parse, Program}
 class LogicExtractSuite extends munit.FunSuite:
   final case class Task(name: String, ontology: Ontology, text: String, rules: String, goal: String)
 
-  val family: Ontology = Ontology(
-    predicates = Map(
-      "parent" -> Predicate("parent", Vector("person", "person")),
-      "male" -> Predicate("male", Vector("person")),
-      "sibling" -> Predicate("sibling", Vector("person", "person")),
-      "grandparent" -> Predicate("grandparent", Vector("person", "person")),
-      "uncle" -> Predicate("uncle", Vector("person", "person"))),
-    constants = Map("person" -> Vector("alice", "bob", "carol", "dave")),
-    inputs = Set("parent", "male"))
+  val family: Ontology = Corpus.family
 
-  val numbers: Ontology = Ontology(
-    predicates = Map(
-      "age" -> Predicate("age", Vector("person", "number")),
-      "adult" -> Predicate("adult", Vector("person"))),
-    constants = Map("person" -> Vector("ann", "bob"), "number" -> Vector("17", "18", "30")),
-    inputs = Set("age"))
+  val numbers: Ontology = Corpus.numbers
 
-  val plan: Ontology = Ontology(
-    predicates = Map(
-      "initial" -> Predicate("initial", Vector("state")),
-      "edge" -> Predicate("edge", Vector("state", "state")),
-      "reachable" -> Predicate("reachable", Vector("state"))),
-    constants = Map("state" -> Vector("s0", "s1", "s2")),
-    inputs = Set("initial", "edge"))
+  val plan: Ontology = Corpus.plan
 
-  val data: Ontology =
-    val base = Ontology.ofTables(Sample.tables)
-    base.copy(predicates = base.predicates ++ Map(
-      "reach" -> Predicate("reach", Vector("edges.from", "edges.to")),
-      "has" -> Predicate("has", Vector("customers.name")),
-      "noOrders" -> Predicate("noOrders", Vector("customers.name"))))
+  val data: Ontology = Corpus.data
 
   val reach = "reach(X, Y) :- edges(X, Y). reach(X, Z) :- edges(X, Y), reach(Y, Z)."
   val closure = "reachable(X) :- initial(X). reachable(Y) :- reachable(X), edge(X, Y)."
