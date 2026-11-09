@@ -22,8 +22,8 @@ object Encode:
     case Con(_, name, args) => name +: args.flatMap(word)
 
   /** the term of a word: the grammar replayed from one hole of type Program */
-  def tree(g: Grammar, w: Word.Letters): Term =
-    w.foldLeft(Hole(Ty.Program): Term) { (t, letter) =>
+  def tree(g: Rules, w: Word.Letters, root: Ty = Ty.Program): Term =
+    w.foldLeft(Hole(root): Term) { (t, letter) =>
       g.nextHole(t).map((ty, _, put) => put(g(ty, letter))).getOrElse(t) }
 
   /** the level-1 grammar of a level-2 grammar: the leftmost hole's candidates — one where the data decides */

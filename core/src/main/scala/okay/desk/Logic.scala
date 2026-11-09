@@ -22,10 +22,16 @@ object Logic:
       program <- Parse.program(quoted(q.rules)).left.map(e => s"rules: $e")
       goal <- Parse.atom(quoted(q.goal)).left.map(e => s"goal: $e")
       result <- Eval.run(program, facts(tables)).left.map(e => s"evaluation: $e")
-    yield
-      val rows = result.query(goal)
-      val vars = rows.headOption.map(_.keys.toVector.sorted).getOrElse(Vector.empty)
-      Table("result", vars, rows.map(b => vars.map(v => Value.of(b(v)))))
+    yield bindings(result, goal)
+
+  /** a program built as data (the logic grammar's denotation): no text, no parsing, the same exact handler */
+  def run(tables: Map[String, Table], program: okay.datalog.Program, goal: okay.datalog.Atom): Either[String, Table] =
+    Eval.run(program, facts(tables)).left.map(e => s"evaluation: $e").map(bindings(_, goal))
+
+  private def bindings(result: okay.datalog.Result, goal: okay.datalog.Atom): Table =
+    val rows = result.query(goal)
+    val vars = rows.headOption.map(_.keys.toVector.sorted).getOrElse(Vector.empty)
+    Table("result", vars, rows.map(b => vars.map(v => Value.of(b(v)))))
 
   /** a constant as Datalog writes it: bare when a lowercase word, quoted otherwise */
   def constant(s: String): String =

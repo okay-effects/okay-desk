@@ -32,6 +32,26 @@ enum Ty:
   case LimitT(ordered: Boolean)
   case NodeT(edges: String)
   case DirectionT
+  // the logic fragment's types (specs/logic.md): a Datalog program as a typed term — its goal, facts and rules; a
+  // rule's head and body; a body literal; an atom; an argument (a variable or a constant); a comparison's operand
+  case LogicT
+  case GoalT
+  case FactsT
+  /** the rules so far: the stratum of each predicate they define (an input is 0; a rule's head is above every
+   * negative dependency and not below a positive one — the level keeps negation acyclic across redefinitions) */
+  case RulesT(levels: Map[String, Int])
+  case RuleT(levels: Map[String, Int])
+  /** a body under a head: the head's predicate and variables, what the literals so far bind, the levels so far */
+  case BodyT(head: String, vars: Vector[String], bound: Vector[String], levels: Map[String, Int])
+  /** a literal of a body: positive (it may introduce variables), negative or a comparison (only bound ones) */
+  case LitT(head: String, vars: Vector[String], bound: Vector[String], levels: Map[String, Int])
+  /** an atom of a body: what is bound, whether a new variable may be introduced, the predicates it may not name */
+  case AtomT(bound: Vector[String], fresh: Boolean, except: Vector[String] = Vector.empty)
+  /** an argument of an atom: the predicate, its position, what is bound, whether a new variable may be introduced */
+  case ArgT(pred: String, index: Int, bound: Vector[String], fresh: Boolean)
+  /** an operand of a comparison: what is bound */
+  case TermT(bound: Vector[String])
+  case CmpOpT
   // the answer grammar's types (Answers.scala): the sentence, a FACT (a cell of the result), a WORD slot
   case AnswerT
   case FactT(row: Int, column: String)
@@ -119,6 +139,7 @@ final class Grammar(val schema: Schema) extends Rules:
     case Ty.NodeT(e) => schema.tables(e).rows.flatten.map(_.text).distinct
     case Ty.DirectionT => Vector("from", "to")
     case Ty.AnswerT | Ty.FactT(_, _) | Ty.WordT(_) => Vector.empty // the answer grammar's, not the terms'
+    case _ => Vector.empty // the logic fragment's: its own grammar is `logic.LogicGrammar`
 
   override def open(ty: Ty): Boolean = ty match
     case Ty.ValueT(t, c) => kindOf(t, c) == Kind.Num || kindOf(t, c) == Kind.Time // a number, a year, a date: written in the question, not listed
