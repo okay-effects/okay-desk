@@ -180,11 +180,11 @@ name (`orders-db`) is quoted (`"orders-db"`). `Compile` builds terms as data and
 - `verdict` names the first stage where a reading leaves the gold word — goal, relation, value (a variable is a
   binding) — and `summarize` gives exact, abstained, closed wrong, wrong per stage, and span F1 over a corpus.
 
-Nine laws in `LogicExtractSuite` over six tasks (grandparent, uncle, reachable, adult, dependency closure, no orders):
+Ten laws in `LogicExtractSuite` over six tasks (grandparent, uncle, reachable, adult, dependency closure, no orders):
 every gold reading replays to its term and every span says its constant; the heads see the hole; `18` is `Known`;
 six refusals; a data evidence names a real cell; an abstention stays open and is not counted wrong; a wrong goal, a
 wrong relation and a wrong value are each named by their stage; the same word known rather than read is exact with
-span F1 0; the corpus is exact with span F1 1.
+span F1 0; a copied span covers a whole word (`Eve` in `Every` is not a copy); the corpus is exact with span F1 1.
 
 No model is measured here: this is the interface and its laws, not a fidelity number. The heads, the corpus of
 paraphrases and the backend agreement remain M3's open part.
@@ -212,11 +212,36 @@ is the engine's and no question is empty; the splits share no sentence pattern; 
 The corpus is data, not a fidelity number: it says the reading heads have something to learn from and be measured on,
 not that any head can read it yet.
 
+## 5.4 M3 heads: the reader over the student's state (built, untrained)
+
+`core/src/main/scala/okay/desk/skill/LogicRead.scala` is the head that turns a state into a reading:
+
+- the prompt is the task, then `Program: ` and the constructors chosen so far; the head reads the state at the last
+  token and ranks the hole's options (`g.constructors(ty)`), never a letter outside them, so the grammar's safety and
+  stratification hold by construction;
+- a choice is taken only when the top score leads the second by the calibrated `margin`; otherwise the reading stops
+  open — an abstention, `g.closed` false, a question for the person, never a guessed answer;
+- a copied constant is one of the ontology's constants, and its evidence is the first whole-word occurrence of the
+  task at or after the previous copy (`Extract.find`), or `Known` when the text does not say it; the reader advances
+  `from` as the gold reading does, so a repeated name cites the next occurrence, not the first;
+- `Masked` is the trainer: a softmax over the hole's options only, so the head learns the grammar's decisions rather
+  than a language of constructors; `steps` gives one example per gold hole, and `parameters`/`parse` carry the weights
+  as `Wire` (`Parameters`: layer, mean, std, letters, weights, bias, margin).
+
+Four laws in `LogicReadSuite`, with a synthetic head whose weights prefer the gold letter: it reproduces the gold word
+exactly (with the same spans); a margin above the gap abstains and is counted abstained, not wrong; a head that prefers
+another constant closes wrong and the verdict names the value (`Stage.Value`, `valueWrong` 1); a threshold the text
+does not say stays `Known` in the reading too.
+
+No model is measured yet: the reader's laws use synthetic states. Training on the corpus of §5.3 and the stage metrics
+on the held-out splits are M3's open part.
+
 ## 6. M0 baseline and current numbers
 
 M0 (2026-11-09): `sbt -batch coreJVM/test` passed 132 tests before this work. After M1: 140 tests pass, including
 the 8 laws above. After M2: 144 tests pass, the 20 tasks adding 4 laws. After the extraction contract: 153 tests
-pass. After the corpus: 159 tests pass. The product numbers this path must not regress are in `data.md` and
+pass. After the corpus: 159 tests pass. After the reader: 164 tests pass (the whole-word span law and the reader's 4
+laws added). The product numbers this path must not regress are in `data.md` and
 `understanding.md`: data +
 readers + exact facts 12/12 en and 9/12 ru; readers on held-out pairs 97–99% whole with 1–3% wrong; the 28-layer
 generative control 12/12 short mutation but 0/8 longer held-out. The logic fragment is a core addition; no page or
@@ -234,18 +259,21 @@ model path changes yet, so those numbers are unchanged.
 - `core/src/test/.../LogicTasksSuite.scala`: the 20 tasks of §5.1 and their 4 laws.
 - `core/.../skill/Extract.scala`: the extraction contract — reading, evidence, replay, stages, span F1, the corpus'
   gold reading.
-- `core/src/test/.../LogicExtractSuite.scala`: the contract's 9 laws over six tasks.
+- `core/src/test/.../LogicExtractSuite.scala`: the contract's 10 laws over six tasks.
 - `core/.../logic/Corpus.scala`: the four families, three splits with disjoint patterns and names, deterministic
   generation of task texts and their gold programs.
 - `core/src/test/.../LogicCorpusSuite.scala`: the corpus' 6 laws.
+- `core/.../skill/LogicRead.scala`: the reader over the student's state — prompt, masked trainer, `Wire` parameters,
+  the margin as abstention, copies with ordered whole-word evidence.
+- `core/src/test/.../LogicReadSuite.scala`: the reader's 4 laws with a synthetic head.
 
 ## 8. Not built
 
 The rest of the plan (`~/.opencode/plan/okay-desk-datalog-neuro.md`) is open and recorded in `BACKLOG.md` §E:
 
-- **M3 (heads):** the extraction heads trained on the corpus of §5.3, the stage metrics on held-out phrasings, and
-  backend agreement on WebGPU, WebGL2 and CPU. The contract they must fill (§5.2) and the corpus they learn from and
-  are measured on (§5.3) are built; no head is trained yet.
+- **M3 (heads):** the reader trained on the corpus of §5.3, the stage metrics on held-out phrasings, and backend
+  agreement on WebGPU, WebGL2 and CPU. The contract (§5.2), the corpus (§5.3) and the reader with its laws (§5.4) are
+  built; no head is trained yet, so there is no fidelity number.
 - **M4:** open holes as questions, lessons per person, the "second time not asked" law.
 - **M5:** proof replay, grounded answers, the independent Horn check where the fragment fits inlay.
 - **M6:** the phone: WebGL2, the texture budget, latency, offline reload; the capacity decision only if a gate
@@ -260,6 +288,7 @@ are measured. A point of the grammar is a formalization, not a faithful reading 
 sbt coreJVM/test                                          # the core laws, including the logic suites
 sbt "coreJVM/testOnly okay.desk.LogicGrammarSuite"        # the 8 logic laws
 sbt "coreJVM/testOnly okay.desk.LogicTasksSuite"          # the 20 tasks of §5.1
-sbt "coreJVM/testOnly okay.desk.LogicExtractSuite"        # the extraction contract's 9 laws
+sbt "coreJVM/testOnly okay.desk.LogicExtractSuite"        # the extraction contract's 10 laws
 sbt "coreJVM/testOnly okay.desk.LogicCorpusSuite"         # the corpus' 6 laws
+sbt "coreJVM/testOnly okay.desk.LogicReadSuite"           # the reader's 4 laws
 ```

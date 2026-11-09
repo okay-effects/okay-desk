@@ -78,7 +78,25 @@ object Extract:
         // the span says the constant up to case: the text's surface form, the table's value
         else if !task.substring(span.start, span.end).equalsIgnoreCase(con) then
           Left(s"the span says '${task.substring(span.start, span.end)}', not '$con'")
+        // and it is a whole word: 'Eve' inside 'Every' is not a copy of the constant eve
+        else if !aligned(task, span.start, span.end) then
+          Left(s"the span ${span.start}..${span.end} is part of a word, not a whole one")
         else Right(())
+
+  private def wordChar(c: Char): Boolean = c.isLetterOrDigit || c == '_' || c == '-'
+
+  /** whether [start, end) covers whole words of the text (`Eve` in `Every` does not) */
+  def aligned(text: String, start: Int, end: Int): Boolean =
+    start >= 0 && end <= text.length && end > start &&
+      (start == 0 || !wordChar(text(start - 1))) && (end == text.length || !wordChar(text(end)))
+
+  /** the first whole-word occurrence of `value` at or after `from`, up to case: the span a copy cites */
+  def find(task: String, value: String, from: Int = 0): Option[Span] =
+    val lower = task.toLowerCase
+    val v = value.toLowerCase
+    var at = lower.indexOf(v, math.max(0, from))
+    while at >= 0 && !aligned(task, at, at + value.length) do at = lower.indexOf(v, at + 1)
+    Option.when(at >= 0)(Span(at, at + value.length, task.substring(at, at + value.length)))
 
   /** a data evidence names a real cell: `table.column` and a value that occurs there */
   def dataHolds(tables: Map[String, Table], source: String, value: String): Boolean =
@@ -97,7 +115,6 @@ object Extract:
    * a reader. A constant the text does not say is `Known` (the ontology's own knowledge, a threshold like 18) */
   def gold(g: LogicGrammar, task: String, term: Term): Either[String, Reading] =
     val letters = Encode.word(term)
-    val lower = task.toLowerCase
     val choices = Vector.newBuilder[Choice]
     var cur: Term = Term.Hole(Ty.LogicT)
     var from = 0
@@ -113,13 +130,11 @@ object Extract:
             val ev =
               if !copies(ty, letter) then None
               else
-                val at = lower.indexOf(letter.toLowerCase, from) match
-                  case -1 => lower.indexOf(letter.toLowerCase)
-                  case x => x
-                if at < 0 then Some(Evidence.Known)
-                else
-                  from = at + letter.length
-                  Some(Evidence.Text(Span(at, at + letter.length, letter)))
+                find(task, letter, from).orElse(find(task, letter)) match
+                  case Some(span) =>
+                    from = span.end
+                    Some(Evidence.Text(span))
+                  case None => Some(Evidence.Known)
             choices += Choice(letter, ev)
             cur = put(g.apply(ty, letter))
       i += 1

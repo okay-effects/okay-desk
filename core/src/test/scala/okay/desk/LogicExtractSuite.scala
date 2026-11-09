@@ -152,6 +152,16 @@ class LogicExtractSuite extends munit.FunSuite:
     assertEquals((s.spanMatched, s.spanPredicted, s.spanGold), (0, 0, 5))
     assertEquals(s.spanF1, 0.0)
 
+  test("a copied span is a whole word: 'Eve' inside 'Every' is not a copy of the constant eve"):
+    assert(!Extract.aligned("Every person is 30.", 0, 3))
+    assert(Extract.aligned("Every person is 30.", 0, 5))
+    assert(Extract.find("Every person is 30.", "eve").isEmpty)
+    assertEquals(Extract.find("Eve is 30. Every person is 30.", "eve").map(_.start), Some(0))
+    val g = LogicGrammar(Corpus.numbers)
+    val inside = Extract.Reading("Every person is 30.", Vector(
+      Choice("Program"), Choice("age"), Choice("eve", Some(Evidence.Text(Span(0, 3, "Eve"))))))
+    assert(Extract.replay(g, inside).isLeft)
+
   test("the corpus: every gold reading exact, none closed wrong, span F1 1"):
     val s = Extract.summarize(tasks.map(t => (grammar(t), gold(t), gold(t))))
     assertEquals((s.tasks, s.exact, s.abstained, s.closedWrong), (6, 6, 0, 0))
