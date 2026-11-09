@@ -21,10 +21,11 @@ import okay.scala3.*
  * language of constructors. `steps` gives the training examples of a gold reading, one per hole.
  */
 object LogicRead:
-  /** the prompt: the task, then the constructors chosen so far — the head reads the next one */
   val System = "Read the task and write its program, one constructor at a time."
-  def user(task: String, prefix: Vector[String]): String =
-    task + "\n\nProgram: " + prefix.mkString(" ")
+  /** the prompt: the chat template's assistant header, then `Program: ` and the constructors chosen so far — the
+   * head reads the state where the next constructor would be written, as a decoder continues its own text */
+  def prompt(task: String, prefix: Vector[String]): String =
+    OnQwen.template(System, task) + "Program: " + prefix.mkString(" ")
 
   final case class Features(last: Array[Float])
 
@@ -37,7 +38,7 @@ object LogicRead:
   /** the state after the task and the prefix: what the head reads at a hole */
   def features[R[_]](task: String, prefix: Vector[String])(using In[Read, R]): Features ! R =
     for
-      ids <- Read.prompt[R](System, user(task, prefix))
+      ids <- Read.encode[R](prompt(task, prefix))
       states <- Read.states[R](ids, Vector(ids.length - 1))
     yield Features(states.head)
 
@@ -68,6 +69,10 @@ object LogicRead:
       var i = 0
       while i < d do { s += weights(k)(i) * x(i); i += 1 }
       s
+
+    /** the options ranked by their score, best first: what the head would choose at a hole */
+    def scores(x: Array[Float], options: Vector[String]): Vector[(String, Float)] =
+      options.flatMap(c => index.get(c).map(k => c -> score(k, x))).sortBy(-_._2)
 
     /** one pass of mini-batch gradient descent; an example whose target is not a letter is skipped */
     def train(examples: Vector[(Array[Float], Vector[String], String)], epochs: Int, lr: Float,

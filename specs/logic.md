@@ -212,13 +212,13 @@ is the engine's and no question is empty; the splits share no sentence pattern; 
 The corpus is data, not a fidelity number: it says the reading heads have something to learn from and be measured on,
 not that any head can read it yet.
 
-## 5.4 M3 heads: the reader over the student's state (built, untrained)
+## 5.4 M3 heads: the reader over the student's state (built, measured)
 
 `core/src/main/scala/okay/desk/skill/LogicRead.scala` is the head that turns a state into a reading:
 
-- the prompt is the task, then `Program: ` and the constructors chosen so far; the head reads the state at the last
-  token and ranks the hole's options (`g.constructors(ty)`), never a letter outside them, so the grammar's safety and
-  stratification hold by construction;
+- the prompt is the chat template's assistant header, then `Program: ` and the constructors chosen so far; the head
+  reads the state at the last token and ranks the hole's options (`g.constructors(ty)`), never a letter outside them,
+  so the grammar's safety and stratification hold by construction;
 - a choice is taken only when the top score leads the second by the calibrated `margin`; otherwise the reading stops
   open — an abstention, `g.closed` false, a question for the person, never a guessed answer;
 - a copied constant is one of the ontology's constants, and its evidence is the first whole-word occurrence of the
@@ -233,8 +233,24 @@ exactly (with the same spans); a margin above the gap abstains and is counted ab
 another constant closes wrong and the verdict names the value (`Stage.Value`, `valueWrong` 1); a threshold the text
 does not say stays `Known` in the reading too.
 
-No model is measured yet: the reader's laws use synthetic states. Training on the corpus of §5.3 and the stage metrics
-on the held-out splits are M3's open part.
+The first fidelity measurement (`bench/.../LogicBench.scala`, 2026-11-09) uses the 12-layer student
+(`cut19-vocab-p12-m4`, layer 12) on the corpus: 64 Train items (16 per family), 32 Validate and 32 Test (8 per family),
+seed 7 — 2489/1291/1291 gold steps. The prompt is the chat template's assistant header, then `Program: ` and the
+prefix. Two questions:
+
+- **the goal is readable from the task.** One state per task, one masked softmax over the goal's options
+  (`bench/.../LogicProbe.scala`): Train 64/64, Validate 25/32. The misses are held-out phrasings whose semantics is
+  close (`Who shares Eve's age?` read as `older`; `Who is childless?` as `uncle`).
+- **the whole program is not, yet.** The prefix head (100 epochs, lr 0.2, batch 32) on Validate: 1131/1291 steps
+  (constructors 1049/1114, copied constants 82/177). Train: 2412/2489 (constructors 2110/2145, copies 302/344). Exact
+  programs on Validate: 1/32 at margin 0, and 0 at every margin with no wrong-closed reading; the default run's only
+  safe margin (6) abstains on all 32 Test items — 0 exact, 32 abstained, 0 wrong-closed. The gate (held-out exact
+  ≥70% with 0 wrong-closed) is not met: a constant is copied from one state at 46% while the constructors are at 94%,
+  and an exact program needs every step of a 20–40 step word to be right.
+
+The next step is a pointer for the copied constants, as `FactReader`'s roles and `Probes.Pointer` already do: the query
+is the state at the constant's hole, the keys are the states of the task's words that say an option, and the gold
+occurrence (or `Known`) is the target. The constructor head keeps its place; the exact-program gate stays open.
 
 ## 6. M0 baseline and current numbers
 
@@ -266,21 +282,25 @@ model path changes yet, so those numbers are unchanged.
 - `core/.../skill/LogicRead.scala`: the reader over the student's state — prompt, masked trainer, `Wire` parameters,
   the margin as abstention, copies with ordered whole-word evidence.
 - `core/src/test/.../LogicReadSuite.scala`: the reader's 4 laws with a synthetic head.
+- `bench/.../LogicBench.scala`: the 12-layer student's training on the corpus, the margin sweep on Validate, the Test
+  metrics on the gold path and by the real decoder, the `Wire` export.
+- `bench/.../LogicProbe.scala`: the goal predicate from the task alone — the first question of the gate.
 
 ## 8. Not built
 
 The rest of the plan (`~/.opencode/plan/okay-desk-datalog-neuro.md`) is open and recorded in `BACKLOG.md` §E:
 
-- **M3 (heads):** the reader trained on the corpus of §5.3, the stage metrics on held-out phrasings, and backend
-  agreement on WebGPU, WebGL2 and CPU. The contract (§5.2), the corpus (§5.3) and the reader with its laws (§5.4) are
-  built; no head is trained yet, so there is no fidelity number.
+- **M3 (heads):** the exact-program gate (≥70% on held-out phrasings with 0 wrong-closed) is not met: the goal is
+  readable (25/32) but a copied constant is read from one state at 46% (copy accuracy) and the Test split has 0 exact,
+  32 abstained, 0 wrong-closed (§5.4). The pointer for copies, more training items, the stage-wise gate and backend
+  agreement on WebGPU, WebGL2 and CPU remain.
 - **M4:** open holes as questions, lessons per person, the "second time not asked" law.
 - **M5:** proof replay, grounded answers, the independent Horn check where the fragment fits inlay.
 - **M6:** the phone: WebGL2, the texture budget, latency, offline reload; the capacity decision only if a gate
   demands it.
 
-No model is wired to this grammar yet, so no fidelity number exists; only the core laws and the containment corpus
-are measured. A point of the grammar is a formalization, not a faithful reading of the text.
+A point of the grammar is a formalization, not a faithful reading of the text; the measured reader abstains on every
+held-out program, so the page is not wired to it yet.
 
 ## 9. Commands
 
@@ -291,4 +311,6 @@ sbt "coreJVM/testOnly okay.desk.LogicTasksSuite"          # the 20 tasks of §5.
 sbt "coreJVM/testOnly okay.desk.LogicExtractSuite"        # the extraction contract's 10 laws
 sbt "coreJVM/testOnly okay.desk.LogicCorpusSuite"         # the corpus' 6 laws
 sbt "coreJVM/testOnly okay.desk.LogicReadSuite"           # the reader's 4 laws
+sbt "bench/runMain okay.desk.bench.LogicProbe"            # is the goal readable from the task?
+sbt "bench/runMain okay.desk.bench.LogicBench"            # train, calibrate, measure, export the reader
 ```
