@@ -164,11 +164,36 @@ All 20 answers are exact. Two text-syntax lessons are recorded because they are 
 Datalog reads an uppercase word (`UA`) as a variable, so a copied country code is quoted (`"UA"`), and a hyphenated
 name (`orders-db`) is quoted (`"orders-db"`). `Compile` builds terms as data and never needs the quoting.
 
+## 5.2 M3 first step: the extraction contract (built)
+
+`core/src/main/scala/okay/desk/skill/Extract.scala` fixes what a reading head must produce, before any head exists:
+
+- a `Reading` is the task's text and a word of `Choice`s: one of the grammar's constructors at each hole, and, for a
+  copied constant, an `Evidence` — a `Text(span)` of the task, a `Data(table.column)`, or `Known` (the ontology's own
+  constant, a threshold like 18 that the text does not say);
+- `replay` refuses a constructor the grammar does not offer, a constant with no evidence, a span outside the task,
+  and a span whose text is not the constant (up to case: the text's surface form against the table's value); `next`
+  is what a head is asked — the hole's type, its options, and the stage it decides;
+- a reading that stops before the last hole is an abstention: `g.closed` is false and the open hole is a question for
+  the person (M4), never a guessed answer;
+- `gold` is the corpus' way in, not a reader: a gold term as a reading, its constants found in the text in order;
+- `verdict` names the first stage where a reading leaves the gold word — goal, relation, value (a variable is a
+  binding) — and `summarize` gives exact, abstained, closed wrong, wrong per stage, and span F1 over a corpus.
+
+Nine laws in `LogicExtractSuite` over six tasks (grandparent, uncle, reachable, adult, dependency closure, no orders):
+every gold reading replays to its term and every span says its constant; the heads see the hole; `18` is `Known`;
+six refusals; a data evidence names a real cell; an abstention stays open and is not counted wrong; a wrong goal, a
+wrong relation and a wrong value are each named by their stage; the same word known rather than read is exact with
+span F1 0; the corpus is exact with span F1 1.
+
+No model is measured here: this is the interface and its laws, not a fidelity number. The heads, the corpus of
+paraphrases and the backend agreement remain M3's open part.
+
 ## 6. M0 baseline and current numbers
 
 M0 (2026-11-09): `sbt -batch coreJVM/test` passed 132 tests before this work. After M1: 140 tests pass, including
-the 8 laws above. After M2: 144 tests pass, the 20 tasks adding 4 laws. The product numbers this path must not
-regress are in `data.md` and `understanding.md`: data +
+the 8 laws above. After M2: 144 tests pass, the 20 tasks adding 4 laws. After the extraction contract: 153 tests
+pass. The product numbers this path must not regress are in `data.md` and `understanding.md`: data +
 readers + exact facts 12/12 en and 9/12 ru; readers on held-out pairs 97–99% whole with 1–3% wrong; the 28-layer
 generative control 12/12 short mutation but 0/8 longer held-out. The logic fragment is a core addition; no page or
 model path changes yet, so those numbers are unchanged.
@@ -183,13 +208,17 @@ model path changes yet, so those numbers are unchanged.
 - `core/.../Logic.scala`: `run(tables, Program, Atom)`.
 - `core/src/test/.../LogicGrammarSuite.scala`: the 8 laws.
 - `core/src/test/.../LogicTasksSuite.scala`: the 20 tasks of §5.1 and their 4 laws.
+- `core/.../skill/Extract.scala`: the extraction contract — reading, evidence, replay, stages, span F1, the corpus'
+  gold reading.
+- `core/src/test/.../LogicExtractSuite.scala`: the contract's 9 laws over six tasks.
 
 ## 8. Not built
 
 The rest of the plan (`~/.opencode/plan/okay-desk-datalog-neuro.md`) is open and recorded in `BACKLOG.md` §E:
 
-- **M3:** the extraction heads (`skill/Extract.scala`): spans, relations, goal; training on the space generator and
-  the corpora; stage metrics and backend agreement on WebGPU, WebGL2 and CPU.
+- **M3 (heads):** the extraction heads trained on the space generator and the paraphrase corpora, the stage metrics
+  on held-out phrasings, and backend agreement on WebGPU, WebGL2 and CPU. The contract they must fill is built
+  (§5.2).
 - **M4:** open holes as questions, lessons per person, the "second time not asked" law.
 - **M5:** proof replay, grounded answers, the independent Horn check where the fragment fits inlay.
 - **M6:** the phone: WebGL2, the texture budget, latency, offline reload; the capacity decision only if a gate
@@ -204,4 +233,5 @@ are measured. A point of the grammar is a formalization, not a faithful reading 
 sbt coreJVM/test                                          # the core laws, including the logic suites
 sbt "coreJVM/testOnly okay.desk.LogicGrammarSuite"        # the 8 logic laws
 sbt "coreJVM/testOnly okay.desk.LogicTasksSuite"          # the 20 tasks of §5.1
+sbt "coreJVM/testOnly okay.desk.LogicExtractSuite"        # the extraction contract's 9 laws
 ```
