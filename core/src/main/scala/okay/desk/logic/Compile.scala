@@ -115,11 +115,14 @@ object Compile:
   private def goalTerm(a: Atom, rename: Map[String, String], ontology: Ontology): Either[String, Term] =
     for
       _ <- known(a, ontology)
-      args <- a.args.zipWithIndex.foldLeft[Either[String, Vector[Term]]](Right(Vector.empty)) { (acc, pair) =>
-        val (arg, i) = pair
-        acc.flatMap(xs => argTerm(arg, Ty.ArgT(a.pred, i, Vector.empty, fresh = true), rename, ontology).map(xs :+ _))
+      args <- a.args.zipWithIndex.foldLeft[Either[String, (Vector[Term], Vector[String])]](Right((Vector.empty,
+        Vector.empty))) { case (acc, (arg, i)) =>
+        acc.flatMap { (xs, used) =>
+          argTerm(arg, Ty.ArgT(a.pred, i, used, fresh = true), rename, ontology)
+            .map(t => (xs :+ t, (used ++ LogicGrammar.varsOf(t)).distinct))
+        }
       }
-    yield Con(Ty.GoalT, a.pred, args)
+    yield Con(Ty.GoalT, a.pred, args._1)
 
   private def factTerm(a: Atom, ontology: Ontology): Either[String, Term] =
     if a.vars.nonEmpty then Left(s"a fact with a variable: $a")
@@ -129,11 +132,14 @@ object Compile:
       rename: Map[String, String], ontology: Ontology): Either[String, Term] =
     for
       _ <- known(a, ontology)
-      args <- a.args.zipWithIndex.foldLeft[Either[String, Vector[Term]]](Right(Vector.empty)) { (acc, pair) =>
-        val (arg, i) = pair
-        acc.flatMap(xs => argTerm(arg, Ty.ArgT(a.pred, i, bound, fresh), rename, ontology).map(xs :+ _))
+      args <- a.args.zipWithIndex.foldLeft[Either[String, (Vector[Term], Vector[String])]](Right((Vector.empty,
+        bound))) { case (acc, (arg, i)) =>
+        acc.flatMap { (xs, used) =>
+          argTerm(arg, Ty.ArgT(a.pred, i, used, fresh), rename, ontology)
+            .map(t => (xs :+ t, (used ++ LogicGrammar.varsOf(t)).distinct))
+        }
       }
-    yield Con(Ty.AtomT(bound, fresh, except), a.pred, args)
+    yield Con(Ty.AtomT(bound, fresh, except), a.pred, args._1)
 
   private def argTerm(t: okay.datalog.Term, ty: Ty, rename: Map[String, String],
       ontology: Ontology): Either[String, Term] = t match
@@ -180,7 +186,8 @@ object Compile:
         if !allowed.contains(a.pred) then Left(s"${a.pred} is not available positively here")
         else
           val except = allPredicates(ontology).filterNot(allowed.contains)
-          atomTerm(a, bound, fresh = true, except, rename, ontology)
+          // the canonical scope of a positive atom is the head's variables plus what is bound: same as `next`
+          atomTerm(a, (vars ++ bound).distinct, fresh = true, except, rename, ontology)
             .map(t => Con(Ty.LitT(head, vars, bound, levels), "pos", Vector(t)))
       case Literal.Neg(a) =>
         val allowed = LogicGrammar.negativeAllowed(inputs, levels, head)
@@ -245,3 +252,15 @@ object Compile:
     Rule(a(r.head), r.body.map(l).sortBy(_.toString))
 
   def equivalent(a: Program, b: Program): Boolean = normal(a) == normal(b)
+
+  /** the goal up to the names of its variables: the same definition, consistently renamed */
+  def normalAtom(a: Atom): Atom =
+    val rename = a.vars.distinct.zipWithIndex.map { case (v, i) => v -> s"V${i + 1}" }.toMap
+    Atom(a.pred, a.args.map {
+      case okay.datalog.Term.Var(n) => okay.datalog.Term.Var(rename(n))
+      case c => c
+    })
+
+  /** two compiled programs are the same formal definition up to alpha-renaming — not merely the same answer */
+  def same(a: Compiled, b: Compiled): Boolean =
+    equivalent(a.program, b.program) && normalAtom(a.goal) == normalAtom(b.goal)

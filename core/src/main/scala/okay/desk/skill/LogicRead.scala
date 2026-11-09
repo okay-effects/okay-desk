@@ -13,34 +13,81 @@ import okay.scala3.*
  * variable or a constant at an argument — so the head never picks a letter the grammar would refuse, and a margin
  * below the calibrated one stops the reading: an open hole is a question for the person, not a guess.
  *
- * A constant is copied: the head's choice is one of the ontology's constants, and the evidence is the first whole
- * word of the task that says it, or `Known` when the text does not (the ontology's own threshold). The contract
- * checks the copy; a wrong constant is a wrong-closed answer and the metric says so.
+ * A constant is copied, and a copied constant is read by a POINTER as well as by the linear head: the query is the
+ * state at the constant's hole, the keys are the states of the task's words in the SAME prompt, and the ontology's
+ * own `Known` is the pointer's "none" key. The linear head says "a constant here"; the pointer says which one, from
+ * the words themselves. A pointer margin below the calibrated one stops the reading too.
  *
  * The trainer is masked: only the hole's options compete, so the head learns the grammar's decisions rather than a
  * language of constructors. `steps` gives the training examples of a gold reading, one per hole.
  */
 object LogicRead:
   val System = "Read the task and write its program, one constructor at a time."
-  /** the prompt: the chat template's assistant header, then `Program: ` and the constructors chosen so far — the
-   * head reads the state where the next constructor would be written, as a decoder continues its own text */
-  def prompt(task: String, prefix: Vector[String]): String =
-    OnQwen.template(System, task) + "Program: " + prefix.mkString(" ")
+  /** the prompt: the chat template's assistant header, then `Program: ` and the constructors chosen so far, then the
+   * hole's options — the head reads the state where the next constructor would be written, as a decoder continues
+   * its own text, and the options as text give a small student the words to match the task against */
+  def prompt(task: String, prefix: Vector[String], options: Vector[String] = Vector.empty): String =
+    OnQwen.template(System, task) + "Program: " + prefix.mkString(" ") +
+      (if options.isEmpty then "" else "\nChoices: " + options.mkString(" "))
 
-  final case class Features(last: Array[Float])
+  /** a word of the task, with its character span */
+  final case class Word(text: String, from: Int, until: Int)
 
-  /** one step of a gold word: the prefix, the hole's options, and the constructor the gold takes */
-  final case class Step(prefix: Vector[String], options: Vector[String], target: String)
+  /** where the task's words sit in the prompt's tokens: found once per task, the same for every prefix */
+  final case class Layout(words: Vector[Word], at: Vector[Int])
+
+  object Layout:
+    val empty: Layout = Layout(Vector.empty, Vector.empty)
+
+  /** the state at the hole, and the states of the task's words in the same prompt */
+  final case class Features(last: Array[Float], words: Vector[Word] = Vector.empty,
+      states: Vector[Array[Float]] = Vector.empty)
+
+  /** one step of a gold word: the prefix, the hole's type and options, and the constructor the gold takes */
+  final case class Step(prefix: Vector[String], options: Vector[String], target: String, ty: Ty)
 
   final case class Parameters(layer: Int, mean: Vector[Float], std: Vector[Float], letters: Vector[String],
-      weights: Vector[Vector[Float]], bias: Vector[Float], margin: Float) derives Wire
+      weights: Vector[Vector[Float]], bias: Vector[Float], margin: Float,
+      pointerQuery: Vector[Vector[Float]] = Vector.empty, pointerKey: Vector[Vector[Float]] = Vector.empty,
+      pointerNone: Vector[Float] = Vector.empty, pointerMargin: Float = 0f) derives Wire
 
-  /** the state after the task and the prefix: what the head reads at a hole */
-  def features[R[_]](task: String, prefix: Vector[String])(using In[Read, R]): Features ! R =
+  private val wordPattern = "[\\p{L}\\p{N}]+(?:[-’'][\\p{L}\\p{N}]+)*".r
+
+  /** the task's words, whole: `orders-db` is one word, and a name's punctuation is not part of it */
+  def wordsOf(text: String): Vector[Word] =
+    wordPattern.findAllMatchIn(text).map(m => Word(m.matched, m.start, m.end)).toVector
+
+  /** the prompt's token position of each of the task's words: `Layout.empty` when the task cannot be located or a
+   * word has no token — the reader then falls back to the linear head */
+  def layout[R[_]](task: String)(using In[Read, R]): Layout ! R =
     for
-      ids <- Read.encode[R](prompt(task, prefix))
-      states <- Read.states[R](ids, Vector(ids.length - 1))
-    yield Features(states.head)
+      ids <- Read.encode[R](prompt(task, Vector.empty))
+      text <- Read.decode[R](ids.toVector)
+      ends <- Read.each[Int, (Int, Int), R](ids.indices.toVector) { i =>
+        Read.decode[R](ids.take(i + 1).toVector).map(s => (i, if text.startsWith(s) then s.length else -1))
+      }
+      base = text.indexOf(task)
+      ws = wordsOf(task)
+      at = ws.map(w => ends.find(_._2 >= base + w.until).map(_._1))
+      result <-
+        if base < 0 || ids.isEmpty || ids.length > 512 || ws.isEmpty || at.exists(_.isEmpty) then
+          pure(Layout.empty)
+        else pure(Layout(ws, at.flatten))
+    yield result
+
+  /** the state after the task and the prefix, and the states of the task's words in the same prompt: what the head
+   * and the pointer read at a hole */
+  def features[R[_]](task: String, prefix: Vector[String], layout: Layout = Layout.empty,
+      options: Vector[String] = Vector.empty)(using In[Read, R]): Features ! R =
+    for
+      ids <- Read.encode[R](prompt(task, prefix, options))
+      states <- Read.states[R](ids, layout.at :+ (ids.length - 1))
+    yield Features(states.last, layout.words, states.dropRight(1))
+
+  /** the options shown to the student at a hole: the goal's predicates as text — the words to match the question
+   * against — while the grammar's other holes are structural and their options would only lengthen the prompt */
+  def shown(g: LogicGrammar, ty: Ty): Vector[String] =
+    if ty == Ty.GoalT then g.constructors(ty) else Vector.empty
 
   /** the gold word as steps: at each hole, the prefix before it and the grammar's options */
   def steps(g: LogicGrammar, gold: Reading): Vector[Step] =
@@ -51,12 +98,30 @@ object LogicRead:
       g.nextHole(t) match
         case None => ()
         case Some((ty, _, put)) =>
-          out += Step(letters.take(i), g.constructors(ty), letter)
+          out += Step(letters.take(i), g.constructors(ty), letter, ty)
           t = put(g.apply(ty, letter))
     out.result()
 
   def normalize(x: Array[Float], mean: Vector[Float], std: Vector[Float]): Array[Float] =
     x.indices.map(i => math.max(-4f, math.min(4f, (x(i) - mean(i)) / std(i)))).toArray
+
+  /** the pointer's input scale (`Readers`' `8/sqrt(d)`): the bilinear maps start at `1/sqrt(d)`, so a unit-norm
+   * state would score near zero and learn too slowly, while a raw normalized state made the gradient diverge */
+  def scale(x: Array[Float], d: Int): Array[Float] =
+    val s = 8f / math.sqrt(d).toFloat
+    x.map(_ * s)
+
+  /** the constants the pointer may choose: the hole's options that the task says, each with the occurrence the
+   * evidence would cite, and the state of that word in the prompt */
+  def copiesAt(g: LogicGrammar, task: String, ty: Ty, from: Int, words: Vector[Word],
+      states: Vector[Array[Float]]): Vector[(String, Extract.Span, Array[Float])] =
+    def state(span: Extract.Span): Option[Array[Float]] =
+      val i = words.indexWhere(w => w.from == span.start && w.until == span.end)
+      Option.when(i >= 0 && i < states.size)(states(i))
+    g.constructors(ty).filter(c => Extract.copies(ty, c)).flatMap { c =>
+      Extract.find(task, c, from).orElse(Extract.find(task, c))
+        .flatMap(span => state(span).map(s => (c, span, s)))
+    }
 
   /** a masked softmax over the grammar's letters: only the hole's options compete */
   final class Masked(val letters: Vector[String], d: Int):
@@ -106,8 +171,10 @@ object LogicRead:
               while i < d do { weights(k)(i) -= rate * (gw(k)(i) + 1e-3f * weights(k)(i)); i += 1 }
           from += batch
 
-  def parameters(m: Masked, layer: Int, mean: Vector[Float], std: Vector[Float], margin: Float): Parameters =
-    Parameters(layer, mean, std, m.letters, m.weights.toVector.map(_.toVector), m.bias.toVector, margin)
+  def parameters(m: Masked, pointer: Probes.Pointer, layer: Int, mean: Vector[Float], std: Vector[Float],
+      margin: Float, pointerMargin: Float): Parameters =
+    Parameters(layer, mean, std, m.letters, m.weights.toVector.map(_.toVector), m.bias.toVector, margin,
+      pointer.wq.toVector.map(_.toVector), pointer.wk.toVector.map(_.toVector), pointer.none.toVector, pointerMargin)
 
   final class Reader(val parameters: Parameters):
     private val d = parameters.mean.size
@@ -116,7 +183,23 @@ object LogicRead:
     require(parameters.weights.size == parameters.letters.size && parameters.weights.forall(_.size == d))
     require(parameters.bias.size == parameters.letters.size)
     require(parameters.margin.isFinite && parameters.margin >= 0)
-    require((parameters.mean ++ parameters.weights.flatten ++ parameters.bias).forall(_.isFinite))
+    require(parameters.pointerMargin.isFinite && parameters.pointerMargin >= 0)
+    require((parameters.mean ++ parameters.weights.flatten ++ parameters.bias ++ parameters.pointerNone ++
+      parameters.pointerQuery.flatten ++ parameters.pointerKey.flatten).forall(_.isFinite))
+
+    /** the pointer rebuilt from its `Wire` weights; absent when the head has none (a linear reader) */
+    private val pointer: Option[Probes.Pointer] =
+      val k = parameters.pointerNone.size
+      if k == 0 then None
+      else
+        require(parameters.pointerQuery.size == k && parameters.pointerQuery.forall(_.size == d))
+        require(parameters.pointerKey.size == k && parameters.pointerKey.forall(_.size == d))
+        val p = Probes.Pointer(d, k)
+        for i <- 0 until k do
+          Array.copy(parameters.pointerQuery(i).toArray, 0, p.wq(i), 0, d)
+          Array.copy(parameters.pointerKey(i).toArray, 0, p.wk(i), 0, d)
+          p.none(i) = parameters.pointerNone(i)
+        Some(p)
 
     private def score(k: Int, x: Array[Float]): Float =
       var s = parameters.bias(k)
@@ -133,6 +216,28 @@ object LogicRead:
         Extract.find(task, con, from).orElse(Extract.find(task, con))
           .map(Evidence.Text.apply).orElse(Some(Evidence.Known))
 
+    /** a copied constant: the head said "a constant", the pointer says which of the task's words, and `Known` is
+     * the pointer's "none" key. A pointer margin below the calibrated one stops the reading. */
+    private def pointed(g: LogicGrammar, task: String, ty: Ty, con: String, x: Array[Float], from: Int,
+        f: Features): Option[Choice] =
+      val fallback = Some(Choice(con, evidence(task, ty, con, from)))
+      if f.states.isEmpty || f.words.size != f.states.size then fallback
+      else
+        pointer match
+          case None => fallback
+          case Some(p) =>
+            val candidates = LogicRead.copiesAt(g, task, ty, from, f.words, f.states)
+            if candidates.isEmpty then fallback
+            else
+              val keys = candidates.map(c => scale(normalize(c._3, parameters.mean, parameters.std), d))
+              val scores = p.scores(scale(x, d), keys)
+              val ranked = scores.indices.sortBy(i => -scores(i))
+              if ranked.size < 2 || scores(ranked(0)) - scores(ranked(1)) < parameters.pointerMargin then None
+              else if ranked(0) == candidates.size then fallback
+              else
+                val (c, span, _) = candidates(ranked(0))
+                Some(Choice(c, Some(Evidence.Text(span))))
+
     /** the choice at one hole, from the state: None when the margin is not met. A copy cites the first whole-word
      * occurrence at or after `from`, as the gold reading does, so a repeated constant does not cite an earlier word */
     def decide(g: LogicGrammar, task: String, ty: Ty, f: Features, from: Int = 0): Option[Choice] =
@@ -141,22 +246,25 @@ object LogicRead:
         val x = normalize(f.last, parameters.mean, parameters.std)
         val ranked = rank(x, g.constructors(ty))
         if ranked.isEmpty then None
-        else if ranked.size == 1 then Some(Choice(ranked.head._1, evidence(task, ty, ranked.head._1, from)))
         else
-          val (c1, s1) = ranked(0)
-          val s2 = ranked(1)._2
-          Option.when(s1 - s2 >= parameters.margin)(Choice(c1, evidence(task, ty, c1, from)))
+          val c1 = ranked.head._1
+          val taken =
+            if ranked.size == 1 then true
+            else ranked.head._2 - ranked(1)._2 >= parameters.margin
+          if !taken then None
+          else if !Extract.copies(ty, c1) then Some(Choice(c1, None))
+          else pointed(g, task, ty, c1, x, from, f)
 
     /** the reading the head wrote, closed or open: an open reading is an ABSTENTION — `Extract.replay` and
      * `g.closed` say so, and the caller asks the person rather than showing an answer */
-    def read[R[_]](g: LogicGrammar, task: String)(using In[Read, R]): Reading ! R =
+    def read[R[_]](g: LogicGrammar, task: String, layout: Layout = Layout.empty)(using In[Read, R]): Reading ! R =
       def go(prefix: Vector[String], term: Term, choices: Vector[Choice], from: Int): Reading ! R =
         if choices.size >= 512 then pure(Reading(task, choices))
         else
           g.nextHole(term) match
             case None => pure(Reading(task, choices))
             case Some((ty, _, put)) =>
-              features[R](task, prefix).flatMap { f =>
+              features[R](task, prefix, layout, LogicRead.shown(g, ty)).flatMap { f =>
                 decide(g, task, ty, f, from) match
                   case None => pure(Reading(task, choices))
                   case Some(c) =>

@@ -228,15 +228,15 @@ not that any head can read it yet.
   than a language of constructors; `steps` gives one example per gold hole, and `parameters`/`parse` carry the weights
   as `Wire` (`Parameters`: layer, mean, std, letters, weights, bias, margin).
 
-Four laws in `LogicReadSuite`, with a synthetic head whose weights prefer the gold letter: it reproduces the gold word
+Six laws in `LogicReadSuite`, with a synthetic head whose weights prefer the gold letter: it reproduces the gold word
 exactly (with the same spans); a margin above the gap abstains and is counted abstained, not wrong; a head that prefers
 another constant closes wrong and the verdict names the value (`Stage.Value`, `valueWrong` 1); a threshold the text
-does not say stays `Known` in the reading too.
+does not say stays `Known` in the reading too; a pointer corrects a copied constant the linear head prefers wrongly;
+and a pointer margin above the gap abstains at the constant hole.
 
-The first fidelity measurement (`bench/.../LogicBench.scala`, 2026-11-09) uses the 12-layer student
-(`cut19-vocab-p12-m4`, layer 12) on the corpus: 64 Train items (16 per family), 32 Validate and 32 Test (8 per family),
-seed 7 — 2489/1291/1291 gold steps. The prompt is the chat template's assistant header, then `Program: ` and the
-prefix. Two questions:
+The first fidelity measurement (`bench/.../LogicBench.scala`, 2026-11-09) uses the corpus: 64 Train items
+(16 per family), 32 Validate and 32 Test (8 per family), seed 7 — 2489/1291/1291 gold steps. The prompt is the chat
+template's assistant header, then `Program: ` and the prefix. Two questions:
 
 - **the goal is readable from the task.** One state per task, one masked softmax over the goal's options
   (`bench/.../LogicProbe.scala`): Train 64/64, Validate 25/32. The misses are held-out phrasings whose semantics is
@@ -248,16 +248,52 @@ prefix. Two questions:
   ≥70% with 0 wrong-closed) is not met: a constant is copied from one state at 46% while the constructors are at 94%,
   and an exact program needs every step of a 20–40 step word to be right.
 
-The next step is a pointer for the copied constants, as `FactReader`'s roles and `Probes.Pointer` already do: the query
-is the state at the constant's hole, the keys are the states of the task's words that say an option, and the gold
-occurrence (or `Known`) is the target. The constructor head keeps its place; the exact-program gate stays open.
+Alpha-equivalence (2026-11-09, agreed with the execution side) removes a class of Value errors that is not a
+reading: a fresh argument offers every pool name, so `X` vs `Y` is a spelling, not a decision. The grammar now
+offers a fresh variable only as the first unused name (`LogicGrammar.firstUnused`; reusing an already bound name
+stays an option, since that is a semantic choice), `Compile.ofProgram` inverts the canonical rename in the order
+`(head.vars ++ body.flatMap(_.vars)).distinct`, and `Compile.same` / `Extract.same` compare programs up to a
+consistent rename (`Extract.Summary.semanticExact` reports it beside `exact`). The scope of canonical naming is
+syntactic (head variables, then earlier atoms), while the safety-bound set stays only positive body variables, so a
+positive atom may mention a head variable before it is bound. Six alpha laws bring `LogicGrammarSuite` to 14, and the
+bench marks a rename-only divergence separately from a changed premise.
+
+The bench is configurable: `LOGIC_DIR` (default: the 12-layer student) and `LOGIC_LAYERS` (default 12) choose the
+backbone and the read-out layer, so the same typed head and pointer can be compared on the intact 28-layer
+`semantic-full28` (257 MiB base + ~5 MiB head, no generative LoRA, `headOnCpu` / `Read.States`). It enforces the
+gate before saving: `closedWrong == 0` and `exact >= ceil(0.70 * tasks)`, otherwise it prints "do not ship" and
+writes nothing.
+
+With the pointer for copies (the hole's state as query, the task's words in the same prompt as keys, `Known` as
+the "none" key) and alpha canonicalization, the comparison (seed 7, same corpus and splits):
+
+- **12-layer student** (`cut19-vocab-p12-m4`, layer 12): pointer 336/336 Train, 127/154 Validate; Train gold path
+  `Score(41, 0, 23)` (exact, wrong-closed, abstained) at margin 0; Validate steps 1163/1291 (constructors
+  1078/1114, copies 85/177). Of 140 margin pairs, 70 have no wrong-closed reading; every safe pair abstains on all
+  32 tasks — no margin is both safe and exact. Nothing is saved.
+- **28-layer `semantic-full28`:** pointer 334/336 Train, 124/154 Validate; Train gold path `Score(54, 0, 10)`;
+  Validate steps 1192/1291 (constructors 1073/1114, copies 119/177). Of 140 margin pairs, 70 are safe; the best
+  (margin 3.0, pointer 0.0–0.5) reads 3/32 Validate exactly with 29 abstained and 0 wrong-closed, and 0/32 Test
+  (32 abstained, 0 wrong-closed, span F1 0.154; test pointer 147/177). The intact backbone is better on the gold
+  path and closes three validation programs, but the held-out Test split still has no exact reading.
+
+The exact-program gate therefore stays open on both backbones: a larger student improves the gold path, not the
+safety/exactness trade-off. No head is promoted; the 28-layer run's artifact (saved before the gate check landed)
+was removed, and `web/Engine.scala` is not wired to the reader. When a run does pass the gate, the bench writes
+`~/.cache/okay-desk/logic-reader-<layers>.json`, so the 12- and 28-layer heads cannot overwrite each other; neither
+is packaged unless qualified.
+
+The next levers are stage-wise, not a bigger prefix decoder: the remaining errors concentrate in the goal and in
+copies (28-layer Validate: Goal 23 right / 9 wrong, Value 279/295 right), so read the goal first, then facts, then
+rules, and widen the held-out patterns before adding capacity.
 
 ## 6. M0 baseline and current numbers
 
 M0 (2026-11-09): `sbt -batch coreJVM/test` passed 132 tests before this work. After M1: 140 tests pass, including
 the 8 laws above. After M2: 144 tests pass, the 20 tasks adding 4 laws. After the extraction contract: 153 tests
 pass. After the corpus: 159 tests pass. After the reader: 164 tests pass (the whole-word span law and the reader's 4
-laws added). The product numbers this path must not regress are in `data.md` and
+laws added). After the pointer: 166 tests pass (the reader's 2 pointer laws added). After alpha-equivalence: 187
+tests pass (13 grammar laws, the reader's 6). The product numbers this path must not regress are in `data.md` and
 `understanding.md`: data +
 readers + exact facts 12/12 en and 9/12 ru; readers on held-out pairs 97–99% whole with 1–3% wrong; the 28-layer
 generative control 12/12 short mutation but 0/8 longer held-out. The logic fragment is a core addition; no page or
@@ -267,11 +303,12 @@ model path changes yet, so those numbers are unchanged.
 
 - `core/.../logic/Ontology.scala`: predicates, sorts, constants, inputs, `ofTables`.
 - `core/.../logic/LogicGrammar.scala`: the typed grammar, goal first, safety and levels by construction, `accepts`,
-  `enumerate`.
-- `core/.../logic/Compile.scala`: term to program and goal, `run`, `ofProgram`, normal form, equivalence.
+  `enumerate`, canonical fresh variables (`firstUnused`) and the goal/atom/body scopes.
+- `core/.../logic/Compile.scala`: term to program and goal, `run`, `ofProgram` with the inverse canonical rename,
+  normal form, equivalence up to a consistent rename (`same`).
 - `core/.../calc/Calculus.scala`: the logic `Ty` cases; `calc/Encode.scala`: `tree` takes a root type.
 - `core/.../Logic.scala`: `run(tables, Program, Atom)`.
-- `core/src/test/.../LogicGrammarSuite.scala`: the 8 laws.
+- `core/src/test/.../LogicGrammarSuite.scala`: the 13 laws (the 8 grammar laws and 5 alpha laws).
 - `core/src/test/.../LogicTasksSuite.scala`: the 20 tasks of §5.1 and their 4 laws.
 - `core/.../skill/Extract.scala`: the extraction contract — reading, evidence, replay, stages, span F1, the corpus'
   gold reading.
@@ -280,20 +317,25 @@ model path changes yet, so those numbers are unchanged.
   generation of task texts and their gold programs.
 - `core/src/test/.../LogicCorpusSuite.scala`: the corpus' 6 laws.
 - `core/.../skill/LogicRead.scala`: the reader over the student's state — prompt, masked trainer, `Wire` parameters,
-  the margin as abstention, copies with ordered whole-word evidence.
-- `core/src/test/.../LogicReadSuite.scala`: the reader's 4 laws with a synthetic head.
-- `bench/.../LogicBench.scala`: the 12-layer student's training on the corpus, the margin sweep on Validate, the Test
-  metrics on the gold path and by the real decoder, the `Wire` export.
+  the margin as abstention, copies with ordered whole-word evidence, and the pointer for a copied constant (the
+  hole's state as the query, the task's words in the same prompt as keys, `Known` as the "none" key).
+- `core/src/test/.../LogicReadSuite.scala`: the reader's 6 laws with a synthetic head (4 linear, 2 pointer).
+- `bench/.../LogicBench.scala`: training on the corpus on a configurable backbone (`LOGIC_DIR`, `LOGIC_LAYERS`), the
+  margin sweep on Validate, the Test metrics on the gold path and by the real decoder, the exact-program gate before
+  the `Wire` export, and a per-layer artifact name (`logic-reader-<layers>.json`).
 - `bench/.../LogicProbe.scala`: the goal predicate from the task alone — the first question of the gate.
 
 ## 8. Not built
 
 The rest of the plan (`~/.opencode/plan/okay-desk-datalog-neuro.md`) is open and recorded in `BACKLOG.md` §E:
 
-- **M3 (heads):** the exact-program gate (≥70% on held-out phrasings with 0 wrong-closed) is not met: the goal is
-  readable (25/32) but a copied constant is read from one state at 46% (copy accuracy) and the Test split has 0 exact,
-  32 abstained, 0 wrong-closed (§5.4). The pointer for copies, more training items, the stage-wise gate and backend
-  agreement on WebGPU, WebGL2 and CPU remain.
+- **M3 (heads):** the exact-program gate (≥70% on held-out phrasings with 0 wrong-closed) is not met on either
+  backbone. The 12-layer student has no margin that is both safe and exact on Validate (70 of 140 pairs are safe,
+  all abstain); the intact 28-layer backbone reaches 3/32 Validate exactly at its best safe margin but 0/32 on the
+  held-out Test split (32 abstained, 0 wrong-closed, §5.4). The goal is readable (25/32 on the student; 23 right / 9
+  wrong on the 28-layer), so the remaining work is stage-wise reading (goal, facts, rules), wider held-out patterns,
+  the stage-wise gate and backend agreement on WebGPU, WebGL2 and CPU. A larger prefix decoder alone is not the
+  lever.
 - **M4:** open holes as questions, lessons per person, the "second time not asked" law.
 - **M5:** proof replay, grounded answers, the independent Horn check where the fragment fits inlay.
 - **M6:** the phone: WebGL2, the texture budget, latency, offline reload; the capacity decision only if a gate
@@ -306,11 +348,18 @@ held-out program, so the page is not wired to it yet.
 
 ```sh
 sbt coreJVM/test                                          # the core laws, including the logic suites
-sbt "coreJVM/testOnly okay.desk.LogicGrammarSuite"        # the 8 logic laws
+sbt "coreJVM/testOnly okay.desk.LogicGrammarSuite"        # the 14 logic laws
 sbt "coreJVM/testOnly okay.desk.LogicTasksSuite"          # the 20 tasks of §5.1
 sbt "coreJVM/testOnly okay.desk.LogicExtractSuite"        # the extraction contract's 10 laws
 sbt "coreJVM/testOnly okay.desk.LogicCorpusSuite"         # the corpus' 6 laws
-sbt "coreJVM/testOnly okay.desk.LogicReadSuite"           # the reader's 4 laws
+sbt "coreJVM/testOnly okay.desk.LogicReadSuite"           # the reader's 6 laws
 sbt "bench/runMain okay.desk.bench.LogicProbe"            # is the goal readable from the task?
 sbt "bench/runMain okay.desk.bench.LogicBench"            # train, calibrate, measure, export the reader
+LOGIC_LAYERS=12 sbt "bench/runMain okay.desk.bench.LogicBench"   # the student; saves logic-reader-12.json
+LOGIC_DIR="$HOME/.cache/okay-desk/semantic-full28" LOGIC_LAYERS=28 \
+  sbt "bench/runMain okay.desk.bench.LogicBench"          # the intact 28-layer control; logic-reader-28.json
 ```
+
+The artifact path is `~/.cache/okay-desk/logic-reader-<layers>.json` (or the first argument); a run that fails the
+gate writes nothing, and no artifact is packaged unless it passes. `LOGIC_TRAIN` (items per family, default 16),
+`LOGIC_EPOCHS` (default 40) and `LOGIC_LR` (default 0.05) tune a run; the Test split and the gate are fixed.

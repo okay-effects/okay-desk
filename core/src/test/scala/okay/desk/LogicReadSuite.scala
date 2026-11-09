@@ -26,14 +26,14 @@ class LogicReadSuite extends munit.FunSuite:
   def gold(i: Corpus.Item): Extract.Reading =
     Extract.gold(grammar(i), i.text, term(i)).fold(fail(_), identity)
 
-  final class Fake(states: Vector[Array[Float]]) extends Reading:
+  final class Fake(states: Vector[Array[Float]], words: Vector[Array[Float]] = Vector.empty) extends Reading:
     private var i = 0
     def answer[X](op: Read[X]): X = op match
       case Read.Prompt(_, _) => Array(0)
-      case Read.States(_, _) =>
+      case Read.States(_, at) =>
         val s = states(i)
         i += 1
-        Vector(s)
+        if at.size == words.size + 1 then words :+ s else Vector(s)
       case Read.Encode(_) => Array.empty[Int]
       case Read.Decode(_) => ""
       case Read.Logits(_) => Array.empty[Float]
@@ -53,8 +53,9 @@ class LogicReadSuite extends munit.FunSuite:
     (Parameters(12, Vector.fill(d)(0f), Vector.fill(d)(1f), letters,
       weights.toVector.map(_.toVector), Vector.fill(letters.size)(0f), 0f), states)
 
-  def read(reader: LogicRead.Reader, g: LogicGrammar, task: String, states: Vector[Array[Float]]): Extract.Reading =
-    Read.run(reader.read[Read](g, task), Fake(states))
+  def read(reader: LogicRead.Reader, g: LogicGrammar, task: String, states: Vector[Array[Float]],
+      layout: LogicRead.Layout = LogicRead.Layout.empty, words: Vector[Array[Float]] = Vector.empty): Extract.Reading =
+    Read.run(reader.read[Read](g, task, layout), Fake(states, words))
 
   def closed(g: LogicGrammar, r: Extract.Reading): Boolean =
     g.closed(Extract.replay(g, r).fold(fail(_), identity))
@@ -102,6 +103,61 @@ class LogicReadSuite extends munit.FunSuite:
     assert(!v.exact)
     val s = Extract.summarize(Vector((g, want, got)))
     assertEquals((s.exact, s.abstained, s.closedWrong, s.valueWrong), (0, 0, 1, 1))
+
+  /** an item, a copied constant step, and another constant option the task says */
+  def pointerCase(): (Corpus.Item, Int, String) =
+    (for
+      i <- items(Corpus.Split.Train)
+      k <- gold(i).choices.indices
+      if gold(i).choices(k).evidence.exists { case Evidence.Text(_) => true; case _ => false }
+      at = Extract.replay(grammar(i), gold(i).copy(choices = gold(i).choices.take(k))).fold(fail(_), identity)
+      ty = grammar(i).nextHole(at).map(_._1).getOrElse(fail("no hole"))
+      other <- grammar(i).constructors(ty).find(c => Extract.copies(ty, c) && c != gold(i).choices(k).con &&
+        Extract.find(i.text, c).isDefined)
+    yield (i, k, other)).head
+
+  /** a pointer with one row per copied constant: the query is the step's state, the key is the gold word's
+   * state in the same prompt, and a `Known` step points at the "none" key */
+  def pointed(g: LogicGrammar, want: Extract.Reading, wrong: Map[Int, String], margin: Float)
+      : (LogicRead.Reader, Vector[Array[Float]], LogicRead.Layout, Vector[Array[Float]]) =
+    val (p, states) = synthetic(g, want, wrong)
+    val d = states.head.length
+    val ws = LogicRead.wordsOf(want.task)
+    assert(ws.size <= d, s"${ws.size} words, $d steps")
+    val keyStates = Vector.tabulate(ws.size)(i => Array.tabulate(d)(j => if j == i then 1f else 0f))
+    val rows = want.choices.indices.flatMap { i =>
+      want.choices(i).evidence.map {
+        case Evidence.Text(span) => (i, ws.indexWhere(w => w.from == span.start && w.until == span.end), false)
+        case _                   => (i, -1, true)
+      }
+    }
+    val query = rows.map((i, _, _) => Vector.tabulate(d)(j => if j == i then 1f else 0f)).toVector
+    val key = rows.map { (_, j, _) =>
+      if j < 0 then Vector.fill(d)(0f) else Vector.tabulate(d)(k => if k == j then 1f else 0f)
+    }.toVector
+    val none = rows.map((_, _, known) => if known then 1f else 0f).toVector
+    val pointer = p.copy(pointerQuery = query, pointerKey = key, pointerNone = none, pointerMargin = margin)
+    (LogicRead.Reader(pointer), states, LogicRead.Layout(ws, Vector.tabulate(ws.size)(identity)), keyStates)
+
+  test("a pointer corrects a copied constant the linear head prefers wrongly"):
+    val (i, k, other) = pointerCase()
+    val g = grammar(i)
+    val want = gold(i)
+    val (reader, states, layout, words) = pointed(g, want, Map(k -> other), margin = 0.5f)
+    val got = read(reader, g, i.text, states, layout, words)
+    assertEquals(Extract.word(got), Extract.word(want), i.text)
+    assert(closed(g, got), i.text)
+
+  test("a pointer margin above the gap abstains at the constant hole"):
+    val (i, k, other) = pointerCase()
+    val g = grammar(i)
+    val want = gold(i)
+    val (reader, states, layout, words) = pointed(g, want, Map(k -> other), margin = 2f)
+    val got = read(reader, g, i.text, states, layout, words)
+    assert(!closed(g, got), i.text)
+    assertEquals(Extract.word(got).size, k)
+    val s = Extract.summarize(Vector((g, want, got)))
+    assertEquals((s.exact, s.abstained, s.closedWrong), (0, 1, 0))
 
   test("a threshold the text does not say stays Known in the reading too"):
     val g = LogicGrammar(Corpus.numbers)

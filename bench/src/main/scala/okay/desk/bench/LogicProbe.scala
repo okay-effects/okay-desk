@@ -21,16 +21,19 @@ object LogicProbe:
 
   def main(args: Array[String]): Unit =
     val home = sys.props("user.home")
-    val dir = Path.of(sys.env.getOrElse("SMALL_DIR", home +
-      "/.cache/huggingface/hub/models--local--Qwen3-0.6B-4bit-cut19-vocab-p12-m4/snapshots/main"))
-    val reading = ComputeReading(dir, 12, ComputeReading.device.getOrElse(okay.llm.compute.OnMlx()))
+    val dir = Path.of(sys.env.getOrElse("LOGIC_DIR", sys.env.getOrElse("SMALL_DIR", home +
+      "/.cache/huggingface/hub/models--local--Qwen3-0.6B-4bit-cut19-vocab-p12-m4/snapshots/main")))
+    val layers = sys.env.get("LOGIC_LAYERS").map(_.toInt).getOrElse(12)
+    println(s"backbone: $dir, layers=$layers")
+    val reading = ComputeReading(dir, layers, ComputeReading.device.getOrElse(okay.llm.compute.OnMlx()))
     def items(split: Corpus.Split, count: Int): Vector[(Corpus.Item, LogicGrammar, Vector[String], Array[Float])] =
       Corpus.items(split, count, seed = 7).map { i =>
         val g = LogicGrammar(i.ontology)
         val gold = Extract.gold(g, i.text, term(i)).fold(e => sys.error(e), identity)
         val steps = LogicRead.steps(g, gold)
         // the goal's predicate: the second hole (the first is `Program` at the root)
-        val f = Read.run(LogicRead.features[Read](i.text, steps(1).prefix), reading)
+        val f = Read.run(LogicRead.features[Read](i.text, steps(1).prefix,
+          options = LogicRead.shown(g, steps(1).ty)), reading)
         (i, g, steps(1).options, f.last)
       }
     val train = items(Corpus.Split.Train, 16)

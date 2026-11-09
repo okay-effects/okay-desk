@@ -9,6 +9,8 @@ import okay.datalog.{Atom, Check, Eval, Parse, Program, Result}
  * (goal first, safe by construction); the word round-trips; the denotation runs on the exact handler and agrees with
  * the hand-computed answers; every term the grammar enumerates is well-formed and stratified, and the engine's two
  * evaluations agree on it; an unsafe rule or an unstratifiable negation is refused, and its end is never offered.
+ * Variables are alpha-canonical: a fresh variable is the first unused name, a consistent rename is not a reading,
+ * while reusing a bound variable stays a semantic choice.
  */
 class LogicGrammarSuite extends munit.FunSuite:
   val ontology: Ontology = Ontology(
@@ -165,3 +167,112 @@ class LogicGrammarSuite extends munit.FunSuite:
     assertEquals(small.enumerate(18).take(20).toVector, small.enumerate(18).take(20).toVector)
     assertEquals(small.constructors(Ty.ArgT("p", 0, Vector.empty, fresh = true)),
       small.constructors(Ty.ArgT("p", 0, Vector.empty, fresh = true)))
+
+  test("alpha: a fresh variable is the first unused name; reusing a bound one is still offered"):
+    val small = LogicGrammar(Ontology(
+      predicates = Map("p" -> Predicate("p", Vector("s", "s", "s"))),
+      constants = Map("s" -> Vector("a")),
+      inputs = Set.empty))
+    def vars(bound: Vector[String]): Vector[String] =
+      small.constructors(Ty.ArgT("p", bound.size, bound, fresh = true)).filter(LogicGrammar.isVar)
+    assertEquals(vars(Vector.empty), Vector("X"))
+    assertEquals(vars(Vector("X")), Vector("X", "Y"))
+    assertEquals(vars(Vector("X", "Y")), Vector("X", "Y", "Z"))
+
+  test("alpha: a consistent rename is refused by the grammar, but a repeated variable is a reading"):
+    val small = LogicGrammar(Ontology(
+      predicates = Map("p" -> Predicate("p", Vector("s", "s")), "q" -> Predicate("q", Vector("s"))),
+      constants = Map("s" -> Vector("a")),
+      inputs = Set("q")))
+    def point(rules: String, goal: String): Term =
+      Compile.ofProgram(program(rules), atom(goal), small.ontology).fold(fail(_), identity)
+    val canonical = point("p(X, Y) :- q(X), q(Y).", "p(X, Y)")
+    assert(small.accepts(canonical))
+    // the same definition with the fresh variables renamed: X is offered, Y is not
+    val renamed = Encode.tree(small, Encode.word(canonical).map {
+      case "X" => "Y"
+      case "Y" => "X"
+      case w   => w
+    }, Ty.LogicT)
+    assert(!small.accepts(renamed), s"a consistent rename is not a reading: ${renamed.show}")
+    // reusing the first variable is a semantic choice the grammar offers: p(X, X) differs from p(X, Y)
+    val repeated = point("p(X, X) :- q(X).", "p(X, X)")
+    assert(small.accepts(repeated))
+    val a = Compile.program(canonical).fold(fail(_), identity)
+    val b = Compile.program(repeated).fold(fail(_), identity)
+    assert(!Compile.same(a, b), "p(X, X) is not p(X, Y)")
+
+  test("alpha: a consistent rename is the same formal definition, a changed premise is not"):
+    val small = Ontology(
+      predicates = Map("p" -> Predicate("p", Vector("s")), "q" -> Predicate("q", Vector("s")),
+        "r" -> Predicate("r", Vector("s"))),
+      constants = Map("s" -> Vector("a")),
+      inputs = Set("q", "r"))
+    def compiled(rules: String, goal: String): Compile.Compiled =
+      Compile.program(Compile.ofProgram(program(rules), atom(goal), small).fold(fail(_), identity))
+        .fold(fail(_), identity)
+    val renamed = compiled("p(X) :- q(X).", "p(X)")
+    val same = compiled("p(Y) :- q(Y).", "p(Y)")
+    assert(Compile.same(renamed, same), "a consistent rename is the same definition")
+    val other = compiled("p(X) :- r(X).", "p(X)")
+    assert(!Compile.same(renamed, other), "a changed premise is not the same definition")
+
+  test("alpha: a head variable is in scope from the first positive atom, the Codex closure"):
+    val graph = Ontology(
+      predicates = Map(
+        "initial" -> Predicate("initial", Vector("s")),
+        "edge" -> Predicate("edge", Vector("s", "s")),
+        "reachable" -> Predicate("reachable", Vector("s"))),
+      constants = Map("s" -> Vector("s0", "s1", "s2")),
+      inputs = Set("initial", "edge"))
+    val gg = LogicGrammar(graph)
+    // the second rule's head variable `Y` is in the body's canonical scope before any positive atom binds it
+    val p = program("initial(s0). edge(s0, s1). edge(s1, s2). " +
+      "reachable(X) :- initial(X). reachable(Y) :- reachable(X), edge(X, Y).")
+    val tm = Compile.ofProgram(p, atom("reachable(X)"), graph).fold(fail(_), identity)
+    assert(gg.accepts(tm), tm.show)
+    assertEquals(Encode.tree(gg, Encode.word(tm), Ty.LogicT), tm)
+    val (_, result) = Compile.run(Map.empty, tm).fold(fail(_), identity)
+    assertEquals(result.rows.map(_.map(_.text)).toSet, Set(Vector("s0"), Vector("s1"), Vector("s2")))
+
+  test("alpha: a recursive join and a repeated goal variable round-trip and denote"):
+    val graph = Ontology(
+      predicates = Map(
+        "edge" -> Predicate("edge", Vector("s", "s")),
+        "reach" -> Predicate("reach", Vector("s", "s"))),
+      constants = Map("s" -> Vector("a", "b", "c")),
+      inputs = Set("edge"))
+    val gg = LogicGrammar(graph)
+    val p = program("reach(X, Y) :- edge(X, Y). reach(X, Z) :- reach(X, Y), edge(Y, Z). " +
+      "edge(a, b). edge(b, a). edge(b, c).")
+    val tm = Compile.ofProgram(p, atom("reach(X, X)"), graph).fold(fail(_), identity)
+    assert(gg.accepts(tm), tm.show)
+    assertEquals(Encode.tree(gg, Encode.word(tm), Ty.LogicT), tm)
+    val c = Compile.program(tm).fold(fail(_), identity)
+    assertEquals(c.goal, atom("reach(X, X)"))
+    val (_, result) = Compile.run(Map.empty, tm).fold(fail(_), identity)
+    assertEquals(result.rows.map(_.map(_.text)).toSet, Set(Vector("a"), Vector("b")))
+
+  test("alpha: the head's variables are in scope in the body, but safety still binds"):
+    val small = Ontology(
+      predicates = Map(
+        "p" -> Predicate("p", Vector("s")),
+        "q" -> Predicate("q", Vector("s")),
+        "r" -> Predicate("r", Vector("s"))),
+      constants = Map("s" -> Vector("a")),
+      inputs = Set("q", "r"))
+    val sg = LogicGrammar(small)
+    // the head's `X` is in the canonical scope of the first positive atom (reusing it is the join)
+    assert(sg.constructors(Ty.AtomT(Vector("X"), fresh = true, except = Vector.empty)).contains("q"))
+    // a head variable that no positive atom binds is still unsafe
+    assert(Compile.ofProgram(program("p(X) :- r(a)."), atom("p(X)"), small).isLeft)
+    // a negation may not mention an unbound variable
+    assert(Compile.ofProgram(program("p(X) :- q(X), not q(Y)."), atom("p(X)"), small).isLeft)
+    // the safe rule that uses the head variable first is accepted
+    assert(Compile.ofProgram(program("p(X) :- q(X)."), atom("p(X)"), small).isRight)
+
+  /** a term with its variable leaves consistently renamed, for the law that the grammar refuses a rename */
+  def renameVars(t: Term, rename: Map[String, String]): Term = t match
+    case Term.Hole(ty) => Term.Hole(ty)
+    case Term.Leaf(ty, v) => Term.Leaf(ty, rename.getOrElse(v, v))
+    case Term.Con(ty, name, args) => Term.Con(ty, name, args.map(renameVars(_, rename)))

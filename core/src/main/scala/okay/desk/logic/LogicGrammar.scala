@@ -19,6 +19,11 @@ import okay.desk.calc.Term.*
  * dependency and strictly above each negative one; a head already defined keeps its level, so a rule that would need
  * a higher one is never offered. All levels only ever go up as the program is written, which makes the final program
  * stratified — the level assignment is the certificate.
+ *
+ * Variables are ALPHA-CANONICAL by construction: a hole that introduces a variable offers the variables already in
+ * scope (reusing one is a semantic constraint — `p(X, X)` differs from `p(X, Y)`) and, as the only new name, the
+ * first pool name not in scope. Choosing `Y` where `X` is free is a rename, not a reading, so the grammar never offers
+ * it. `Compile.ofProgram` renames in the same order, which is what makes a gold program a point of the grammar.
  */
 final class LogicGrammar(val ontology: Ontology) extends Rules:
   import LogicGrammar.*
@@ -44,7 +49,9 @@ final class LogicGrammar(val ontology: Ontology) extends Rules:
         (if negative(head, levels).nonEmpty then Vector("neg") else Vector.empty) ++
         (if bound.nonEmpty then Vector("cmp") else Vector.empty)
     case AtomT(_, _, except) => allPredicates.filterNot(except.contains)
-    case ArgT(pred, index, bound, fresh) => (if fresh then pool else bound) ++ constantsAt(pred, index)
+    // a fresh variable is the first name not in scope: any other new name is a rename, not a reading
+    case ArgT(pred, index, bound, fresh) =>
+      (bound ++ (if fresh then firstUnused(bound) else Vector.empty)) ++ constantsAt(pred, index)
     case TermT(bound) => bound ++ allConstants
     case CmpOpT => ops
     case _ => Vector.empty
@@ -70,7 +77,10 @@ final class LogicGrammar(val ontology: Ontology) extends Rules:
       case 2 => Some(RulesT(factLevels(args(1))))
       case _ => None
     case (GoalT, pred) => ontology.predicate(pred).flatMap { p =>
-      if args.size < p.arity then Some(ArgT(pred, args.size, Vector.empty, fresh = true)) else None }
+      // the goal's own earlier arguments are in scope: reusing one is a semantic choice, a new one is canonical
+      if args.size < p.arity then
+        Some(ArgT(pred, args.size, args.flatMap(varsOf).distinct, fresh = true))
+      else None }
     case (FactsT, "cons") => args.size match
       case 0 => Some(AtomT(Vector.empty, fresh = false, except = Vector.empty))
       case 1 => Some(FactsT)
@@ -88,9 +98,11 @@ final class LogicGrammar(val ontology: Ontology) extends Rules:
       case 0 => Some(LitT(head, vars, bound, levels))
       case 1 => Some(BodyT(head, vars, bound ++ varsOf(args(0)), levels))
       case _ => None
-    case (LitT(head, _, bound, levels), "pos") =>
+    case (LitT(head, vars, bound, levels), "pos") =>
       if args.isEmpty then
-        Some(AtomT(bound, fresh = true, except = allPredicates.filterNot(positive(head, levels).contains)))
+        // the head's variables are in scope in the body (reusing one is a choice); the safety bound stays `bound`
+        Some(AtomT((vars ++ bound).distinct, fresh = true,
+          except = allPredicates.filterNot(positive(head, levels).contains)))
       else None
     case (LitT(head, _, bound, levels), "neg") =>
       if args.isEmpty then
@@ -101,7 +113,10 @@ final class LogicGrammar(val ontology: Ontology) extends Rules:
       case 1 | 2 => Some(TermT(bound))
       case _ => None
     case (AtomT(bound, fresh, _), pred) => ontology.predicate(pred).flatMap { p =>
-      if args.size < p.arity then Some(ArgT(pred, args.size, bound, fresh)) else None }
+      // the atom's own earlier arguments are in scope too: `p(X, X)` and `p(X, Y)` are different atoms
+      if args.size < p.arity then
+        Some(ArgT(pred, args.size, (bound ++ args.flatMap(varsOf)).distinct, fresh))
+      else None }
     case _ => None
 
   /** whether a term is a point of this grammar: each constructor was allowed where chosen, and the term is complete */
@@ -130,6 +145,10 @@ object LogicGrammar:
   val ops: Vector[String] = Vector("=", "!=", "<", "<=", ">", ">=")
 
   def isVar(value: String): Boolean = pool.contains(value)
+
+  /** the one name a hole may introduce: the first pool name not already in scope (none when the pool is spent) */
+  def firstUnused(bound: Vector[String]): Vector[String] =
+    pool.find(v => !bound.contains(v)).toVector
 
   /** the stratum of a predicate: an input (or one not yet defined) is 0 */
   def levelOf(levels: Map[String, Int], pred: String): Int = levels.getOrElse(pred, 0)

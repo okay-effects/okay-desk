@@ -2,7 +2,7 @@ package okay.desk.skill
 
 import okay.desk.Table
 import okay.desk.calc.{Encode, Term, Ty}
-import okay.desk.logic.LogicGrammar
+import okay.desk.logic.{Compile, LogicGrammar}
 
 /**
  * THE EXTRACTION CONTRACT (specs/logic.md §5.2): what a reading head must produce for the logic grammar — one of the
@@ -169,20 +169,32 @@ object Extract:
   private def stageAt(g: LogicGrammar, t: Term): Option[Stage] =
     g.nextHole(t).map { case (ty, _, _) => stageOfType(ty) }
 
+  /** whether a reading says the gold program and goal up to a consistent renaming of variables: a literal word match
+   * is `Verdict.exact`, this is the formal definition — a rename is not a wrong premise, a changed atom still is */
+  def same(g: LogicGrammar, gold: Reading, reading: Reading): Boolean =
+    (replay(g, gold), replay(g, reading)) match
+      case (Right(a), Right(b)) =>
+        (Compile.program(a), Compile.program(b)) match
+          case (Right(x), Right(y)) => Compile.same(x, y)
+          case _                    => false
+      case _ => false
+
   /** the text spans a reading copied from */
   def spans(r: Reading): Set[(Int, Int)] =
     r.choices.flatMap(_.evidence).collect { case Evidence.Text(s) => (s.start, s.end) }.toSet
 
-  /** the stage metrics over a corpus: exact, abstained, closed wrong, wrong per stage, and the copied spans */
+  /** the stage metrics over a corpus: exact (literal word), semantic (up to alpha-renaming), abstained, closed wrong,
+   * wrong per stage, and the copied spans */
   final case class Summary(tasks: Int, exact: Int, abstained: Int, closedWrong: Int, goalWrong: Int,
-      relationWrong: Int, valueWrong: Int, spanMatched: Int, spanPredicted: Int, spanGold: Int):
+      relationWrong: Int, valueWrong: Int, spanMatched: Int, spanPredicted: Int, spanGold: Int,
+      semanticExact: Int):
     def precision: Double = if spanPredicted == 0 then 1.0 else spanMatched.toDouble / spanPredicted
     def recall: Double = if spanGold == 0 then 1.0 else spanMatched.toDouble / spanGold
     def spanF1: Double =
       if precision + recall == 0 then 0.0 else 2 * precision * recall / (precision + recall)
 
   object Summary:
-    val empty: Summary = Summary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    val empty: Summary = Summary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
   def summarize(cases: Vector[(LogicGrammar, Reading, Reading)]): Summary =
     cases.foldLeft(Summary.empty) { case (s, (g, gold, reading)) =>
@@ -200,5 +212,6 @@ object Extract:
         valueWrong = s.valueWrong + (if !v.stopped && v.stage.contains(Stage.Value) then 1 else 0),
         spanMatched = s.spanMatched + (pred & want).size,
         spanPredicted = s.spanPredicted + pred.size,
-        spanGold = s.spanGold + want.size)
+        spanGold = s.spanGold + want.size,
+        semanticExact = s.semanticExact + (if same(g, gold, reading) then 1 else 0))
     }
