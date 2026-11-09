@@ -287,13 +287,33 @@ The next levers are stage-wise, not a bigger prefix decoder: the remaining error
 copies (28-layer Validate: Goal 23 right / 9 wrong, Value 279/295 right), so read the goal first, then facts, then
 rules, and widen the held-out patterns before adding capacity.
 
+## 5.5 The decision budget: what the exact-program gate can demand (measured)
+
+`bench/.../LogicBudget.scala` is model-free: it walks the gold reading of every corpus task and counts the holes the
+grammar leaves open. A hole with one option is taken by the grammar and cannot be read wrong; only holes with two or
+more options are decisions. On Validate (32 tasks, 1291 holes): 201 holes (15.6%) are taken by the grammar, 1090
+(84.4%) are decided — 34.1 decisions per task (median 32, max 55), 177 of them copied constants. By stage: Goal 32,
+Relation 209 (16 free), Value 177 (all copies), Binding 295, Structure 377 (185 free); Test is the same size.
+
+So a program is exact only when about 34 decisions are all right, and the gate's arithmetic follows: `a^34 >= 0.70`
+needs `a >= 98.96%` per decision. The measured per-step accuracy is 1163/1291 = 90.1% on the 12-layer student and
+1192/1291 = 92.3% on the 28-layer control, which predicts 0.9 and 2.1 exact tasks of 32 even if the errors were
+independent; the measured numbers are 0/32 and 3/32 (Validate) and 0/32 on Test.
+
+This is why a bigger backbone is not the lever: the gate as stated is out of reach for prefix decoding over
+34-decision programs. The honest gate is threefold — safety (0 wrong-closed on Validate and Test at a margin that
+still closes a task), stage thresholds (goal, relation, value, copies), and execution (every closed reading replays
+to a term the exact handler agrees with) — and whole-program exactness is reported, never promised. A future gate
+that does demand 70% whole programs needs a shorter decision path (grammar pruning, or a task type whose program is
+small), not a larger head.
+
 ## 6. M0 baseline and current numbers
 
 M0 (2026-11-09): `sbt -batch coreJVM/test` passed 132 tests before this work. After M1: 140 tests pass, including
 the 8 laws above. After M2: 144 tests pass, the 20 tasks adding 4 laws. After the extraction contract: 153 tests
 pass. After the corpus: 159 tests pass. After the reader: 164 tests pass (the whole-word span law and the reader's 4
 laws added). After the pointer: 166 tests pass (the reader's 2 pointer laws added). After alpha-equivalence: 187
-tests pass (13 grammar laws, the reader's 6). The product numbers this path must not regress are in `data.md` and
+tests pass (14 grammar laws, the reader's 6). The product numbers this path must not regress are in `data.md` and
 `understanding.md`: data +
 readers + exact facts 12/12 en and 9/12 ru; readers on held-out pairs 97–99% whole with 1–3% wrong; the 28-layer
 generative control 12/12 short mutation but 0/8 longer held-out. The logic fragment is a core addition; no page or
@@ -324,20 +344,25 @@ model path changes yet, so those numbers are unchanged.
   margin sweep on Validate, the Test metrics on the gold path and by the real decoder, the exact-program gate before
   the `Wire` export, and a per-layer artifact name (`logic-reader-<layers>.json`).
 - `bench/.../LogicProbe.scala`: the goal predicate from the task alone — the first question of the gate.
+- `bench/.../LogicBudget.scala`: the model-free decision budget — the holes the grammar takes for free, the decisions
+  per task and per stage, and the per-decision accuracy the gate demands (§5.5).
 
 ## 8. Not built
 
 The rest of the plan (`~/.opencode/plan/okay-desk-datalog-neuro.md`) is open and recorded in `BACKLOG.md` §E:
 
 - **M3 (heads):** the exact-program gate (≥70% on held-out phrasings with 0 wrong-closed) is not met on either
-  backbone. The 12-layer student has no margin that is both safe and exact on Validate (70 of 140 pairs are safe,
-  all abstain); the intact 28-layer backbone reaches 3/32 Validate exactly at its best safe margin but 0/32 on the
-  held-out Test split (32 abstained, 0 wrong-closed, §5.4). The goal is readable (25/32 on the student; 23 right / 9
-  wrong on the 28-layer), so the remaining work is stage-wise reading (goal, facts, rules), wider held-out patterns,
-  the stage-wise gate and backend agreement on WebGPU, WebGL2 and CPU. A larger prefix decoder alone is not the
-  lever.
+  backbone, and §5.5 shows why it cannot be met by a bigger head: a Validate program takes 34 decisions, so 70%
+  exact needs 98.96% per decision against a measured 90.1% (student) and 92.3% (28-layer). The 12-layer student has
+  no margin that is both safe and exact on Validate (70 of 140 pairs are safe, all abstain); the intact 28-layer
+  backbone reaches 3/32 Validate exactly at its best safe margin but 0/32 on the held-out Test split (32 abstained,
+  0 wrong-closed, §5.4). The goal is readable (25/32 on the student; 23 right / 9 wrong on the 28-layer), so the
+  remaining work is stage-wise reading (goal, facts, rules), wider held-out patterns, the stage-wise gate and backend
+  agreement on WebGPU, WebGL2 and CPU. A larger prefix decoder alone is not the lever.
 - **M4:** open holes as questions, lessons per person, the "second time not asked" law.
-- **M5:** proof replay, grounded answers, the independent Horn check where the fragment fits inlay.
+- **M5:** the exact execution/proof boundary and typed Worker transport are built (`logic-execution.md`), with
+  proof replay and bounded compiled-inlay witnesses. Existing logical data queries use this gate in the chat.
+  Connecting a qualified general typed reader and its open-hole dialogue remains part of M3/M4/M6.
 - **M6:** the phone: WebGL2, the texture budget, latency, offline reload; the capacity decision only if a gate
   demands it.
 
@@ -354,6 +379,7 @@ sbt "coreJVM/testOnly okay.desk.LogicExtractSuite"        # the extraction contr
 sbt "coreJVM/testOnly okay.desk.LogicCorpusSuite"         # the corpus' 6 laws
 sbt "coreJVM/testOnly okay.desk.LogicReadSuite"           # the reader's 6 laws
 sbt "bench/runMain okay.desk.bench.LogicProbe"            # is the goal readable from the task?
+sbt "bench/runMain okay.desk.bench.LogicBudget"           # the decision budget of the gate (no model)
 sbt "bench/runMain okay.desk.bench.LogicBench"            # train, calibrate, measure, export the reader
 LOGIC_LAYERS=12 sbt "bench/runMain okay.desk.bench.LogicBench"   # the student; saves logic-reader-12.json
 LOGIC_DIR="$HOME/.cache/okay-desk/semantic-full28" LOGIC_LAYERS=28 \
