@@ -307,6 +307,21 @@ to a term the exact handler agrees with) — and whole-program exactness is repo
 that does demand 70% whole programs needs a shorter decision path (grammar pruning, or a task type whose program is
 small), not a larger head.
 
+**What a compact encoding buys (measured, not assumed).** The cons-chains are shape, not reading: with an n-ary list
+node one length decision replaces each chain, and the budget falls from 34.1 to 26.6 decisions per task (70% then
+needs 98.67%, from 98.96%). What remains: binding 9.2 decisions (7.5 options on average), relation 6.5 (4.7), copies
+5.5 (5.2, read by the pointer at 83%), list 1.2 after compaction, literal 2.7, goal 1.0, operator 0.4. Compaction
+removes bookkeeping, not the semantic decisions, so on its own it does not open the gate.
+
+**What the programs actually are (the decisive measurement).** Abstracting constants to `#` and keeping the canonical
+variables, the 128 corpus tasks carry **17 program schemas** (data 4, kinship 5, numbers 5, planning 3). No schema is
+seen once, and every Test schema also appears in Train (3/3, 4/4, 4/4, 3/3). So the corpus's "understanding" is a
+choice among four schemas within a family plus slot filling, spelled out as 34 constructors. A schema-first reader
+would make one schema decision plus 5.5 pointer slots = 6.5 decisions per task, where 70% exactness needs 94.69% per
+decision and the schema choice is 4-way — a target a 12-layer student could plausibly hit. Two consequences: the
+current gate measures spelling, not understanding; and a held-out split that shares every schema tests slots only,
+so testing the *form* needs held-out schemas.
+
 ## 6. M0 baseline and current numbers
 
 M0 (2026-11-09): `sbt -batch coreJVM/test` passed 132 tests before this work. After M1: 140 tests pass, including
