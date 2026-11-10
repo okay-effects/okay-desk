@@ -322,14 +322,41 @@ decision and the schema choice is 4-way — a target a 12-layer student could pl
 current gate measures spelling, not understanding; and a held-out split that shares every schema tests slots only,
 so testing the *form* needs held-out schemas.
 
+## 5.6 Schema-first reading: the form, then the slots (measured)
+
+`core/.../logic/Schema.scala`: a schema is a program's term with every constant replaced by a hole of its own type,
+so a schema is a partial point of the same grammar (same safety, same levels) and instantiating it is filling its
+holes leftmost first. Its identity is the word with the constants abstracted to `#` — variables are already
+alpha-canonical, so two tasks share a schema exactly when their words agree. `instantiate` refuses a constant the
+grammar does not offer at the hole, so an instantiated schema is a point of the grammar or nothing. Five laws
+(`SchemaSuite`): the program's own constants instantiate back to the program; the word is the reading with the
+constants abstracted; the slots are the constants in order and the library keeps one entry per word; a bogus constant
+and a short fill are refused; and the Train library covers every Test schema.
+
+`bench/.../LogicSchema.scala` measures the one question the path depends on: can the student choose the schema from
+the task text? One masked softmax over the family's 3–5 schemas, one state per task, 192 Train tasks (48 per family),
+300 epochs, lr 0.1, the 12-layer student:
+
+- **last token of the prompt:** 23/32 Test schemas (71.9%) and 22/32 Validate (68.8%), against a majority baseline
+  of 11/32. Test per family: data 8/8, kinship 8/8, numbers 2/8, planning 5/8; Validate 5/6/7/4.
+- **bag of the task's tokens (mean state):** 19/32 Test (59.4%) and 20/32 Validate (62.5%) — the last token is the
+  better summary of the question, so the head reads the position where the program would start, not a bag of words.
+- **whole programs** with the pointer at its measured 83.1% per slot: 33.2% Test and 27.4% Validate; a perfect
+  pointer would give 71.9% and 68.8%.
+
+So the factorization turns 0/32 exact held-out programs into about a third, and names the two remaining bottlenecks:
+the schema choice (72%) and the pointer (83% per slot over ~5.5 slots). Seventy percent whole programs needs about
+95% on both. The pointer number is still the gold-prefix measurement of §5.4: reading the slots under a *schema*
+prefix, and the end-to-end decoder, are the next measurements.
+
 ## 6. M0 baseline and current numbers
 
 M0 (2026-11-09): `sbt -batch coreJVM/test` passed 132 tests before this work. After M1: 140 tests pass, including
 the 8 laws above. After M2: 144 tests pass, the 20 tasks adding 4 laws. After the extraction contract: 153 tests
 pass. After the corpus: 159 tests pass. After the reader: 164 tests pass (the whole-word span law and the reader's 4
 laws added). After the pointer: 166 tests pass (the reader's 2 pointer laws added). After alpha-equivalence: 187
-tests pass (14 grammar laws, the reader's 6). The product numbers this path must not regress are in `data.md` and
-`understanding.md`: data +
+tests pass (14 grammar laws, the reader's 6). After the schema: 5 more laws (`SchemaSuite`). The product numbers this
+path must not regress are in `data.md` and `understanding.md`: data +
 readers + exact facts 12/12 en and 9/12 ru; readers on held-out pairs 97–99% whole with 1–3% wrong; the 28-layer
 generative control 12/12 short mutation but 0/8 longer held-out. The logic fragment is a core addition; no page or
 model path changes yet, so those numbers are unchanged.
@@ -361,19 +388,28 @@ model path changes yet, so those numbers are unchanged.
 - `bench/.../LogicProbe.scala`: the goal predicate from the task alone — the first question of the gate.
 - `bench/.../LogicBudget.scala`: the model-free decision budget — the holes the grammar takes for free, the decisions
   per task and per stage, and the per-decision accuracy the gate demands (§5.5).
+- `core/.../logic/Schema.scala`: the schema of a program — constants to holes, the word as identity, `instantiate`
+  that refuses what the grammar does not offer, and the library (§5.6).
+- `core/src/test/.../SchemaSuite.scala`: the schema's 5 laws, including the Train library covering every Test schema.
+- `bench/.../LogicSchema.scala`: the schema head — one masked softmax over the family's schemas, the last token
+  against a bag of the task's tokens, the majority baseline and the whole-program expectation (§5.6).
 
 ## 8. Not built
 
 The rest of the plan (`~/.opencode/plan/okay-desk-datalog-neuro.md`) is open and recorded in `BACKLOG.md` §E:
 
-- **M3 (heads):** the exact-program gate (≥70% on held-out phrasings with 0 wrong-closed) is not met on either
-  backbone, and §5.5 shows why it cannot be met by a bigger head: a Validate program takes 34 decisions, so 70%
-  exact needs 98.96% per decision against a measured 90.1% (student) and 92.3% (28-layer). The 12-layer student has
-  no margin that is both safe and exact on Validate (70 of 140 pairs are safe, all abstain); the intact 28-layer
+- **M3 (heads):** the constructor-level exact-program gate (≥70% on held-out phrasings with 0 wrong-closed) is not
+  met on either backbone, and §5.5 shows why it cannot be met by a bigger head: a Validate program takes 34
+  decisions, so 70% exact needs 98.96% per decision against a measured 90.1% (student) and 92.3% (28-layer). The
+  12-layer student has no margin that is both safe and exact on Validate (70 of 140 pairs are safe, all abstain); the
+  intact 28-layer
   backbone reaches 3/32 Validate exactly at its best safe margin but 0/32 on the held-out Test split (32 abstained,
   0 wrong-closed, §5.4). The goal is readable (25/32 on the student; 23 right / 9 wrong on the 28-layer), so the
   remaining work is stage-wise reading (goal, facts, rules), wider held-out patterns, the stage-wise gate and backend
-  agreement on WebGPU, WebGL2 and CPU. A larger prefix decoder alone is not the lever.
+  agreement on WebGPU, WebGL2 and CPU. A larger prefix decoder alone is not the lever. The lever is schema-first
+  (§5.6): the schema head reads 23/32 Test schemas and the pointer 83% per slot, which is ~33% whole programs, so the
+  next steps are the slots read under a schema prefix (not a gold one), a schema head above 95%, and a held-out split
+  with schemas Train never showed.
 - **M4:** open holes as questions, lessons per person, the "second time not asked" law.
 - **M5:** the exact execution/proof boundary and typed Worker transport are built (`logic-execution.md`), with
   proof replay and bounded compiled-inlay witnesses. Existing logical data queries use this gate in the chat.
@@ -381,8 +417,8 @@ The rest of the plan (`~/.opencode/plan/okay-desk-datalog-neuro.md`) is open and
 - **M6:** the phone: WebGL2, the texture budget, latency, offline reload; the capacity decision only if a gate
   demands it.
 
-A point of the grammar is a formalization, not a faithful reading of the text; the measured reader abstains on every
-held-out program, so the page is not wired to it yet.
+A point of the grammar is a formalization, not a faithful reading of the text; the constructor-level reader abstains
+on every held-out program, and the schema head is a measurement rather than a decoder, so the page is not wired yet.
 
 ## 9. Commands
 
@@ -393,8 +429,11 @@ sbt "coreJVM/testOnly okay.desk.LogicTasksSuite"          # the 20 tasks of §5.
 sbt "coreJVM/testOnly okay.desk.LogicExtractSuite"        # the extraction contract's 10 laws
 sbt "coreJVM/testOnly okay.desk.LogicCorpusSuite"         # the corpus' 6 laws
 sbt "coreJVM/testOnly okay.desk.LogicReadSuite"           # the reader's 6 laws
+sbt "coreJVM/testOnly okay.desk.SchemaSuite"              # the schema's 5 laws
 sbt "bench/runMain okay.desk.bench.LogicProbe"            # is the goal readable from the task?
 sbt "bench/runMain okay.desk.bench.LogicBudget"           # the decision budget of the gate (no model)
+sbt "bench/runMain okay.desk.bench.LogicSchema"           # can the student choose the schema?
+SCHEMA_MODEL=0 sbt "bench/runMain okay.desk.bench.LogicSchema"  # the model-free schema report
 sbt "bench/runMain okay.desk.bench.LogicBench"            # train, calibrate, measure, export the reader
 LOGIC_LAYERS=12 sbt "bench/runMain okay.desk.bench.LogicBench"   # the student; saves logic-reader-12.json
 LOGIC_DIR="$HOME/.cache/okay-desk/semantic-full28" LOGIC_LAYERS=28 \
