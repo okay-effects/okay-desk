@@ -346,8 +346,67 @@ the task text? One masked softmax over the family's 3–5 schemas, one state per
 
 So the factorization turns 0/32 exact held-out programs into about a third, and names the two remaining bottlenecks:
 the schema choice (72%) and the pointer (83% per slot over ~5.5 slots). Seventy percent whole programs needs about
-95% on both. The pointer number is still the gold-prefix measurement of §5.4: reading the slots under a *schema*
-prefix, and the end-to-end decoder, are the next measurements.
+95% on both. The pointer number is still the gold-prefix measurement of §5.4.
+
+## 5.7 The schema-first decoder, end to end (measured)
+
+`bench/.../LogicSchemaRead.scala` runs the whole path a page would run: the schema head picks the form from the task's
+last state, the pointer reads each slot under the prefix *the schema itself writes* (never a gold prefix),
+`Schema.instantiate` fills the holes and `Compile.run` executes. The head is trained on Train tasks, the pointer on
+Train's slot reads, both are calibrated on Validate, and Test is read once with the chosen setting.
+
+The head's label set is the library filtered by the task's own ontology — a schema naming a predicate the task's
+tables do not have is not a candidate. That filter reproduces the family partition exactly (checked in the run), so it
+is the page's information (its tables), not the corpus' family label.
+
+64 Train tasks (16 per family), 12-layer student:
+
+- **pointer under schema prefixes:** 336 Train slot reads, 123/154 Validate (79.9%) at 150 steps, lr 0.05. The
+  gold-prefix pointer of §5.4 read 127/154, so a schema prefix costs about 4 slot reads out of 154.
+- **margin 0:** 13/32 Validate exact, 6 abstained, 13 wrong — 7 of the wrong ones chose the wrong form.
+- **the calibrated pair:** schema margin 0.0, pointer margin 2.0 (best exact among the 21 of 56 pairs with no
+  wrong-closed reading): Validate 9/32 exact, 23 abstained, 0 wrong; Test 12/32 exact, 20 abstained, **0 wrong**.
+  The schema margin carries almost nothing — the head's top-two gap does not separate right from wrong forms — so
+  the pointer's margin is the whole safety.
+- **Test per family at that pair:** data 8/8 exact (no abstention), planning 4/8 (4 abstained), kinship 0/8 (8
+  abstained), numbers 0/8 (8 abstained).
+- **per-form margins** (the form is known at decode time, so each form carries its own pointer margin; a form no
+  Validate task chose abstains): Validate 11/32, Test 12/32, still 0 wrong — two Validate tasks for nothing on Test.
+
+Where the reading fails, at margin 0 (form = the head named the right schema; slots = right constants of the right
+schema's slots):
+
+| split | family | form | closed | exact | slots |
+|---|---|---|---|---|---|
+| Validate | data | 8/8 | 8/8 | 8/8 | 10/10 |
+| Validate | kinship | 6/8 | 4/8 | 0/8 | 10/23 |
+| Validate | numbers | 5/8 | 6/8 | 1/8 | 33/36 |
+| Validate | planning | 4/8 | 8/8 | 4/8 | 20/20 |
+| Test | data | 8/8 | 8/8 | 8/8 | 10/10 |
+| Test | kinship | 8/8 | 8/8 | 1/8 | 38/57 |
+| Test | numbers | 2/8 | 7/8 | 1/8 | 13/13 |
+| Test | planning | 4/8 | 8/8 | 4/8 | 20/20 |
+
+The table names the bottleneck per family:
+
+- **data** — the product's own questions: form 8/8 and slots 10/10 on both splits, 8/8 exact, nothing abstained.
+- **planning** — the pointer is perfect (20/20 slots) and the form is the whole loss. The misses are one thing: the
+  planning forms differ only in how many `edge` facts the program writes (2, 3 or 4), and the head always answers
+  the 2-edge form. A schema carries the task's facts because a text-only family has no tables, so the fact count
+  became a form decision the head cannot count.
+- **numbers** — the form again: slots 33/36 and 13/13, but on the held-out phrasings "minor" wins over
+  older/between/sameAge. The four forms share every fact and differ in one rule and one comparator, and the
+  student's last state does not separate them.
+- **kinship** — the form is right (6/8, 8/8) and the pointer is the loss: its slots are person names drawn from five
+  names repeated across the facts, and the pointer picks the wrong occurrence.
+
+More Train tasks is not the lever: 192 Train tasks make the head memorize (192/192 Train) and the safe pair collapses
+to 5/32 Validate and 3/32 Test **with 3 wrong** — the representation, not the count, is the limit.
+
+So the path is safe and its ceiling is measured: at the calibrated margin the page reads its own data questions
+exactly and abstains elsewhere rather than guessing. The next levers, in order: the facts out of the form (a
+text-only task's facts as a table, or a repeating fact block, so the fact count stops being a form), the form head on
+held-out phrasings, and the pointer over repeated names.
 
 ## 6. M0 baseline and current numbers
 
@@ -393,6 +452,9 @@ model path changes yet, so those numbers are unchanged.
 - `core/src/test/.../SchemaSuite.scala`: the schema's 5 laws, including the Train library covering every Test schema.
 - `bench/.../LogicSchema.scala`: the schema head — one masked softmax over the family's schemas, the last token
   against a bag of the task's tokens, the majority baseline and the whole-program expectation (§5.6).
+- `bench/.../LogicSchemaRead.scala`: the decoder end to end — the ontology-filtered schema head, the pointer under
+  the schema's own prefixes, `Schema.instantiate`, `Compile.run`, the margin sweep (one global pair and one pointer
+  margin per form), where each reading fails, and the two bottlenecks (§5.7).
 
 ## 8. Not built
 
@@ -410,6 +472,15 @@ The rest of the plan (`~/.opencode/plan/okay-desk-datalog-neuro.md`) is open and
   (§5.6): the schema head reads 23/32 Test schemas and the pointer 83% per slot, which is ~33% whole programs, so the
   next steps are the slots read under a schema prefix (not a gold one), a schema head above 95%, and a held-out split
   with schemas Train never showed.
+  The decoder now runs end to end (§5.7): at the calibrated pointer margin it reads the data family 8/8 exactly on
+  Test and abstains elsewhere with 0 wrong-closed readings, so the path is safe but its ceiling is the form head.
+  Three levers, in order: (a) the task's facts out of the form — a text-only family writes its facts into the
+  program, so planning's forms differ only in fact count and the head always answers the 2-edge one; the facts belong
+  to a table (or to a repeating block in the form) so the count stops being a decision; (b) the form head on
+  held-out phrasings — numbers' four forms share every fact and differ in one rule and one comparator, and the
+  student's last state says "minor" for three of them; (c) the pointer over repeated names — kinship's slots draw
+  from five names repeated across the facts and the pointer picks the wrong occurrence (38/57). More Train tasks does
+  not help: 192 Train tasks make the head memorize and the safe pair collapses to 3/32 Test with 3 wrong.
 - **M4:** open holes as questions, lessons per person, the "second time not asked" law.
 - **M5:** the exact execution/proof boundary and typed Worker transport are built (`logic-execution.md`), with
   proof replay and bounded compiled-inlay witnesses. Existing logical data queries use this gate in the chat.
@@ -434,6 +505,8 @@ sbt "bench/runMain okay.desk.bench.LogicProbe"            # is the goal readable
 sbt "bench/runMain okay.desk.bench.LogicBudget"           # the decision budget of the gate (no model)
 sbt "bench/runMain okay.desk.bench.LogicSchema"           # can the student choose the schema?
 SCHEMA_MODEL=0 sbt "bench/runMain okay.desk.bench.LogicSchema"  # the model-free schema report
+sbt "bench/runMain okay.desk.bench.LogicSchemaRead"        # the schema-first decoder end to end (~75 s)
+SCHEMA_TRAIN=48 sbt "bench/runMain okay.desk.bench.LogicSchemaRead"   # more Train tasks: the head memorizes
 sbt "bench/runMain okay.desk.bench.LogicBench"            # train, calibrate, measure, export the reader
 LOGIC_LAYERS=12 sbt "bench/runMain okay.desk.bench.LogicBench"   # the student; saves logic-reader-12.json
 LOGIC_DIR="$HOME/.cache/okay-desk/semantic-full28" LOGIC_LAYERS=28 \
