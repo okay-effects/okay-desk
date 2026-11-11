@@ -24,6 +24,10 @@ object Engine:
   var on: OnQwen = null
   var skill: Skill = null
   var engine: js.Dynamic = null
+  /** the native generator: Qwen3 0.6B whole (28 layers) on okay-llm's forward — WebGL2 or the CPU where WebLLM has
+   * no WebGPU; its tokenizer, `on` its forward */
+  private var generator: Option[Tokenizer] = None
+  private def generates: Boolean = engine != null || generator.nonEmpty
   var status: String => Unit = _ => ()
 
   /** THE DISK'S CACHE (the browser's Cache API: its storage on disk): a file of the model fetched once and kept, so the
@@ -109,11 +113,11 @@ object Engine:
   /** `phone`: a small screen — WebGL2 keeps a small pool of textures and the head stays on the CPU (the embedding's
    * 78 MB not sent: a phone's browser takes the GPU's memory back at a few hundred MB) */
   var phone = false
-  def loadReaders(dir: String, layer: Int): Future[Either[String, String]] =
+  def loadReaders(dir: String, layer: Int, generate: Boolean = false): Future[Either[String, String]] =
     (for
       config <- fetch(s"$dir/config.json").map(text).map(Qwen3Config.parse)
       tok <- fetch(s"$dir/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
-      skillBytes <- fetch(s"$dir/readers.skill")
+      skillBytes <- if generate then Future.successful(new ArrayBuffer(0)) else fetch(s"$dir/readers.skill")
       gpu <- OnWebGpu.create()
       device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 24L * 1048576 else 96L * 1048576, headsAtOnce = if phone then 2 else 16).left.map(more => s"$why; $more"))
       c = device.fold(_ => OnCpu(), identity)
@@ -123,13 +127,24 @@ object Engine:
         stage(s"the weights to ${c.api}…")
         Qwen3Compute(c, st, config, headOnCpu = phone && c.api != "WebGPU", embedGiven = embed) }
     yield
-      on = OnQwen(model, tok, layer, ensure)
+      on = OnQwen(model, tok, if generate then config.layers else layer, ensure)
       idle()
-      skill = Skill(); skill.load(new Int8Array(skillBytes).toArray)
+      skill = if generate then null else Skill()
+      if skill != null then skill.load(new Int8Array(skillBytes).toArray)
+      generator = if generate then Some(tok) else None
       engine = null
-      Right(s"${if dir == "model" then "the cut model" else "the student"} (${config.layers} layers) and the readers on ${c.api}" +
+      val name = if generate then "Qwen3 0.6B" else if dir == "model" then "the cut model" else "the student"
+      Right(s"$name (${config.layers} layers) and ${if generate then "generation" else "the readers"} on ${c.api}" +
         (if phone && c.api != "WebGPU" then ", the head on the CPU" else "") + device.fold(why => s" ($why)", _ => "")))
       .recover { case t => Left(s"cannot load the readers: ${t.getMessage}") }
+
+  /** WebLLM's 0.6B, made by our forward where the browser has no WebGPU (an iPhone: WebGL2): the whole model's files */
+  private val nativeGenerated = Map("Qwen3-0.6B-q4f16_1-MLC" -> "model-understanding")
+  private def webGpu: Future[Boolean] =
+    val gpu = dom.window.navigator.asInstanceOf[js.Dynamic].gpu
+    if js.isUndefined(gpu) || gpu == null then Future.successful(false)
+    else gpu.requestAdapter().asInstanceOf[js.Promise[js.Any]].toFuture
+      .map(a => a != null && !js.isUndefined(a)).recover { case _ => false }
 
   /** a model that generates: WebLLM's engine, cached by the browser after the first load */
   def loadWebLlm(id: String): Future[Either[String, String]] =
@@ -138,10 +153,33 @@ object Engine:
     else
       val opts = js.Dynamic.literal(initProgressCallback = ((p: js.Dynamic) => status(p.text.asInstanceOf[String])): js.Function1[js.Dynamic, Unit])
       webllm.CreateMLCEngine(id, opts).asInstanceOf[js.Promise[js.Dynamic]].toFuture
-        .map { e => engine = e; skill = null; on = null; status(""); Right(s"$id ready (generates)") }
+        .map { e => engine = e; skill = null; on = null; generator = None; status(""); Right(s"$id ready (generates)") }
         .recover { case t => Left(s"cannot load $id: ${t.getMessage}") }
 
   def complete(messages: Vector[(String, String)], max: Int): Future[String] =
+    generator match
+      case Some(tok) if engine == null => generate(tok, messages, max)
+      case _ => completeWebLlm(messages, max)
+
+  /** GREEDY GENERATION on the native forward: Qwen3's chat template (thinking off), a token at a time after the
+   * prefix cache (one row a step), until a special token (<|im_end|>) or `max` */
+  private def generate(tok: Tokenizer, messages: Vector[(String, String)], max: Int): Future[String] =
+    val prompt = messages.map((r, c) => s"<|im_start|>$r\n$c<|im_end|>\n").mkString +
+      "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    def step(ids: Array[Int], out: Vector[Int]): Future[Vector[Int]] =
+      if out.size >= max then Future.successful(out)
+      else on.handler(Read.Logits(ids)).flatMap { logits =>
+        var best = 0
+        var i = 1
+        while i < logits.length do { if logits(i) > logits(best) then best = i; i += 1 }
+        if tok.isSpecial(best) then Future.successful(out)
+        else
+          stage(s"generating: ${out.size + 1} tokens…")
+          step(ids :+ best, out :+ best)
+      }
+    step(tok.encode(prompt), Vector.empty).map { out => idle(); tok.decode(out) }
+
+  private def completeWebLlm(messages: Vector[(String, String)], max: Int): Future[String] =
     val req = js.Dynamic.literal(
       messages = js.Array(messages.map((r, c) => js.Dynamic.literal(role = r, content = c))*),
       temperature = 0, max_tokens = max, extra_body = js.Dynamic.literal(enable_thinking = false))
@@ -151,7 +189,7 @@ object Engine:
   /** the program read by the readers (no token generated), or written by the model */
   def program(tables: Map[String, Table], question: String, retry: Option[(String, String)]): Future[Either[String, String]] =
     if skill != null then Read.future(if assembler then skill.program[Async + Read](tables, question) else readByCalculus(tables, question, skill.words, Vector(Language.En.language, Language.Ru.language), Vector.empty), on.handler)
-    else if engine == null then Future.successful(Left("load the model first"))
+    else if !generates then Future.successful(Left("load the model first"))
     else
       val sys = Prompt.system(tables)
       val messages = Vector("system" -> sys, "user" -> question) ++ retry.toVector.flatMap((answer, problem) =>
@@ -159,7 +197,7 @@ object Engine:
       complete(messages, 600).map(Prompt.program)
 
   def summary(question: String, q: Query, result: Table): Future[Option[String]] =
-    if engine == null then Future.successful(None)
+    if !generates then Future.successful(None)
     else complete(Vector("user" -> Prompt.summarize(question, q, result)), 200)
       .map(s => Some(s.replaceAll("(?s)<think>.*?</think>", "").trim))
 
@@ -169,7 +207,9 @@ object Engine:
   private def begin(name: String): Unit =
     progressWords = s"loading ${Model.choices.toMap.getOrElse(name, name)}…"
     status = s => { progressWords = s; dom.window.localStorage.setItem("okay-desk.stage", s) }   // (not `stage`: it calls `status`)
-    loading = Some(Model.readers.get(name).fold(loadWebLlm(name))((dir, layer) => loadReaders(dir, layer)))
+    loading = Some(Model.readers.get(name).fold(nativeGenerated.get(name).fold(loadWebLlm(name))(dir =>
+      webGpu.flatMap(gpu => if gpu then loadWebLlm(name) else loadReaders(dir, 0, generate = true))))(
+      (dir, layer) => loadReaders(dir, layer)))
   private def progress(): Future[Either[String, Either[String, String]]] =
     val p = scala.concurrent.Promise[Either[String, Either[String, String]]]()
     js.timers.setTimeout(250) {

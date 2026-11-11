@@ -42,6 +42,13 @@ if [ -d "$CORE_DIR" ]; then
   cp "$CORE_DIR/config.json" "$CORE_DIR/tokenizer.json" "$out/model-core/" && cp "$SKILL" "$out/model-core/readers.skill"
   sbt -batch "bench/runMain okay.desk.bench.SplitWeights $CORE_DIR $out/model-core" > /dev/null
 fi
+# THE WHOLE 0.6B (28 layers) for generation where WebGPU is absent (WebLLM needs it): our forward on WebGL2 or the CPU
+SEMANTIC_DIR=${SEMANTIC_DIR:-$HOME/.cache/okay-desk/semantic-full28}
+if [ -f "$SEMANTIC_DIR/model.safetensors" ]; then
+  mkdir -p "$out/model-understanding"
+  cp "$SEMANTIC_DIR/config.json" "$SEMANTIC_DIR/tokenizer.json" "$out/model-understanding/"
+  sbt -batch "bench/runMain okay.desk.bench.SplitWeights $SEMANTIC_DIR $out/model-understanding" > /dev/null
+fi
 touch "$out/.nojekyll"
 git -C "$out" add -A
 git -C "$out" commit -q -m "the page, from $(git rev-parse --short HEAD)"
