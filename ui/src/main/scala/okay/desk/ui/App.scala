@@ -241,7 +241,12 @@ object App:
                 if st.model.isEmpty then Reasoning.start[R](st, q)
                 else busy[R](st, "the model reads the task into a formal statement, the exact solver solves it…")
                   .flatMap(_ => Model.state[R](q)).flatMap {
-                    case Some(reading) if reading.shown =>
+                    // answered, or read and doubted: the reader's words — the answer, or the sentence it is unsure
+                    // of; a text it could not write down at all goes the chat's other ways
+                    case Some(reading) if reading.shown || reading.statement.nonEmpty && reading.doubt.exists {
+                        case _: okay.desk.statement.Reader.Doubt.Unsure | _: okay.desk.statement.Reader.Doubt.Unfamiliar
+                          => true
+                        case _ => false } =>
                       val ru = okay.desk.statement.Reader.russian(q)
                       val (said, read) = okay.desk.statement.Said.words(q, reading, ru)
                       pure(st.copy(log = st.log :+ Entry("model", said, None, read)))

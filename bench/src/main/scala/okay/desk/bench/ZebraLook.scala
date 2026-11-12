@@ -19,7 +19,7 @@ object ZebraLook:
     for g <- gold do
       val t = ZebraRead.text(g("puzzle").string)
       val r = Reader.read(trained, Read.run(Reader.see[Read](t, trained.norm, trained.echo), reading))
-      println(s"=== ${g("id").string}\n$t")
+      println(s"=== ${g("id").string}")
       r.statement.foreach { s =>
         s.frames.filter(_.con == Con.Attribute).foreach(f =>
           println("LIST: " + f.args.collect { case m: Arg.Mention => m.at.in(t) }.mkString(" | ")))

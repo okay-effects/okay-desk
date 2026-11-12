@@ -387,7 +387,9 @@ Output one JSON object {"1": [relations of line 1], "2": [...], ...} and nothing
         println(s"${item.family} ${item.seed}: ${wrong.size} lines wrong ${wrong.take(3).mkString("; ")}")
       println(s"the judge on originals: lines $linesRight of $lines, whole tasks $tasksRight of $tasks")
       return
-    for item <- Drawn.items(split, until).drop(from); stated <- item.task.stated do
+    // TEACH_FAMILY: only the tasks of these families (a new kind of clue taught where it is said)
+    val families = sys.env.get("TEACH_FAMILY").map(_.split(",").toSet)
+    for item <- Drawn.items(split, until).drop(from) if families.forall(_(item.family)); stated <- item.task.stated do
       val original = Marked.of(stated.en)
       val truth = gold(original)
       val result = keyed(stated.en, Faults.result(stated.en.statement, stated.en.text))

@@ -955,3 +955,59 @@ shown: the benchmark's words were never met — as it should be while 20 of 167 
 
 Next for it, in order of the counts: values of several words in a list; the pieces a frame takes; then the gate
 for words met only in the benchmark's style.
+
+### 18.2 The teacher on the new clues; whole words; the page's reader (2026-11-12 afternoon)
+
+The teacher rewrote the houses tasks that say positions in words, "not in", "N between": 60 kept of 308 (long
+tasks: one line the judge misreads loses the whole). With them, 437 rewrites taught; the "repeat it" reader (seed 1;
+seeds 2, 3 running) against §18's:
+
+| set | §18 (echo 2) | now |
+|---|---|---|
+| Validate + Test en / ru | 98.2 / 98.9 | 99.7 / 98.7 |
+| Unseen en / ru | 62.7 / 57.0 | 81.3 / 62.0 |
+| Sealed en / ru | 49.6 / 21.3 | 54.0 / 13.7 |
+| teacher's test en / ru / uk / pl | 33.3 / 28.0 / 9.4 / 5.3 | 38.9 / 44.0 / 15.7 / 5.3 |
+| collection en / ru (no gate) | 87.9 / 83.5 | 95.6 / 92.3 |
+| collection under the gate | 60 / 62, 0 wrong | 70 / 63, 0 wrong |
+| ZebraLogic, grids right | 147 (15.1%) | 177 (18.2%) |
+
+Sealed ru fell (21.3 → 13.7): one seed each; §14.1's spread there is 4.6 points — the confirming seeds decide.
+
+A list's item is what lies between its commas (pieces with only spaces between them are one: "google pixel 6"); a
+piece is whole words ("Norweg" tagged, "ian" not, is "Norwegian"), and a token inside a word another began leaves
+the gate — its tag changes no piece. A typed English task the reader had asked about at "Norweg|ian" is answered.
+
+On the page (build 356ba7f8e77a): in the browser 77 right, 3 asked, 0 wrong of 80 (best so far); live as a phone
+32 of 32 right; two typed tasks, English and Russian, answered right.
+
+Confirmed over three seeds (the page's reader is seed 1): Sealed en 54.0 / 53.3 / 49.3 (mean 52.2; untaught 34.2,
+the first teacher's corpus 43.2) — the gain holds; Sealed ru 13.7 / 11.0 / 14.0 (mean 12.9) — §18's 21.3 was one
+lucky seed, Russian of another hand does not move with this corpus; Unseen en 81.3 / 73.6 / 77.6; the collection
+en 95.6 / 94.5 / 78.0 — a seed decides much of it, and the page has the best of three. Next for Russian: more of
+the teacher's Russian, and the adapter (lever 3), since heads alone stop here.
+
+### 18.3 The phone: a second task reloaded the tab (2026-11-12)
+
+On a real iPhone the first typed task was answered and the next reloaded the page. The forward keeps every layer's
+keys and values of the prompt for reuse (`OnQwen`'s prefix cache) — for a long task said twice some 100 MB of
+textures; the next task frees them and allocates its own, and a phone's driver frees late: both live at once, and
+the tab is killed. Nothing reuses a statement reading's prefix, so `Engine.state` lets the cache go before and after
+each reading. Measured on the live page as a phone (WebGL2 textures): 231 MB at the peak of a reading, 127 MB
+between tasks, the same after four tasks in a row (before, the cache stayed and the next reading stacked on it).
+"Clear chat" never touched it: the cache is the model's, not the conversation's.
+
+Not enough on the iPhone: the second task still reloaded the tab. The peak itself is now lower: a statement reading
+runs the forward keeping nothing (`OnQwen.statesOnce`: no prefix kept, each layer's keys and values let go as the
+next layer is computed) — 157 MB at the peak instead of 231, 127 MB between tasks (live page, phone profile, three
+tasks in a row). What a real iPhone does with textures freed late is not seen in Chromium: the phone itself is the
+test.
+
+Still not enough on the iPhone. Counting WebGL textures made and deleted (Chromium, phone profile) showed the churn:
+a task of another length made and deleted some 180 textures. `OnWebGl2`'s pool is by exact height, and a task of
+another length asks for other heights — the last task's textures lay in the pool unused while every op of the new
+one made and deleted its own. Two changes in okay-llm's `OnWebGl2`: heights in steps (1, 2, 3, 4, 6, 8, 12, …; a
+texture at most a third taller than needed, the shaders stop at `total`), so tasks of near lengths share textures;
+and a full pool lets go of other heights first, so it follows the work of now. With the phone's pool at 64 MB (24
+before): the second task made 16 textures and deleted 9 (was ~180 each), 158–160 MB between tasks, 191 MB at the
+peak (three tasks in a row). The trade: some 40 MB more held, nearly nothing freed late. Build 55c047bc2994.

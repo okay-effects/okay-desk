@@ -51,6 +51,16 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     case Read.Prompt(system, user) => Future.successful(tok.encode(OnQwen.template(system, user)))
     case Read.Note(_) => Future.unit
   def handler: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => answer[X](op)
+
+  /**
+   * THE STATES OF ONE READING, KEEPING NOTHING (specs/formalization.md §18.3): a statement reader asks once about a
+   * prompt no later ask begins with — so no prefix is kept, and each layer's keys and values are let go as soon as
+   * the next layer is computed. On a phone that is the difference between all the layers' keys and values of a long
+   * task at once (some 100 MB) and one layer's. The cache of other readers is dropped first.
+   */
+  def statesOnce(ids: Array[Int], at: Seq[Int]): Future[Vector[Array[Float]]] =
+    clearCache()
+    ensure(ids).flatMap(_ => model.run(ids, layer, at, withLogits = false, None, keep = false)).map(_._1)
   /** `c.api` of the device it runs on */
   def api: String = model.c.api
   def layers: Int = model.config.layers

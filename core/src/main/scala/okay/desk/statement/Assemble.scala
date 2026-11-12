@@ -54,7 +54,24 @@ object Assemble:
           out ++= open
           open = None
     out ++= open
-    out.result()
+    // a piece is whole words: a word begun is a word taken ("Norweg" tagged, "ian" not, is "Norwegian")
+    out.result().map((s, o) => (words(text, s), o)).foldLeft(Vector.empty[(Span, Boolean)]) { (acc, p) =>
+      // two pieces of one word are that one word
+      acc.lastOption match
+        case Some((q, o)) if p._1.from < q.until => acc.init :+ (Span(q.from, math.max(q.until, p._1.until)), o)
+        case _ => acc :+ p }
+
+  /** a span widened to the whole words it touches */
+  def words(text: String, s: Span): Span =
+    var (a, b) = (s.from, s.until)
+    while a > 0 && text(a - 1).isLetterOrDigit && text(a).isLetterOrDigit do a -= 1
+    while b < text.length && text(b).isLetterOrDigit && b > 0 && text(b - 1).isLetterOrDigit do b += 1
+    Span(a, b)
+
+  /** whether a token goes on a word another token began: its tag cannot change a piece (`words`) */
+  def within(text: String, t: Span): Boolean =
+    val c = core(text, t)
+    c.from > 0 && c.from == t.from && text(c.from - 1).isLetterOrDigit && c.from < c.until
 
   private val most = 8
 
@@ -81,10 +98,18 @@ object Assemble:
       val cons = if left.isEmpty then read.filter(_.roles.isEmpty) else read
       val frames = cons.map { con =>
         val roles = con.roles.filter(_ != Role.Attribute)
-        val mine =
+        val taken =
           if con.many then left.take(1) ++ left.drop(1).takeWhile(!_._2)
           else left.take(roles.size)
-        left = left.drop(mine.size)
+        left = left.drop(taken.size)
+        // a list's item is what lies between its commas: pieces with only spaces between them are one item
+        // ("google pixel 6" read as three pieces is one phone) — the punctuation of a list, not its words
+        val mine = if con != Con.Attribute then taken else
+          taken.foldLeft(Vector.empty[(Span, Boolean)]) { (acc, p) =>
+            acc.lastOption match
+              case Some((q, open)) if text.substring(q.until, p._1.from).forall(_.isWhitespace) =>
+                acc.init :+ (Span(q.from, p._1.until), open)
+              case _ => acc :+ p }
         // a number goes to the frame's number wherever it is said ("there is ONE house between A and B"); the
         // other pieces fill the other roles in the order of the text
         // (in the order of the text when the piece there is a number: a thing may be named by digits too)

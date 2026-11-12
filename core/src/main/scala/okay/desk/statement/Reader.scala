@@ -348,7 +348,9 @@ object Reader:
       case other => other)
     def sentenceOf(token: Int): Int = seen.sentences.indexWhere(s =>
       s.from <= seen.tokens(token).from && seen.tokens(token).from < s.until)
-    val margins = tagged.zipWithIndex.map { case ((_, m), i) => ("tag", m, sentenceOf(i)) } ++ by.margins
+    // a token inside a word another began decides nothing: a piece is whole words (`Assemble.words`)
+    val margins = tagged.zipWithIndex.collect { case ((_, m), i) if !Assemble.within(seen.text, seen.tokens(i)) =>
+      ("tag", m, sentenceOf(i)) } ++ by.margins
     val least = margins.groupMapReduce(_._1)(_._2)(math.min)
     val (words, pairs) = trained.known.news(seen, tags)
     val language = if russian(seen.text) then "ru" else "en"

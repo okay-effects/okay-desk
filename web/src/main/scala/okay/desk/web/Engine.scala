@@ -184,7 +184,7 @@ object Engine:
         fetch(Execution.versioned(s"$dir/statement.reader")).map(b => Reader.parse(new Int8Array(b).toArray).toOption)
           .recover { case _ => None }
       gpu <- OnWebGpu.create()
-      device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 24L * 1048576 else 96L * 1048576,
+      device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 64L * 1048576 else 96L * 1048576,
         headsAtOnce = if phone then 2 else 16, maximum = if phone then 512L * 1048576 else 1536L * 1048576,
         compactCache = phone && understanding)
         .left.map(more => s"$why; $more"))
@@ -229,11 +229,33 @@ object Engine:
 
   /** a logic task to its statement by the statement reader, the statement to the exact solver: one forward of the
    * task, no token generated; None where this model has no statement reader */
-  def state(text: String): Future[Option[Reader.Reading]] = statementReader match
+  /** THE CHAT DRAWN BEFORE THE READING: the screen with the task and its step is rendered, but a WebGL2 forward
+   * blocks the page until the answer — with the model loaded already (a second task) nothing was drawn between the
+   * press and the answer; two frames let the browser draw it first */
+  def state(text: String): Future[Option[Reader.Reading]] =
+    val p = scala.concurrent.Promise[Unit]()
+    dom.window.requestAnimationFrame(_ => dom.window.requestAnimationFrame(_ => p.success(())))
+    p.future.flatMap(_ => stateNow(text))
+  private def stateNow(text: String): Future[Option[Reader.Reading]] = statementReader match
     case Some(trained) if on != null =>
       stage("reading the task…")
-      Read.future(Reader.see[Async + Read](text, trained.norm, trained.echo).map(Reader.read(trained, _)),
-        [X] => (op: Read[X]) => reading(op)).map(Option(_)).recover { case _ => None }.map { r => idle(); r }
+      // the forward of a task said twice keeps every layer's keys and values for reuse — some 100 MB for a long
+      // task; nothing reuses them here, and a phone frees a texture late: they are let go before and after
+      on.clearCache()
+      // the states asked once, nothing kept, a layer's keys and values let go as the next is computed
+      val once: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => op match
+        case Read.States(ids, at) => Execution.model.submit(on.statesOnce(ids, at)).asInstanceOf[Future[X]]
+        case other => reading(other)
+      Read.future(Reader.see[Async + Read](text, trained.norm, trained.echo).map(Reader.read(trained, _)), once)
+        .map(Option(_)).recover { case e =>
+          // a failure on this device is said where the person sees it, not passed by in silence
+          status(s"the statement reader failed on this device: ${e.getMessage}")
+          dom.console.log(s"statement reader: $e")
+          None }.map { r =>
+          on.clearCache()
+          memoryStage("after the statement reader")
+          if r.nonEmpty then idle()
+          r }
     case _ => Future.successful(None)
 
   /** WebLLM's 0.6B, made by our forward where the browser has no WebGPU (an iPhone: WebGL2) */
