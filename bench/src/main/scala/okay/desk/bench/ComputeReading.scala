@@ -1,6 +1,6 @@
 package okay.desk.bench
 
-import okay.desk.skill.{OnQwen, Read, Reading}
+import okay.desk.skill.{Adapted, OnQwen, Read, Reading}
 import okay.llm.compute.{Compute, OnCpu, OnMlx}
 import okay.llm.qwen.{Qwen3Compute, Qwen3Config, Safetensors, Tokenizer}
 
@@ -14,12 +14,21 @@ import scala.concurrent.duration.*
  * teacher (35B); for reading, one program on four devices. DESK_DEVICE=mlx|cpu in the benches.
  */
 final class ComputeReading(dir: java.nio.file.Path, layer: Int, c: Compute) extends Reading:
+  // Generated prefixes change size at every token; cap retained free Metal buffers in workstation benches.
+  if c.api == "mlx" then
+    val _ = mlx.Mlx.setCacheLimit(256L * 1024 * 1024)
   // every step on the calling thread: MLX's default stream is the thread's (a pool thread has none)
   private given ExecutionContext = ExecutionContext.parasitic
   private val st = Safetensors(java.nio.file.Files.readAllBytes(dir.resolve("model.safetensors")))
   private val config = Qwen3Config.parse(java.nio.file.Files.readString(dir.resolve("config.json")))
   private val tok = Tokenizer.fromJson(okay.effects.json.Json.fromText(java.nio.file.Files.readString(dir.resolve("tokenizer.json"))))
-  private val on = OnQwen(Qwen3Compute(c, st, config), tok, layer)
+  private val adapted = sys.env.get("SEMANTIC_NATIVE_ADAPTER").map { path =>
+    Adapted(c, st, Safetensors(java.nio.file.Files.readAllBytes(java.nio.file.Path.of(path))))
+  }
+  private val model = adapted.fold(Qwen3Compute(c, st, config))(a =>
+    Qwen3Compute(a, a.tensors, config))
+  adapted.foreach(_.releaseSources())
+  private val on = OnQwen(model, tok, layer)
   def answer[X](op: Read[X]): X = Await.result(on.answer(op), 10.minutes)
 
 object ComputeReading:

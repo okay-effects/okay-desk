@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters.*
   def stuck(where: String): Nothing =
     p.screenshot(Page.ScreenshotOptions().setPath(Path.of("/tmp/real-stuck.png")))
     println(s"stuck at $where: " + p.locator("body").textContent().replaceAll("\\s+", " ").takeRight(600)); sys.exit(1)
-  p.navigate(url)
+  p.navigate(url + (if url.contains("?") then "&" else "?") + "models")
   p.waitForSelector("button:text-is('Load the model')")
   p.click("button:text-is('Load the model')")
   try p.waitForFunction("() => /readers on|cannot load/.test(document.body.textContent)") catch case _: Throwable => stuck("loading")

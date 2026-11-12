@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters.*
   p.setDefaultTimeout(sys.env.get("STEP_TIMEOUT").map(_.toInt).getOrElse(600000))
   def body() = p.locator("body").textContent()
   def snap(name: String): Unit = p.screenshot(com.microsoft.playwright.Page.ScreenshotOptions().setPath(Path.of(out).resolveSibling(s"$name.png")).setType(ScreenshotType.PNG))
-  p.navigate(url)
+  p.navigate(url + (if url.contains("?") then "&" else "?") + "models")
   p.waitForSelector("button:text-is('Load the model')")
   try
     p.click("button:text-is('Load the model')")

@@ -88,3 +88,95 @@ and leave this file. The operator decides the order; the numbers that motivate e
 27. **Self-consistency as the teacher**: the same question phrased three ways (the space's phrases, the teacher's
     rewrites) must read to one term; where readings disagree, the disagreement is a pair for induction and a question
     for the person. No gold needed.
+
+## E. Shared reasoning and world knowledge (specs/reasoning.md, specs/puzzles.md)
+
+**Priority: model-authored task understanding** (specs/understanding.md). The language model must interpret the
+whole arbitrary task and its question and author the formal model itself on phone WebGL2. Built experimentally:
+native program generation, separate low-rank adapters, generic finite constraints, a compiled inlay Horn
+certificate, typed worker execution and ?understanding in the same chat. No symbolic task-text fallback.
+Built: model-selected arithmetic steps with exact receipts and cached tool continuations; paired premise/goal
+mutation evaluation; model-owned dialogue and clarification continuation. Best compact result so far: 2/6 mutation
+groups. An intact 28-layer control reaches 6/6 short groups but 0/8 longer held-out questions. Both remain research.
+The requirement remains open: the first compact model does not generalize reliably; working examples and exact
+proofs do not establish faithful interpretation of arbitrary text. Measure whole-formalization fidelity, not just
+final-answer agreement, before promoting the experimental model to the default path.
+The published model still does not reliably formalize the river task. Generic bounded state/action planning is
+built (understanding §8), but whole-transition fidelity remains below the release gate. Runaway generation and
+phone-memory escalation are bounded (§7); these stability changes are not a semantic solution to the puzzle.
+Built: the typed reading execution/proof gate, portable Worker protocol, and checked proofs for the existing
+logical data chat (specs/logic-execution.md). The new general typed reader remains unqualified: the 28-layer
+control closed 0/32 held-out Test definitions. Do not package an all-abstain head as task understanding.
+
+28. **More world sources and dialogue** (§7, §10–11): `Know` as an effect, ambiguity choices, more properties and
+    qualifier contexts, then okay-facts and quoted Wikipedia. Built: autonomous Wikidata research for four
+    properties with type/rank/time filters, sourced cache and the selector compiled by okay-inlay (§10–11).
+29. **Further constraint families** (§8): knights and knaves, kinship, cell grids and age/arithmetic constraints; each with
+    generated phrases, exact laws and the same read-back/dialogue flow.
+    Built: source-declared house grids without category headers and multiple questions (puzzles §13).
+    Arbitrary category vocabularies and unrestricted prose-to-constraint reading remain open.
+30. **General source coverage** (specs/reasoning.md §6): web search and document adapters beyond Wikipedia,
+    refresh and disagreement policies, and source/entity clarification inside the common chat.
+    Built: explicit HTTPS HTML/plain-text/Markdown documents through the browser, provenance, caching and CORS
+    failure reporting (reasoning §9). General web search and a server-side fetch adapter remain open.
+31. **Learned reading into the common inference language** (specs/reasoning.md §6–7): train and measure readers
+    for typed facts/rules and question goals, with source spans, abstention and clarification; test on held-out
+    phrasings and real source prose. Built: the bounded Horn block in okay-inlay, sourced typed readings, exact
+    multi-hop proofs, negative facts, conflicts and unknowns in one chat; the actual 12-layer student's learned
+    membership/polarity/universal reader with copied spans, abstention and browser WebGL2 integration (§8).
+    Built next: six named binary relations, open binding goals, explicit relation composition, live Wikipedia
+    development audit and browser document reading (§9). Remaining: learned general goals and rule syntax,
+    richer relations, coreference, temporal/modal terms, a larger blind real-document corpus and clarification.
+32. **The minimal phone core** (specs/reasoning.md §7): reduce the student against the expanded reading contract;
+    measure physical-phone WebGL2 memory and latency. Default is the existing 12-layer student; no separate writer.
+33. **Measured heterogeneous execution** (specs/execution.md): move native model execution and its CPU head off
+    the page, transferable messages, resource/memory budgets and per-kernel cost measurements; verified GPU
+    handlers for eligible exact tools, then adaptive placement. Built: bounded CPU Worker pool, independent model
+    lane, typed CPU API, dependency plans, cancellation and browser concurrency checks.
+34. **The logic fragment: the model weighs a Datalog program** (specs/logic.md): the model reads the task and chooses
+    points of a typed grammar — goal, facts, rules — while `okay-datalog` computes. Built: the ontology, the typed
+    grammar (goal first, safety and stratification by construction through per-predicate levels, canonical fresh
+    variables and the goal/atom/body scopes), the denotation and inverse, the normal form,
+    `Logic.run(tables, Program, Atom)`, 14 grammar laws (8 structural and 6 alpha: a fresh variable is the first
+    unused name, a consistent rename is the same definition), M2's hand ontology over 20 tasks (5 data, 5 planning,
+    5 puzzle, 5 comparison) with 4 laws — every gold program a point of the grammar, no invented constants, each
+    answer exact by hand, every answer with a proof — and M3's extraction contract (`skill/Extract.scala`: a reading
+    as a word with evidence, replay, refusals, abstention, stage verdicts, span F1, `same`/`semanticExact`) with 10
+    laws over six tasks, and M3's corpus (`logic/Corpus.scala`: four families — planning, numbers, kinship, data —
+    three splits with disjoint sentence patterns and names, deterministic generation of task texts and their gold
+    programs) with 6 laws, and M3's reader (`skill/LogicRead.scala`: prefix decoding over the student's state, masked
+    softmax over the hole's options, margin as abstention, copies with ordered whole-word evidence, a pointer for
+    copied constants, `Wire` parameters) with 6 laws. 187 core tests pass. Measured on the 12-layer student with the
+    pointer and alpha canonicalization: Validate steps 1163/1291 (constructors 1078/1114, copies 85/177) and Train
+    gold path `Score(41,0,23)`, but no safe margin is also exact (70 safe pairs, all abstain). The intact 28-layer
+    control is better on the gold path (`Score(54,0,10)` against `Score(41,0,23)` on Train) and reaches 3/32 Validate
+    exactly at its best safe margin, but 0/32 on held-out Test (32 abstained, 0 wrong-closed). The exact-program gate
+    (≥70% held-out exact, 0 wrong-closed) is not met, and it cannot be met by a bigger head: `bench/.../LogicBudget`
+    (model-free) counts 34.1 decisions per Validate task — 84.4% of the 1291 holes; the grammar takes only 15.6% for
+    free — so 70% exact needs 98.96% per decision against a measured 90.1% (student) and 92.3% (28-layer). Compaction
+    was measured, not assumed: n-ary lists take the budget to 26.6 decisions (98.67% needed), and the 128 corpus tasks
+    carry only **17 program schemas** (4/5/5/3 per family), every Test schema also in Train. So the corpus's
+    "understanding" is a 4-way schema choice plus slots, spelled out as 34 constructors; schema-first would be 6.5
+    decisions (94.69% needed). The benchmark therefore measures spelling, not form: testing the form needs held-out
+    schemas. The schema path is now built and measured (`logic/Schema.scala`, 5 laws; `bench/LogicSchema`): a schema is
+    the program with its constants as holes, instantiated by filling them in order. The schema head reads 23/32 Test
+    schemas (71.9%) and 22/32 Validate (68.8%) against a majority baseline of 11/32, so with the pointer at 83% per
+    slot the whole-program expectation is 33% Test and 27% Validate — about a third instead of 0/32, with the schema
+    choice and the pointer as the two bottlenecks. The decoder now runs end to end (`bench/LogicSchemaRead`): the
+    ontology-filtered schema head, the pointer under the schema's own prefixes, `Schema.instantiate`, `Compile.run`,
+    calibrated on Validate and read once on Test. At the calibrated pointer margin 2.0 (schema margin 0.0, 21 of 56
+    pairs safe) it reads Test 12/32 exactly, abstains on 20, and closes **0 wrong**: data 8/8 with no abstention,
+    planning 4/8, kinship and numbers all abstained. The table of where each reading fails names the levers: planning's
+    pointer is perfect (20/20 slots) and its forms differ only in the fact count (2/3/4 edges), which the head cannot
+    count because a text-only task writes its facts into the program; numbers' forms share every fact and differ in
+    one rule (the head says "minor" for older/between/sameAge on held-out phrasings); kinship's form is right and the
+    pointer picks the wrong occurrence of five repeated names (38/57 slots). More Train tasks does not help (192 Train
+    tasks: the head memorizes and the safe pair collapses to 3/32 Test with 3 wrong). No head is promoted and
+    `web/Engine.scala` is not wired. The bench is configurable (`LOGIC_DIR`, `LOGIC_LAYERS`, `SCHEMA_TRAIN`),
+    enforces the gate before saving, and labels artifacts by layer (`logic-reader-<layers>.json`). Next: the task's
+    facts out of the form (a table, or a repeating block in the form, so the fact count stops being a decision), the
+    form head on held-out phrasings, the pointer over repeated names, plus a held-out split with schemas Train never
+    showed; then the honest threefold gate (safety, stage thresholds, execution) with whole-program exactness reported
+    rather than promised; M4 open holes as questions and
+    lessons; M5 proof replay and the Horn check; M6 the phone (WebGL2, texture budget, latency, offline reload) and the
+    capacity decision. The plan is `~/.opencode/plan/okay-desk-datalog-neuro.md`.

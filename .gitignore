@@ -1,3 +1,6 @@
 target/
 web/page/main.js
+web/page/worker.js
 .bsp/
+.symdex/
+.scala-build/

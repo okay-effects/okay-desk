@@ -1,9 +1,11 @@
 package okay.desk.web
 
 import okay.desk.*
-import okay.desk.skill.{OnQwen, Read, Readers as Skill, Words}
+import okay.desk.skill.{Adapted, NativeCompiler, OnQwen, Read, Readers as Skill, Words}
 import okay.desk.calc.{Context, Den, Fill, Grammar, Language, Strategy, Term, Ty, Dialogue}
 import okay.desk.ui.Model
+import okay.desk.know.{FactReader, Knowledge}
+import okay.desk.statement.Reader
 import okay.llm.compute.{OnCpu, OnWebGl2, OnWebGpu}
 import okay.llm.qwen.{Qwen3Compute, Qwen3Config, Safetensors, Tensors, Tokenizer}
 import okay.scala3.*
@@ -23,12 +25,25 @@ import scala.scalajs.js.typedarray.*
 object Engine:
   var on: OnQwen = null
   var skill: Skill = null
+  private var factReader: Option[FactReader.Reader] = None
+  private var relationReader: Option[FactReader.Reader] = None
+  private var statementReader: Option[Reader.Trained] = None
+  private var authorQuestion = ""
+  private var authorContext = ""
+  private var authorHistory = Vector.empty[(String, String)]
+  private var authorOutput: Option[NativeCompiler.Output] = None
+  private var authorObserved = 0
   var engine: js.Dynamic = null
-  /** the native generator: Qwen3 0.6B whole (28 layers) on okay-llm's forward — WebGL2 or the CPU where WebLLM has
-   * no WebGPU; its tokenizer, `on` its forward */
+  /** the native generator: Qwen3 0.6B whole (28 layers, no adapter) on okay-llm's forward — WebGL2 or the CPU
+   * where WebLLM has no WebGPU; its tokenizer, `on` its forward */
   private var generator: Option[Tokenizer] = None
   private def generates: Boolean = engine != null || generator.nonEmpty
   var status: String => Unit = _ => ()
+
+  /** The native prefix cache is one mutable resource; independent CPU tools do not acquire this lane. */
+  private def reading[X](op: Read[X]): Future[X] = op match
+    case _: Read.States | _: Read.Logits => Execution.model.submit(on.handler(op))
+    case _ => on.handler(op)
 
   /** THE DISK'S CACHE (the browser's Cache API: its storage on disk): a file of the model fetched once and kept, so the
    * next visit reads it from the device; a quota refused is no failure — the file is fetched again next time */
@@ -37,14 +52,18 @@ object Engine:
     if js.isUndefined(caches) then Future.successful(None)
     else caches.open(name).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map(Some(_)).recover { case _ => None }
   private def fetch(name: String): Future[ArrayBuffer] =
+    val address = if name.startsWith("model-understanding/") && !name.contains("?") then
+      Execution.versioned(name) else name
     cache("okay-desk-model").flatMap { c =>
-      val hit = c.fold(Future.successful(null: js.Dynamic))(cc => cc.`match`(name).asInstanceOf[js.Promise[js.Dynamic]].toFuture)
+      val hit = c.fold(Future.successful(null: js.Dynamic))(cc =>
+        cc.`match`(address).asInstanceOf[js.Promise[js.Dynamic]].toFuture)
       hit.flatMap { r =>
         if r != null && !js.isUndefined(r) then r.arrayBuffer().asInstanceOf[js.Promise[ArrayBuffer]].toFuture
-        else dom.fetch(name).toFuture.flatMap { r =>
-          if !r.ok then Future.failed(IllegalStateException(s"$name: HTTP ${r.status}"))
+        else dom.fetch(address).toFuture.flatMap { r =>
+          if !r.ok then Future.failed(IllegalStateException(s"$address: HTTP ${r.status}"))
           else
-            val kept = c.fold(Future.unit)(cc => cc.put(name, r.clone()).asInstanceOf[js.Promise[Unit]].toFuture.recover { case _ => () })
+            val kept = c.fold(Future.unit)(cc => cc.put(address, r.clone()).asInstanceOf[js.Promise[Unit]]
+              .toFuture.recover { case _ => () })
             kept.flatMap(_ => r.arrayBuffer().toFuture)
         }
       }
@@ -74,9 +93,9 @@ object Engine:
    * holds the whole of them twice; GitHub Pages caps a file at 100 MB), else the one model.safetensors; and the
    * embedding: in blocks when the manifest has them */
   private def weights(dir: String, vocab: Int): Future[(Tensors, Option[okay.llm.qwen.Rows])] =
-    dom.fetch(s"$dir/manifest.json").toFuture.flatMap { r =>
-      if !r.ok then fetch(s"$dir/model.safetensors").map(b => (new Safetensors(TypedArrayBuffer.wrap(b)), None))
-      else r.text().toFuture.flatMap { t =>
+    fetch(s"$dir/manifest.json").map(b => Option(text(b))).recover { case _ => None }.flatMap {
+      case None => fetch(s"$dir/model.safetensors").map(b => (new Safetensors(TypedArrayBuffer.wrap(b)), None))
+      case Some(t) =>
         val m = okay.effects.json.Json.fromText(t) match
           case okay.effects.json.Json.Obj(fs) => fs.toMap
           case _ => Map.empty[String, okay.effects.json.Json]
@@ -100,7 +119,6 @@ object Engine:
               wanted.filter(blocks.contains).foldLeft(Future.unit)((acc, b) => acc.flatMap(_ => loadBlock(dir, b))).map(_ => Some(rows))
             }
         for ls <- layers; e <- embedding yield (Tensors.Many(ls), e)
-      }
     }
   /** THE STAGE, KEPT (local storage): a phone that kills the tab reloads it with no word — the next visit says where
    * the last one ended */
@@ -113,33 +131,113 @@ object Engine:
   /** `phone`: a small screen — WebGL2 keeps a small pool of textures and the head stays on the CPU (the embedding's
    * 78 MB not sent: a phone's browser takes the GPU's memory back at a few hundred MB) */
   var phone = false
-  def loadReaders(dir: String, layer: Int, generate: Boolean = false): Future[Either[String, String]] =
+  private val pendingQuestionKey = "okay-desk.pending-author-question"
+  def recoveredQuestion: Option[String] =
+    try
+      val saved = Option(dom.window.localStorage.getItem(pendingQuestionKey))
+      dom.window.localStorage.removeItem(pendingQuestionKey)
+      saved.filter(q => q.nonEmpty && q.length <= 50000)
+    catch case _: Exception => None
+  private def rememberQuestion(question: String): Unit =
+    try
+      if question.length <= 50000 then dom.window.localStorage.setItem(pendingQuestionKey, question)
+      else dom.window.localStorage.removeItem(pendingQuestionKey)
+    catch case _: Exception => ()
+  private def forgetQuestion(): Unit =
+    try dom.window.localStorage.removeItem(pendingQuestionKey)
+    catch case _: Exception => ()
+  private var memoryInfo: () => (Long, Long) = () => (0L, 0L)
+  private def memoryStage(words: String): Unit =
+    val (bytes, peak) = memoryInfo()
+    dom.window.asInstanceOf[js.Dynamic].updateDynamic("okayModelProgress")(js.Dynamic.literal(
+      stage = words, gpuBytes = bytes.toDouble, peakGpuBytes = peak.toDouble))
+  /** Release the previous device before loading another model: a phone holds one set of weights. */
+  private def unload(): Future[Unit] =
+    authorQuestion = ""; authorContext = ""; authorHistory = Vector.empty; authorOutput = None; authorObserved = 0
+    Option(on).foreach(_.close())
+    memoryInfo = () => (0L, 0L)
+    on = null; skill = null; blocksOf = None; factReader = None; relationReader = None
+    statementReader = None; generator = None
+    val old = engine
+    engine = null
+    if old == null then Future.unit
+    else old.unload().asInstanceOf[js.Promise[Unit]].toFuture
+
+  def loadReaders(requestedDir: String, layer: Int, generate: Boolean = false): Future[Either[String, String]] =
+    val dir = requestedDir
+    val understanding = dir == "model-understanding"
     (for
       config <- fetch(s"$dir/config.json").map(text).map(Qwen3Config.parse)
       tok <- fetch(s"$dir/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
-      skillBytes <- if generate then Future.successful(new ArrayBuffer(0)) else fetch(s"$dir/readers.skill")
+      skillBytes <- if understanding then Future.successful(new ArrayBuffer(0)) else fetch(s"$dir/readers.skill")
+      adapter <- if understanding && !generate then
+        fetch(Execution.versioned(s"$dir/semantic-adapter.safetensors")).map(Some(_))
+        else Future.successful(None)
+      facts <- if understanding then Future.successful(None) else
+        fetch(Execution.versioned(s"$dir/facts.skill")).map(b => FactReader.parse(text(b)).toOption)
+          .recover { case _ => None }
+      relations <- if understanding then Future.successful(None) else fetch(Execution.versioned(s"$dir/relations-v1.skill"))
+        .map(b => okay.desk.know.Relations.parse(text(b)).toOption)
+        .recover { case _ => None }
+      // the statement reader (specs/formalization.md §12.1): heads over this model, the words they were taught
+      stated <- if understanding then Future.successful(None) else
+        fetch(Execution.versioned(s"$dir/statement.reader")).map(b => Reader.parse(new Int8Array(b).toArray).toOption)
+          .recover { case _ => None }
       gpu <- OnWebGpu.create()
-      device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 24L * 1048576 else 96L * 1048576, headsAtOnce = if phone then 2 else 16).left.map(more => s"$why; $more"))
+      device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 24L * 1048576 else 96L * 1048576,
+        headsAtOnce = if phone then 2 else 16, maximum = if phone then 512L * 1048576 else 1536L * 1048576,
+        compactCache = phone && understanding)
+        .left.map(more => s"$why; $more"))
       c = device.fold(_ => OnCpu(), identity)
       // the weights last, read straight from the fetched buffer (no copy) onto the device, and not kept: a phone's
       // tab has no room for a second copy of 244 MB
       model <- weights(dir, config.vocab).map { (st, embed) =>
         stage(s"the weights to ${c.api}…")
-        Qwen3Compute(c, st, config, headOnCpu = phone && c.api != "WebGPU", embedGiven = embed) }
+        try
+          adapter match
+            case None => Qwen3Compute(c, st, config, headOnCpu = phone && c.api != "WebGPU", embedGiven = embed)
+            case Some(bytes) =>
+              val adapted = Adapted(c, st, new Safetensors(TypedArrayBuffer.wrap(bytes)))
+              val loaded = Qwen3Compute(adapted, adapted.tensors, config,
+                headOnCpu = phone && c.api != "WebGPU", embedGiven = embed)
+              adapted.releaseSources()
+              loaded
+        catch case error: Exception =>
+          c.close()
+          throw error }
     yield
-      on = OnQwen(model, tok, if generate then config.layers else layer, ensure)
+      memoryInfo = c match
+        case gl: OnWebGl2 => () => (gl.bytes, gl.peakBytes)
+        case _ => () => (0L, 0L)
+      on = OnQwen(model, tok, if understanding then config.layers else layer, ensure)
+      statementReader = stated.filter(_.heads.d == config.hidden)
+      factReader = if adapter.nonEmpty then None else
+        facts.filter(r => r.parameters.layer == layer && r.parameters.mean.size == config.hidden)
+      relationReader = if adapter.nonEmpty then None else
+        relations.filter(r => r.parameters.layer == layer && r.parameters.mean.size == config.hidden)
       idle()
-      skill = if generate then null else Skill()
-      if skill != null then skill.load(new Int8Array(skillBytes).toArray)
+      skill = if adapter.nonEmpty || generate then null else Skill()
       generator = if generate then Some(tok) else None
+      if skill != null then skill.load(new Int8Array(skillBytes).toArray)
       engine = null
-      val name = if generate then "Qwen3 0.6B" else if dir == "model" then "the cut model" else "the student"
-      Right(s"$name (${config.layers} layers) and ${if generate then "generation" else "the readers"} on ${c.api}" +
+      val name = if generate then "Qwen3 0.6B" else if understanding then "Qwen3 0.6B task interpreter" else "the student"
+      Right(s"$name (${config.layers} layers) and ${if generate then "generation" else if understanding then "model program authoring" else "the readers"}" +
+        s" on ${c.api}" +
         (if phone && c.api != "WebGPU" then ", the head on the CPU" else "") + device.fold(why => s" ($why)", _ => "")))
-      .recover { case t => Left(s"cannot load the readers: ${t.getMessage}") }
+      .recover { case t => Left(s"cannot load ${if understanding then "the task interpreter" else "the readers"}: " +
+        t.getMessage) }
 
-  /** WebLLM's 0.6B, made by our forward where the browser has no WebGPU (an iPhone: WebGL2): the whole model's files */
-  private val nativeGenerated = Map("Qwen3-0.6B-q4f16_1-MLC" -> "model-understanding")
+  /** a logic task to its statement by the statement reader, the statement to the exact solver: one forward of the
+   * task, no token generated; None where this model has no statement reader */
+  def state(text: String): Future[Option[Reader.Reading]] = statementReader match
+    case Some(trained) if on != null =>
+      stage("reading the task…")
+      Read.future(Reader.see[Async + Read](text, trained.norm, trained.echo).map(Reader.read(trained, _)),
+        [X] => (op: Read[X]) => reading(op)).map(Option(_)).recover { case _ => None }.map { r => idle(); r }
+    case _ => Future.successful(None)
+
+  /** WebLLM's 0.6B, made by our forward where the browser has no WebGPU (an iPhone: WebGL2) */
+  private val nativeGenerated = "Qwen3-0.6B-q4f16_1-MLC"
   private def webGpu: Future[Boolean] =
     val gpu = dom.window.navigator.asInstanceOf[js.Dynamic].gpu
     if js.isUndefined(gpu) || gpu == null then Future.successful(false)
@@ -153,13 +251,14 @@ object Engine:
     else
       val opts = js.Dynamic.literal(initProgressCallback = ((p: js.Dynamic) => status(p.text.asInstanceOf[String])): js.Function1[js.Dynamic, Unit])
       webllm.CreateMLCEngine(id, opts).asInstanceOf[js.Promise[js.Dynamic]].toFuture
-        .map { e => engine = e; skill = null; on = null; generator = None; status(""); Right(s"$id ready (generates)") }
+        .map { e => engine = e; skill = null; on = null; status(""); Right(s"$id ready (generates)") }
         .recover { case t => Left(s"cannot load $id: ${t.getMessage}") }
 
-  def complete(messages: Vector[(String, String)], max: Int): Future[String] =
+  def complete(messages: Vector[(String, String)], max: Int, json: Boolean = false,
+      schema: Option[String] = None): Future[String] =
     generator match
       case Some(tok) if engine == null => generate(tok, messages, max)
-      case _ => completeWebLlm(messages, max)
+      case _ => completeWebLlm(messages, max, json, schema)
 
   /** GREEDY GENERATION on the native forward: Qwen3's chat template (thinking off), a token at a time after the
    * prefix cache (one row a step), until a special token (<|im_end|>) or `max` */
@@ -168,7 +267,7 @@ object Engine:
       "<|im_start|>assistant\n<think>\n\n</think>\n\n"
     def step(ids: Array[Int], out: Vector[Int]): Future[Vector[Int]] =
       if out.size >= max then Future.successful(out)
-      else on.handler(Read.Logits(ids)).flatMap { logits =>
+      else reading(Read.Logits(ids)).flatMap { logits =>
         var best = 0
         var i = 1
         while i < logits.length do { if logits(i) > logits(best) then best = i; i += 1 }
@@ -179,16 +278,22 @@ object Engine:
       }
     step(tok.encode(prompt), Vector.empty).map { out => idle(); tok.decode(out) }
 
-  private def completeWebLlm(messages: Vector[(String, String)], max: Int): Future[String] =
+  private def completeWebLlm(messages: Vector[(String, String)], max: Int, json: Boolean,
+      schema: Option[String]): Future[String] =
     val req = js.Dynamic.literal(
       messages = js.Array(messages.map((r, c) => js.Dynamic.literal(role = r, content = c))*),
       temperature = 0, max_tokens = max, extra_body = js.Dynamic.literal(enable_thinking = false))
+    if json || schema.nonEmpty then
+      val format = js.Dynamic.literal(`type` = "json_object")
+      schema.foreach(s => format.updateDynamic("schema")(s))
+      req.updateDynamic("response_format")(format)
+      req.updateDynamic("enable_thinking")(false)
     engine.chat.completions.create(req).asInstanceOf[js.Promise[js.Dynamic]].toFuture
       .map(r => r.choices.asInstanceOf[js.Array[js.Dynamic]].head.message.content.asInstanceOf[String])
 
   /** the program read by the readers (no token generated), or written by the model */
   def program(tables: Map[String, Table], question: String, retry: Option[(String, String)]): Future[Either[String, String]] =
-    if skill != null then Read.future(if assembler then skill.program[Async + Read](tables, question) else readByCalculus(tables, question, skill.words, Vector(Language.En.language, Language.Ru.language), Vector.empty), on.handler)
+    if skill != null then Read.future(if assembler then skill.program[Async + Read](tables, question) else readByCalculus(tables, question, skill.words, Vector(Language.En.language, Language.Ru.language), Vector.empty), [X] => (op: Read[X]) => reading(op))
     else if !generates then Future.successful(Left("load the model first"))
     else
       val sys = Prompt.system(tables)
@@ -196,20 +301,18 @@ object Engine:
         Vector("assistant" -> answer, "user" -> s"That program failed: $problem. Reply with the corrected JSON only."))
       complete(messages, 600).map(Prompt.program)
 
-  def summary(question: String, q: Query, result: Table): Future[Option[String]] =
-    if !generates then Future.successful(None)
-    else complete(Vector("user" -> Prompt.summarize(question, q, result)), 200)
-      .map(s => Some(s.replaceAll("(?s)<think>.*?</think>", "").trim))
-
   // THE LOADING, FOLLOWED: begun in the background, its words kept as it goes; `Progress` answers a moment later
   private var loading: Option[Future[Either[String, String]]] = None
   private var progressWords = ""
   private def begin(name: String): Unit =
     progressWords = s"loading ${Model.choices.toMap.getOrElse(name, name)}…"
     status = s => { progressWords = s; dom.window.localStorage.setItem("okay-desk.stage", s) }   // (not `stage`: it calls `status`)
-    loading = Some(Model.readers.get(name).fold(nativeGenerated.get(name).fold(loadWebLlm(name))(dir =>
-      webGpu.flatMap(gpu => if gpu then loadWebLlm(name) else loadReaders(dir, 0, generate = true))))(
-      (dir, layer) => loadReaders(dir, layer)))
+    loading = Some(unload().flatMap { _ =>
+      Model.nativeModels.get(name).fold(
+        if name == nativeGenerated then webGpu.flatMap(gpu =>
+          if gpu then loadWebLlm(name) else loadReaders("model-understanding", 28, generate = true))
+        else loadWebLlm(name))((dir, layer) => loadReaders(dir, layer))
+    }.recover { case t => Left(s"model loading failed: ${t.getMessage}") })
   private def progress(): Future[Either[String, Either[String, String]]] =
     val p = scala.concurrent.Promise[Either[String, Either[String, String]]]()
     js.timers.setTimeout(250) {
@@ -227,13 +330,12 @@ object Engine:
   // fetched once a table; none else
   private val wordsOf = scala.collection.mutable.Map.empty[String, Future[Words]]
   private def wordsFor(name: String): Future[Words] = wordsOf.getOrElseUpdate(name,
-    dom.fetch(s"words/$name.json").toFuture.flatMap { r =>
-      if !r.ok then Future.successful(Words.none) else r.text().toFuture.map(t => Words.parse(t).getOrElse(Words.none))
-    }.recover { case _ => Words.none })
+    fetch(Execution.versioned(s"words/$name.json")).map(b => Words.parse(text(b)).getOrElse(Words.none))
+      .recover { case _ => Words.none })
   // A LANGUAGE WHEN A QUESTION ASKS FOR IT (calculus.md §18): lang/<code>.json beside the page, fetched once
   private val langOf = scala.collection.mutable.Map.empty[String, Future[Option[Language]]]
   private def langFor(code: String): Future[Option[Language]] = Language.builtIn.get(code).fold(langOf.getOrElseUpdate(code,
-    dom.fetch(s"lang/$code.json").toFuture.flatMap(r => if !r.ok then Future.successful(None) else r.text().toFuture.map(t => Language.parse(t).toOption)).recover { case _ => None }))(l => Future.successful(Some(l)))
+    fetch(Execution.versioned(s"lang/$code.json")).map(b => Language.parse(text(b)).toOption).recover { case _ => None }))(l => Future.successful(Some(l)))
   /** THE CALCULUS ON THE PAGE (docs/calculus.md): the data first, the readers' skill next, the model's own tokens last —
    * one reading program; an open term is "not sure" with the hole named. `?assembler` in the address keeps the old way */
   private val assembler = dom.window.location.search.contains("assembler")
@@ -323,12 +425,13 @@ object Engine:
       p.future
     val noting: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => op match
       case Read.Note(words) =>
+        memoryStage(words)
         said :+= words
         wake()
         (if on.api == "WebGPU" then afterATurn(Future.unit) else drawn()).asInstanceOf[Future[X]]
       // a turn before a forward only: the encodings are many and cheap, and a browser clamps nested zero timeouts to
       // 4 ms — a turn before each made a question 2.6 → 5.5 s
-      case op @ (_: Read.States | _: Read.Logits) => afterATurn(on.handler(op))
+      case op @ (_: Read.States | _: Read.Logits) => afterATurn(reading(op))
       case other => on.handler(other)
     val f =
       if skill != null then Future.sequence(tables.keys.toVector.map(wordsFor)).flatMap { ws =>
@@ -361,19 +464,160 @@ object Engine:
       js.timers.setTimeout(250)(if waiting.contains(p) then { waiting = None; p.trySuccess(now()) })
     p.future
 
+  /** All interpretation is model-authored here. No baseline, data-reference gate or PuzzleText reader is consulted. */
+  private def author(question: String, tables: Map[String, Table], sources: Vector[Knowledge.Source],
+      observations: Vector[String]): Unit =
+    rememberQuestion(question)
+    def afterATurn[X](f: => Future[X]): Future[X] =
+      val turn = scala.concurrent.Promise[Unit]()
+      js.timers.setTimeout(0)(turn.success(()))
+      turn.future.flatMap(_ => f)
+    def drawn(): Future[Unit] =
+      val p = scala.concurrent.Promise[Unit]()
+      dom.window.requestAnimationFrame(_ => dom.window.requestAnimationFrame(_ => p.success(())))
+      p.future
+    said = Vector("language model understanding the task and its question…")
+    since = js.Date.now()
+    shown = 0
+    val schema = if tables.isEmpty then "" else "\nOpened data tool: output {\"query\": QUERY_JSON}.\n" +
+      Prompt.system(tables)
+    val context = question + schema + sources.map(s => s.id + ":" + s.text.hashCode).mkString("|")
+    val sameTask = authorQuestion == question && observations.nonEmpty && authorOutput.nonEmpty
+    val feedback = if sameTask then observations.drop(authorObserved).mkString("\n") else ""
+    val continuation = if sameTask && authorContext == context then
+      authorOutput.filter(_.sequence.nonEmpty).map(o => o.sequence -> feedback) else None
+    if sameTask then authorHistory :+= authorOutput.get.text -> feedback else authorHistory = Vector.empty
+    authorQuestion = question
+    authorContext = context
+    val noting: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => op match
+      case Read.Note(words) =>
+        memoryStage(words)
+        said :+= words
+        wake()
+        drawn().asInstanceOf[Future[X]]
+      case value @ (_: Read.States | _: Read.Logits) => afterATurn(reading(value))
+      case other => on.handler(other)
+    val proposed =
+      if on != null && generator.isEmpty then Read.future(NativeCompiler.compile[Async + Read](question, sources, observations,
+        tableInstructions = schema, history = authorHistory, continuation = continuation,
+        systemInstructions = Some(okay.desk.skill.PublishedAuthor.system + okay.desk.know.Planning.instructions),
+        maxTokens = if phone then 384 else 1024, maxContext = if phone then 1536 else 3072), noting).map { result =>
+        authorOutput = result.toOption
+        authorObserved = observations.size
+        result.map { output =>
+          dom.window.asInstanceOf[js.Dynamic].updateDynamic("okayUnderstanding")(js.Dynamic.literal(
+            question = question, program = output.text, tokens = output.tokens, api = on.api, layers = on.layers,
+            programs = js.Array((authorHistory.map(_._1) :+ output.text)*),
+            author = "native-language-model", parserFallback = false))
+          output.text
+        }
+      }
+      else if generates then complete(Vector("system" ->
+        (okay.desk.know.Formal.instructions + NativeCompiler.actions + okay.desk.know.Planning.instructions + schema),
+        "user" -> (question + "\nEvidence:\n" + sources.map(_.text).mkString("\n") +
+          "\nTool feedback:\n" + observations.mkString("\n"))) ++
+          authorHistory.flatMap((program, reply) => Vector("assistant" -> program, "user" -> reply)),
+        1024, json = true).map { text =>
+          authorOutput = Some(NativeCompiler.Output(text, 0))
+          authorObserved = observations.size
+          Right(text)
+        }
+      else Future.successful(Left("load a language model before interpreting the task"))
+    thinking = Some(proposed.flatMap {
+      case Left(error) =>
+        memoryStage("Stopped: " + error)
+        unload().map { _ => forgetQuestion(); Left(error) }
+      case right => forgetQuestion(); Future.successful(right)
+    }.recoverWith { case t =>
+      memoryStage("Stopped: " + t.getMessage)
+      unload().recover { case _ => () }.map { _ =>
+        forgetQuestion()
+        Left("Model stopped: " + t.getMessage + ". No answer was proved. The question is kept in the chat.")
+      }
+    })
+    thinking.foreach(_.onComplete(_ => js.timers.setTimeout(0)(wake())))
+
+  private def document(url: String, body: String, contentType: String): Either[String, Knowledge.Source] =
+    if body.length > 1048576 then Left("The source document exceeds the 1 MB text limit.")
+    else
+      val decoded = contentType match
+        case "text/plain" | "text/markdown" => Right(url -> body)
+        case "text/html" | "application/xhtml+xml" =>
+          val parsed = new dom.DOMParser().parseFromString(body, dom.MIMEType.`text/html`)
+          val removed = parsed.querySelectorAll("script,style,noscript,nav,header,footer,form,iframe")
+          (0 until removed.length).foreach(i => removed(i).parentNode.removeChild(removed(i)))
+          val root = Option(parsed.querySelector("main,article")).getOrElse(parsed.querySelector("body"))
+          val blocks = root.querySelectorAll("h1,h2,h3,p,li,pre,blockquote")
+          val words = (0 until blocks.length).map(i => blocks(i).textContent.trim).filter(_.nonEmpty).distinct
+          val title = Option(parsed.querySelector("title")).map(_.textContent).filter(_.nonEmpty).getOrElse(url)
+          Right(title -> (if words.nonEmpty then words.mkString("\n") else root.textContent))
+        case _ => Left("This source format is unsupported; use HTML, plain text or Markdown.")
+      decoded.flatMap { (title, words) =>
+        okay.desk.know.SourceDocument.create(url, title, words, new js.Date().toISOString().take(10))
+      }
+
+  def readFacts(quotes: Vector[Knowledge.Quote]): Future[Either[String, Vector[FactReader.Reading]]] =
+    factReader match
+      case None => Future.successful(Left("No trained fact reader is installed for this model."))
+      case Some(_) if quotes.size > 24 => Future.successful(Left("Too many source sentences to read."))
+      case Some(reader) =>
+        Read.future(Read.each[Knowledge.Quote, Option[FactReader.Reading], Async + Read](quotes) { q =>
+          FactReader.features[Async + Read](q.text).map(_.flatMap { f =>
+            relationReader match
+              case Some(primary) => FactReader.combined(primary, reader, q.source, q.text, f)
+              case None => reader.read(q.source, q.text, f)
+          })
+        }, [X] => (op: Read[X]) => reading(op)).map(rs => Right(rs.flatten))
+          .recover { case t => Left("Fact reading failed: " + t.getMessage) }
+
   /** `Model` answered here, each by its future */
   def model[R[_], Rest[_], A](p: A ! R)(using Split[Model, R, Rest], In[Async, Rest]): A ! Rest =
     handle(p, Handler.general[Model, Rest, A, A](a => pure(a))([X] => (op: Model[X], k: X => A ! Rest) =>
       val f: Future[X] = op match
+        case Model.ReadFacts(quotes) => readFacts(quotes)
+        case Model.Document(url, body, contentType) => Future.successful(document(url, body, contentType))
+        case Model.Execute(job) => Execution.cpu.execute(job)
+        case Model.ExecutePlan(nodes) => okay.desk.exec.ComputePlan.run(nodes)(Execution.cpu.execute)
         case Model.Begin(name) => begin(name); Future.unit
+        case Model.Unload() => unload().map(_ => idle())
         case Model.Progress() => progress()
         case Model.Program(tables, question, retry) =>
           stage("reading a question…")
           program(tables, question, retry).map { r => idle(); r }.recover { case t => idle(); Left(s"the model failed: $t") }
         case Model.Ask(tables, question, retry, choice) => ask(tables, question, retry, choice); Future.unit
         case Model.Thought() => thought()
-        case Model.Summary(question, q, result) => summary(question, q, result).recover { case _ => None }
+        case Model.Author(question, tables, sources, observations) =>
+          author(question, tables, sources, observations)
+          Future.unit
+        case Model.Authored() => thought().map(_.map {
+          case Left(error) => Left(Model.AuthorFailure.Generation(error))
+          case Right(program) =>
+            val parsed = Knowledge.authored(program)
+              .left.map(error => Model.AuthorFailure.InvalidProgram(program, error))
+            parsed.foreach {
+              case _: Knowledge.Step.Eval => ()
+              case _ => Option(on).foreach(_.clearCache())
+            }
+            parsed
+        })
         case Model.Forget(question) => Future.successful(forget(question))
+        case Model.State(text) => state(text)
+        case Model.References(tables, question) =>
+          for
+            words <- Future.sequence(tables.keys.toVector.map(wordsFor))
+            languages <- Future.sequence(Language.detect(question).map(langFor))
+          yield okay.desk.calc.DataReference.matches(tables, question,
+            words.foldLeft(Words.none)(_ ++ _), languages.flatten)
+        case Model.Reason(question, sources, observations, learned) =>
+          import okay.desk.know.Knowledge
+          val direct = Knowledge.baseline(question, sources, learned)
+          if !generates || direct.isInstanceOf[Knowledge.Step.Deduce] ||
+              direct.isInstanceOf[Knowledge.Step.Calculate] || direct.isInstanceOf[Knowledge.Step.Constraints] ||
+              direct.isInstanceOf[Knowledge.Step.Compute] then
+            Future.successful(Right(direct))
+          else complete(Vector("system" -> Knowledge.prompt(question, sources, observations)), 1600, json = true)
+            .map(Prompt.program(_).flatMap(Knowledge.parse))
+            .recover { case t => Left(s"reasoning program failed: $t") }
       Async.fromFuture[X, Rest](f).flatMap(k)))
 
 /** THE DISK: `Disk` by the browser's Cache API — every file opened kept under `data/<name>` (its text a response),

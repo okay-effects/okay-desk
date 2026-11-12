@@ -928,3 +928,82 @@ with TEACHER_PAIRS (DESK_ADAPTER_REFERENCE, DESK_ADAPTER_CONTROL, the map). Stat
   number; the bus is the part that carries it to another model.
 
 Next: Qwen3.5-0.8B (another family, another tokenizer: the reading points mapped by characters, specs/bus.md L0).
+
+
+## 33. One production reader model (2026-11-09)
+
+The page and publication now offer only `readers-small`: the 12-layer, 4-bit student distilled toward the cut's
+layer-19 states (§21), with its reduced vocabulary and the fact/relation readouts (reasoning.md §8–9). The three
+WebLLM generative choices remain. The other native backbones are alternatives for research, not dependencies
+loaded alongside the student: `readers` is the 19-layer reference cut; `readers-core` retains 19 layers but removes
+13 attention/MLP components and distils back the reading contract (§22b). Neither is packaged for the site or
+available through its model selector/self-test. Their local research checkpoints and historical measurements
+remain. This product simplification does not establish that the student dominates them on every task.
+
+Published build `dfe1adec42fd`: browser verification confirmed one native choice plus the three generative
+choices, default student loading on WebGL2, live sourced answers and offline reuse. The retired `model/` and
+`model-core/` manifests return 404 on the site; `model-small/` remains available.
+
+
+## 34. Examples and conversation actions (2026-11-09)
+
+The same okay-ui program now has three screens: chat, data and examples. The chat and data screens each link to
+Examples. All four question examples and all open-data examples live there. Running a question or opening a data
+example returns to the existing chat; navigating back preserves its conversation and pending clarification.
+
+A nonempty, idle chat offers Copy chat and Clear chat. Copy exports every log entry, including exact results,
+proof notes, source URLs and program JSON, as plain text. Clipboard is an explicit effect, handled by a buffer in
+JVM/Scala.js Play tests and by an awaited browser write in `OnClipboard`. Failure is reported without claiming
+success or altering the transcript. The typed, unsent question stays in place when copying.
+
+Clear removes the conversation, pending research/clarification, constraint state and input draft. The model, open
+tables, stored files/lessons and the online-source preference remain. A new question-field key starts an empty
+draft; keys stay stable during copy and ordinary redraws. Empty chats do not offer Copy/Clear. Examples remain
+available regardless of whether the conversation has entries.
+
+`AppSuite` and `ReasoningUiSuite` play the same navigation/copy/clear actions on JVM and Scala.js.
+`scripts/chat.scala` checks mobile and desktop widths, actual clipboard contents, denied writes, preserved drafts,
+reset inputs and retained data in the browser. `scripts/execution.scala` reaches its sample questions through
+Examples as a person does.
+
+Published build `a0f1fcd30737` was checked with `scripts/chat.scala` on the public site at 390 and 1100 pixels:
+examples navigation, actual clipboard contents, denied writes, preserved drafts, cleared inputs and retained data
+all passed. JVM and Scala.js UI suites passed 21 tests.
+
+
+## 35. Dataset names before routing (2026-11-09)
+
+Regression from a phone report: with `gdp` open and the student unloaded, "Где ВВП растет быстрее всего и почему?"
+was sent straight to external research. The common-chat routing gate considered only literal table/column/value
+names and built-in language forms. The readers knew `ВВП` through `words/gdp.json`, but that file was fetched only
+AFTER the gate chose data reading; the model never got loaded for this question.
+
+`Model.References` now obtains dataset dictionaries and the question's available languages without loading model
+weights. Shared `DataReference` checks the actual open schema/values and their localized forms, including
+inflections and ё/е. The same `Words` objects then reach the data readers. No GDP-specific route or remembered
+answer was added. Words and optional language files use the model's cache-first application-resource fetch and
+build version, so their first successful retrieval survives offline use. External-world source permission is
+separate from fetching these application resources. Unrelated questions and direct exact tools retain their routes.
+
+A new data question resets pending research/constraint state from the previous question, preserving the online
+preference. A request for "why" does not discard the computable local answer. Growth/change responses state their
+existing definition: first versus last available numeric points per group, not an annual rate. When causation is
+asked for, the handler explicitly says that the calculation does not establish economic causes; it does not
+invent an explanation from the numeric series.
+
+`DataReferenceSuite` checks dataset aliases, column/value forms, inflections and absence of references to unopened
+data. `ReasoningUiSuite` reproduces the exact reported phrase over a hand-computed growth fixture, after a pending
+research question: the student loads, the exact result is shown and no external-source permission is requested.
+`scripts/gdp.scala` opens the real GDP CSV in a cold browser at phone width with WebGPU hidden, checks dictionary
+lookup before model loading, the growth program, cause/scope notes, cached metadata and an offline ё variant.
+
+Published build `90c205310715` passed `scripts/gdp.scala` against the public site on 2026-11-09. The exact phone
+question produced a local growth result through the 12-layer WebGL2 model path, without external fact requests;
+metadata was read before weights loaded and the offline ё variant also passed.
+
+
+Conversation actions are placed after the complete transcript and before the question form, in both the okay-ui
+program and the browser's flex order. `scripts/chat.scala` checks their actual bounding rectangles at phone and
+desktop widths, alongside the existing copy/clear behavior checks.
+
+Published build `51e2e337d6e3` passed the public-site position and copy/clear checks at 390 and 1100 pixels.

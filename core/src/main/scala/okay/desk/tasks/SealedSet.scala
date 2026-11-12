@@ -1,0 +1,242 @@
+package okay.desk.tasks
+
+import Grids.{Feature, Setting, Who, count, item, ru, who}
+import Matching.{Scale, Theme, Thing, scale}
+
+/**
+ * THE SEALED SET (specs/formalization.md §12): families of tasks written by another hand than the corpus, never
+ * trained on and never read one by one — a reader is measured on them by totals alone. Whoever changes the corpus
+ * does not look in here.
+ */
+object SealedSet:
+  private def feature(sort: String, verb: String, base: String, ruVerb: String, each: Words, ask: Words,
+      items: (String, String, String, String)*): Feature =
+    Feature(sort, verb, base, ruVerb, each, ask, items.toVector.map((key, en, said, name) => item(key, en, said, name)))
+  private def people(names: (String, String, String)*): Vector[Who] = names.toVector.map(who(_, _, _))
+
+  /** places in space: fishing spots along a river, 1 by the bridge, the numbers growing downstream */
+  private val anglers: Setting = Setting(Kind.Places, "angler", "the angler who",
+    n => Words(s"${count(n).en} anglers", ru(n, "рыболова", "рыболовов").capitalize),
+    n => Words(s"${count(n).en} anglers sit along a riverbank at spots numbered downstream from 1, right by the " +
+      s"bridge, to $n, one angler at each spot",
+      s"Вдоль берега реки сидят ${ru(n, "рыболова", "рыболовов")}; места пронумерованы вниз по течению " +
+        s"от 1 (у самого моста) до $n, на каждом месте один рыболов"),
+    people(("Victor", "Виктор", "Виктора"), ("Pavel", "Павел", "Павла"), ("Lida", "Лида", "Лиды"),
+      ("Zoya", "Зоя", "Зои"), ("Mark", "Марк", "Марка"), ("Tamara", "Тамара", "Тамары"),
+      ("Denis", "Денис", "Дениса"), ("Yana", "Яна", "Яны")),
+    Vector(
+      feature("catch", "catches", "catch", "ловит",
+        Words("Each catches a different kind of fish", "Каждый ловит свою рыбу"),
+        Words("Which fish does {A} catch?", "Какую рыбу ловит {A}?"),
+        ("pike", "a pike", "щуку", "щука"), ("perch", "a perch", "окуня", "окунь"),
+        ("carp", "a carp", "карпа", "карп"), ("bream", "a bream", "леща", "лещ"),
+        ("catfish", "a catfish", "сома", "сом"), ("roach", "a roach", "плотву", "плотва"),
+        ("burbot", "a burbot", "налима", "налим")),
+      feature("bait", "baits the hook with", "bait the hook with", "насаживает на крючок",
+        Words("Each baits the hook with something different", "У каждого своя наживка"),
+        Words("What does {A} bait the hook with?", "Что насаживает на крючок {A}?"),
+        ("worm", "a worm", "червя", "червь"), ("bread", "bread", "хлеб", "хлеб"),
+        ("corn", "corn", "кукурузу", "кукуруза"), ("dough", "dough", "тесто", "тесто"),
+        ("maggot", "a maggot", "опарыша", "опарыш"), ("cheese", "cheese", "сыр", "сыр"),
+        ("pearl barley", "pearl barley", "перловую кашу", "перловая каша")),
+      feature("seat", "sits on", "sit on", "сидит на",
+        Words("Each sits on something different", "У каждого своё сиденье"),
+        Words("What does {A} sit on?", "На чём сидит {A}?"),
+        ("folding chair", "a folding chair", "складном стуле", "складной стул"),
+        ("log", "a log", "бревне", "бревно"), ("bucket", "a bucket", "ведре", "ведро"),
+        ("crate", "a crate", "ящике", "ящик"), ("stump", "a stump", "пне", "пень"),
+        ("stool", "a stool", "табурете", "табурет"), ("boulder", "a boulder", "валуне", "валун")),
+      feature("transport", "comes by", "come by", "приезжает на",
+        Words("Each comes to the river by a different means", "Каждый приезжает на реку по-своему"),
+        Words("What does {A} come by?", "На чём приезжает {A}?"),
+        ("bicycle", "bicycle", "велосипеде", "велосипед"), ("moped", "moped", "мопеде", "мопед"),
+        ("bus", "bus", "автобусе", "автобус"), ("tractor", "tractor", "тракторе", "трактор"),
+        ("motorbike", "motorbike", "мотоцикле", "мотоцикл"), ("scooter", "scooter", "самокате", "самокат"),
+        ("commuter train", "commuter train", "электричке", "электричка"))),
+    n => Words(s"fishes at spot $n", s"удит на месте $n"),
+    Words("fishes at the middle spot", "удит на среднем месте"),
+    Words("{A} fishes somewhere upstream of {B}", "{A} удит по течению где-то выше {B}"),
+    Words("{A} fishes somewhere downstream of {B}", "{A} удит по течению где-то ниже {B}"),
+    Words("{A} fishes at the very next spot downstream of {B}", "{A} удит на соседнем месте вниз по течению от {B}"),
+    Words("{A} fishes at the very next spot upstream of {B}", "{A} удит на соседнем месте вверх по течению от {B}"),
+    Words("{A} and {B} fish at neighbouring spots", "{A} и {B} удят на соседних местах"))
+
+  /** places in space: stalls along a wall of a fair, 1 at the entrance */
+  private val fair: Setting = Setting(Kind.Places, "stallholder", "the stallholder who",
+    n => Words(s"${count(n).en} stalls at a fair", ru(n, "прилавка", "прилавков").capitalize + " на ярмарке"),
+    n => Words(s"${count(n).en} stalls stand along one wall of a craft fair, numbered 1 to $n starting from the " +
+      "entrance, each run by one stallholder",
+      s"На ярмарке ремёсел вдоль стены стоят ${ru(n, "прилавка", "прилавков")}; они пронумерованы от 1 до $n, " +
+        "считая от входа, и за каждым торгует один человек"),
+    people(("Arthur", "Артур", "Артура"), ("Lena", "Лена", "Лены"), ("Timur", "Тимур", "Тимура"),
+      ("Marta", "Марта", "Марты"), ("Stepan", "Степан", "Степана"), ("Raisa", "Раиса", "Раисы"),
+      ("Kirill", "Кирилл", "Кирилла"), ("Polina", "Полина", "Полины")),
+    Vector(
+      feature("ware", "sells", "sell", "продаёт",
+        Words("Each sells a different ware", "Каждый продаёт свой товар"),
+        Words("What does {A} sell?", "Что продаёт {A}?"),
+        ("clay jugs", "clay jugs", "глиняные кувшины", "глиняные кувшины"), ("candles", "candles", "свечи", "свечи"),
+        ("soap", "soap", "мыло", "мыло"), ("lace", "lace", "кружево", "кружево"),
+        ("baskets", "baskets", "корзины", "корзины"), ("felt boots", "felt boots", "валенки", "валенки"),
+        ("wooden spoons", "wooden spoons", "деревянные ложки", "деревянные ложки")),
+      feature("decor", "decorates the stall with", "decorate the stall with", "украшает прилавок",
+        Words("Each decorates the stall in a different way", "У каждого прилавка своё украшение"),
+        Words("What does {A} decorate the stall with?", "Чем украшает прилавок {A}?"),
+        ("ribbons", "ribbons", "лентами", "ленты"), ("lanterns", "lanterns", "фонариками", "фонарики"),
+        ("flags", "flags", "флажками", "флажки"), ("flowers", "flowers", "цветами", "цветы"),
+        ("balloons", "balloons", "воздушными шарами", "воздушные шары"),
+        ("fir branches", "fir branches", "еловыми ветками", "еловые ветки")),
+      feature("wrap", "wraps purchases in", "wrap purchases in", "заворачивает покупки в",
+        Words("Each wraps purchases in something different", "У каждого своя обёртка для покупок"),
+        Words("What does {A} wrap purchases in?", "Во что заворачивает покупки {A}?"),
+        ("newspaper", "newspaper", "газету", "газета"), ("cloth", "cloth", "ткань", "ткань"),
+        ("foil", "foil", "фольгу", "фольга"), ("cellophane", "cellophane", "целлофан", "целлофан"),
+        ("burlap", "burlap", "мешковину", "мешковина"), ("parchment", "parchment", "пергамент", "пергамент")),
+      feature("treat", "treats customers to", "treat customers to", "угощает покупателей",
+        Words("Each treats customers to something different", "У каждого для покупателей своё угощение"),
+        Words("What does {A} treat customers to?", "Чем угощает покупателей {A}?"),
+        ("gingerbread", "gingerbread", "пряниками", "пряники"), ("nuts", "nuts", "орехами", "орехи"),
+        ("toffees", "toffees", "ирисками", "ириски"), ("raisins", "raisins", "изюмом", "изюм"),
+        ("waffles", "waffles", "вафлями", "вафли"), ("pretzels", "pretzels", "кренделями", "крендели"),
+        ("dried apricots", "dried apricots", "курагой", "курага"))),
+    n => Words(s"runs stall $n", s"торгует за прилавком $n"),
+    Words("runs the middle stall", "торгует за средним прилавком"),
+    Words("{A} trades somewhere nearer the entrance than {B}", "{A} торгует где-то между входом и прилавком {B}"),
+    Words("{A} trades somewhere farther from the entrance than {B}",
+      "{A} торгует где-то дальше {B}, если идти от входа"),
+    Words("{A} runs the very next stall after {B}", "{A} занимает следующий прилавок после {B}"),
+    Words("{A} runs the stall just before {B}", "{A} торгует со стороны входа за прилавком, соседним с прилавком {B}"),
+    Words("{A} and {B} run stalls side by side", "{A} и {B} торгуют за соседними прилавками"))
+
+  /** an order in time: contestants go before a jury one at a time, turn 1 the first */
+  private val kitchen: Setting = Setting(Kind.Places, "contestant", "the contestant who",
+    n => Words(s"${count(n).en} dishes for the jury",
+      ru(n, "участника", "участников").capitalize + " кулинарного конкурса"),
+    n => Words(s"${count(n).en} contestants in a cooking contest bring their dishes before the jury one at a time, " +
+      s"in turns numbered 1 (the first to go) to $n",
+      s"${ru(n, "участника", "участников").capitalize} кулинарного конкурса по одному выходят к жюри со своими " +
+        s"блюдами; выходы пронумерованы от 1 (самый первый) до $n"),
+    people(("Fedor", "Фёдор", "Фёдора"), ("Galina", "Галина", "Галины"), ("Ruslan", "Руслан", "Руслана"),
+      ("Inna", "Инна", "Инны"), ("Zakhar", "Захар", "Захара"), ("Lilia", "Лилия", "Лилии"),
+      ("Matvey", "Матвей", "Матвея"), ("Oksana", "Оксана", "Оксаны")),
+    Vector(
+      feature("dish", "cooks", "cook", "готовит",
+        Words("Each cooks a different dish", "Каждый готовит своё блюдо"),
+        Words("Which dish does {A} cook?", "Какое блюдо готовит {A}?"),
+        ("risotto", "risotto", "ризотто", "ризотто"), ("dumplings", "dumplings", "вареники", "вареники"),
+        ("pancakes", "pancakes", "блины", "блины"), ("goulash", "goulash", "гуляш", "гуляш"),
+        ("omelette", "an omelette", "омлет", "омлет"), ("fish soup", "fish soup", "уху", "уха"),
+        ("stuffed peppers", "stuffed peppers", "фаршированные перцы", "фаршированные перцы")),
+      feature("seasoning", "adds", "add", "добавляет",
+        Words("Each adds a different seasoning", "У каждого своя приправа"),
+        Words("Which seasoning does {A} add?", "Какую приправу добавляет {A}?"),
+        ("basil", "basil", "базилик", "базилик"), ("cinnamon", "cinnamon", "корицу", "корица"),
+        ("ginger", "ginger", "имбирь", "имбирь"), ("garlic", "garlic", "чеснок", "чеснок"),
+        ("mint", "mint", "мяту", "мята"), ("saffron", "saffron", "шафран", "шафран"),
+        ("bay leaf", "a bay leaf", "лавровый лист", "лавровый лист")),
+      feature("charm", "carries", "carry", "носит в кармане",
+        Words("Each carries a different lucky charm in a pocket", "У каждого в кармане свой талисман"),
+        Words("Which lucky charm does {A} carry?", "Какой талисман носит в кармане {A}?"),
+        ("coin", "a coin", "монету", "монета"), ("button", "a button", "пуговицу", "пуговица"),
+        ("chestnut", "a chestnut", "каштан", "каштан"), ("pebble", "a pebble", "камешек", "камешек"),
+        ("key", "a key", "ключ", "ключ"), ("shell", "a shell", "ракушку", "ракушка"),
+        ("tin soldier", "a tin soldier", "оловянного солдатика", "оловянный солдатик")),
+      feature("tune", "hums", "hum", "напевает",
+        Words("Each hums a different tune while cooking", "За готовкой каждый напевает свою мелодию"),
+        Words("What does {A} hum?", "Что напевает {A}?"),
+        ("waltz", "a waltz", "вальс", "вальс"), ("march", "a march", "марш", "марш"),
+        ("lullaby", "a lullaby", "колыбельную", "колыбельная"), ("tango", "a tango", "танго", "танго"),
+        ("polka", "a polka", "польку", "полька"), ("aria", "an aria", "арию", "ария"))),
+    n => Words(s"faces the jury in turn $n", s"выходит к жюри под номером $n"),
+    Words("faces the jury exactly in the middle of the order", "выходит к жюри ровно в середине очереди"),
+    Words("{A} faces the jury at some point before {B}", "{A} выходит к жюри раньше {B}"),
+    Words("{A} faces the jury at some point after {B}", "{A} выходит к жюри позже {B}"),
+    Words("{A} faces the jury straight after {B}", "{A} выходит к жюри сразу после {B}"),
+    Words("{A} faces the jury just before {B}", "{A} выходит к жюри ровно на один выход раньше {B}"),
+    Words("{A} and {B} have consecutive turns", "{A} и {B} выходят к жюри друг за другом, в том или ином порядке"))
+
+  /** a competition result: the final list of a photo contest, place 1 at its top */
+  private val photos: Setting = Setting(Kind.Places, "photographer", "the photographer who",
+    n => Words(s"${count(n).en} photographers", ru(n, "фотографа", "фотографов").capitalize),
+    n => Words(s"The jury of a photo contest has ranked ${count(n).en.toLowerCase} photographers; the final list " +
+      s"runs from place 1 at the top (the best picture) down to place $n, and no place is shared",
+      s"${ru(n, "фотографа", "фотографов").capitalize} ждут решения жюри фотоконкурса; итоговый список идёт " +
+        s"от места 1 наверху (лучший снимок) до места $n внизу, и каждое место достаётся одному"),
+    people(("Albert", "Альберт", "Альберта"), ("Bella", "Белла", "Беллы"), ("Vadim", "Вадим", "Вадима"),
+      ("Daria", "Дарья", "Дарьи"), ("Efim", "Ефим", "Ефима"), ("Zhanna", "Жанна", "Жанны"),
+      ("Rodion", "Родион", "Родиона"), ("Svetlana", "Светлана", "Светланы")),
+    Vector(
+      feature("subject", "submits a picture of", "submit a picture of", "выставляет снимок",
+        Words("Each submits a picture of something different", "У каждого на снимке своё"),
+        Words("What does {A} submit a picture of?", "Что на снимке, который выставляет {A}?"),
+        ("lighthouse", "a lighthouse", "маяка", "маяк"), ("waterfall", "a waterfall", "водопада", "водопад"),
+        ("heron", "a heron", "цапли", "цапля"), ("thunderstorm", "a thunderstorm", "грозы", "гроза"),
+        ("bridge", "a bridge", "моста", "мост"), ("hedgehog", "a hedgehog", "ежа", "ёж"),
+        ("old mill", "an old mill", "старой мельницы", "старая мельница")),
+      feature("gear", "shoots with", "shoot with", "снимает на",
+        Words("Each shoots with a different device", "Каждый снимает на своё устройство"),
+        Words("What does {A} shoot with?", "На что снимает {A}?"),
+        ("film camera", "a film camera", "плёночную камеру", "плёночная камера"),
+        ("phone", "a phone", "телефон", "телефон"), ("drone", "a drone", "дрон", "дрон"),
+        ("tablet", "a tablet", "планшет", "планшет"), ("laptop", "a laptop", "ноутбук", "ноутбук"),
+        ("camcorder", "a camcorder", "видеокамеру", "видеокамера")),
+      feature("print", "prints the picture on", "print the picture on", "печатает снимок на",
+        Words("Each prints the picture on a different material", "Каждый печатает снимок на своём материале"),
+        Words("What does {A} print the picture on?", "На чём печатает снимок {A}?"),
+        ("canvas", "canvas", "холсте", "холст"), ("metal", "metal", "металле", "металл"),
+        ("wood", "wood", "дереве", "дерево"), ("glass", "glass", "стекле", "стекло"),
+        ("cardboard", "cardboard", "картоне", "картон"), ("silk", "silk", "шёлке", "шёлк"),
+        ("glossy paper", "glossy paper", "глянцевой бумаге", "глянцевая бумага")),
+      feature("companion", "comes to the ceremony with", "come to the ceremony with", "приходит на церемонию с",
+        Words("Each comes to the award ceremony with a different companion",
+          "Каждый приходит на церемонию награждения со своим спутником"),
+        Words("Who does {A} come to the ceremony with?", "С кем приходит на церемонию {A}?"),
+        ("grandmother", "a grandmother", "бабушкой", "бабушка"), ("brother", "a brother", "братом", "брат"),
+        ("neighbour", "a neighbour", "соседом", "сосед"), ("niece", "a niece", "племянницей", "племянница"),
+        ("teacher", "a teacher", "учителем", "учитель"), ("daughter", "a daughter", "дочерью", "дочь"),
+        ("uncle", "an uncle", "дядей", "дядя"))),
+    n => Words(s"is awarded place $n", s"получает место $n"),
+    Words("ends up exactly in the middle of the final list", "оказывается ровно в середине итогового списка"),
+    Words("{A} is ranked somewhere above {B}", "{A} оказывается в итоговом списке где-то выше {B}"),
+    Words("{A} is ranked somewhere below {B}", "{A} оказывается в итоговом списке где-то ниже {B}"),
+    Words("{A} comes in the final list right after {B}", "{A} идёт в итоговом списке сразу после {B}"),
+    Words("{A} is ranked exactly one place above {B}", "{A} оказывается ровно на одно место выше {B}"),
+    Words("{A} and {B} are next to each other in the final list", "{A} и {B} стоят в итоговом списке рядом"))
+
+  val settings: Vector[(String, Grids.Setting)] =
+    Vector("anglers" -> anglers, "fair" -> fair, "kitchen" -> kitchen, "photos" -> photos)
+
+  val themes: Vector[Matching.Theme] = Vector(
+    Theme(Words("Desserts", "Десерты"),
+      Words("{P} each ordered a different dessert at the café: {L}.",
+        "{P} заказывают в кафе по одному десерту, у каждого свой: {L}."),
+      Words("It was not {P} who ordered the {V}.", "Заказ {Pof} — не {V}."),
+      Words("{P} ordered one of two things: the {V} or the {W}.", "Заказ {Pof} — {V} или же {W}."),
+      Words("Who ordered the {V}?", "Чей заказ — {V}?"),
+      Vector(Thing("strudel", "strudel", "штрудель", "штрудель"), Thing("eclair", "eclair", "эклер", "эклер"),
+        Thing("cheesecake", "cheesecake", "чизкейк", "чизкейк"), Thing("meringue", "meringue", "безе", "безе"),
+        Thing("sorbet", "sorbet", "сорбет", "сорбет"), Thing("pudding", "pudding", "пудинг", "пудинг"),
+        Thing("waffle", "waffle", "вафля", "вафля")),
+      people(("Ilya", "Илья", "Ильи"), ("Kira", "Кира", "Киры"), ("Lev", "Лев", "Льва"), ("Mila", "Мила", "Милы"),
+        ("Nazar", "Назар", "Назара"), ("Olga", "Ольга", "Ольги"), ("Taras", "Тарас", "Тараса"),
+        ("Ulyana", "Ульяна", "Ульяны"))),
+    Theme(Words("Raffle prizes", "Призы лотереи"),
+      Words("At the village raffle {P} each won a different prize: {L}.",
+        "В деревенской лотерее {P} выигрывают по одному призу, все призы разные: {L}."),
+      Words("{P} went home without the {V}.", "{P} уносит домой не {V}."),
+      Words("{P} went home with either the {V} or the {W}.", "{P} уносит домой либо {V}, либо {W}."),
+      Words("Who went home with the {V}?", "Кто уносит домой {V}?"),
+      Vector(Thing("kettle", "kettle", "чайник", "чайник"), Thing("lamp", "lamp", "лампа", "лампу"),
+        Thing("blanket", "blanket", "плед", "плед"), Thing("hammock", "hammock", "гамак", "гамак"),
+        Thing("telescope", "telescope", "телескоп", "телескоп"), Thing("globe", "globe", "глобус", "глобус"),
+        Thing("mirror", "mirror", "зеркало", "зеркало"),
+        Thing("alarm clock", "alarm clock", "будильник", "будильник")),
+      people(("Anton", "Антон", "Антона"), ("Varvara", "Варвара", "Варвары"), ("German", "Герман", "Германа"),
+        ("Emilia", "Эмилия", "Эмилии"), ("Yakov", "Яков", "Якова"), ("Lyuba", "Люба", "Любы"),
+        ("Robert", "Роберт", "Роберта"), ("Nonna", "Нонна", "Нонны"))))
+
+  val scales: Vector[Matching.Scale] = Vector[Scale](
+    scale(Words("stricter", "строже"), Words("more lenient", "мягче"), "strictest", "most lenient"),
+    scale(Words("more stubborn", "упрямее"), Words("more yielding", "уступчивее"), "most stubborn", "most yielding"),
+    scale(Words("more tanned", "загорелее"), Words("paler", "бледнее"), "most tanned", "palest"),
+    scale(Words("more modest", "скромнее"), Words("more boastful", "хвастливее"), "most modest", "most boastful"))

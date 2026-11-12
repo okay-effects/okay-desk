@@ -31,7 +31,7 @@ import scala.jdk.CollectionConverters.*
     const last = window.__steps.length ? window.__steps[window.__steps.length - 1][1] : null;
     if (t && t !== last) window.__steps.push([Math.round(performance.now()), t]);
   }).observe(document, { subtree: true, childList: true, characterData: true });""")
-  p.navigate(url)
+  p.navigate(url + (if url.contains("?") then "&" else "?") + "models")
   p.waitForSelector("button:text-is('Load the model')")
   p.click("button:text-is('Load the model')")
   p.waitForFunction("() => /readers on|cannot load/.test(document.body.textContent)")

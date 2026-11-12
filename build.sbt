@@ -18,6 +18,7 @@ ThisBuild / resolvers ++= Seq(
  * its answer's parsing — plain Scala: the JVM for the laws, the browser for the page */
 lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).in(file("core"))
   .settings(name := "okay-desk",
+    scalacOptions ++= Seq("-Xmax-inlines", "128"),
     libraryDependencies ++= Seq(
       "io.github.okay-effects" %%% "okay-datalog" % "0.1.0",
       "io.github.okay-effects" %%% "okay-inlay" % "0.1.0",
@@ -33,6 +34,7 @@ lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
 lazy val ui = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).in(file("ui")).dependsOn(core)
   .settings(name := "okay-desk-ui", publish / skip := true,
     libraryDependencies ++= Seq("io.github.okay-effects" %%% "okay-ui" % "0.1.0", "org.scalameta" %%% "munit" % "1.2.3" % Test))
+  .jsSettings(scalaJSLinkerConfig ~= { _.withESFeatures(_.withESVersion(org.scalajs.linker.interface.ESVersion.ES2018)) })
 
 /** the page: files opened in the browser, the model (WebLLM, WebGPU) in the page, the chat */
 lazy val web = (project in file("web")).enablePlugins(ScalaJSPlugin).dependsOn(ui.js)
@@ -42,7 +44,14 @@ lazy val web = (project in file("web")).enablePlugins(ScalaJSPlugin).dependsOn(u
     scalaJSLinkerConfig ~= (_.withModuleKind(org.scalajs.linker.interface.ModuleKind.NoModule)),
     libraryDependencies ++= Seq("io.github.okay-effects" %%% "okay-llm-qwen-browser" % "0.1.0"))
 
-lazy val root = (project in file(".")).aggregate(core.jvm, core.js, ui.jvm, ui.js, web).settings(publish / skip := true)
+/** The same exact handlers, linked separately so CPU work never occupies the page's event loop. */
+lazy val worker = (project in file("worker")).enablePlugins(ScalaJSPlugin).dependsOn(core.js)
+  .settings(name := "okay-desk-worker", publish / skip := true, scalaJSUseMainModuleInitializer := true,
+    scalaJSLinkerConfig ~= { _.withESFeatures(_.withESVersion(org.scalajs.linker.interface.ESVersion.ES2018)) },
+    scalaJSLinkerConfig ~= (_.withModuleKind(org.scalajs.linker.interface.ModuleKind.NoModule)))
+
+lazy val root = (project in file(".")).aggregate(core.jvm, core.js, ui.jvm, ui.js, web, worker)
+  .settings(publish / skip := true)
 
 /** THE BENCH (specs/data.md §3): the questions, in English and Russian, over sample tables with gold programs; each
  * model (mlx-scala, Apple's GPU) asked with the page's prompt; its program run by the exact handlers and compared to
