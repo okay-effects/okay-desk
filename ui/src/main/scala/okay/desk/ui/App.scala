@@ -37,7 +37,9 @@ object App:
     solving: Option[TaskList.Solving] = None,
     /** the model chosen by a person (a form, its buttons); without it the model is chosen and loaded by itself and
      * the chat says which it is and how it is */
-    chooser: Boolean = true)
+    chooser: Boolean = true,
+    /** the last task the statement reader answered: a short question after it asks about the same things */
+    told: Option[String] = None)
 
   enum Msg:
     case Go(place: String)
@@ -150,7 +152,8 @@ object App:
               case Some(reading) =>
                 val (said, read) = okay.desk.statement.Said.words(text, reading, russian)
                 pure(st.copy(solving = Some(TaskList.Solving(task, russian, from,
-                  reading.result.filter(_ => reading.shown))), log = st.log :+ Entry("model", said, None, read))) } }
+                  reading.result.filter(_ => reading.shown))), log = st.log :+ Entry("model", said, None, read),
+                  told = if reading.shown then Some(text) else st.told)) } }
       case Msg.RunTask(task, russian) =>
         task.opens.filterNot(u => s.tables.contains(nameOf(u).takeWhile(_ != '.')))
           .foldLeft(pure[State, R](s.copy(place = "chat")))((acc, u) => acc.flatMap(st => step[R](st, Msg.OpenUrl(u))))
@@ -159,7 +162,7 @@ object App:
       case Msg.CopyChat =>
         perform[Clipboard](Clipboard.Copy(transcript(s))).map(ok => s.copy(problem = None,
           notice = Some(if ok then "Chat copied." else "Could not copy the chat. Clipboard access is unavailable.")))
-      case Msg.ClearChat => pure(cleared.copy(place = "chat", log = Vector.empty, asking = None, hole = None,
+      case Msg.ClearChat => pure(cleared.copy(place = "chat", log = Vector.empty, asking = None, hole = None, told = None,
         chatVersion = s.chatVersion + 1, visibleProofs = Set.empty,
         puzzle = Puzzles.State(), reasoning = Reasoning.State(online = s.reasoning.online)))
       case Msg.ToggleProof(index) =>
@@ -234,24 +237,40 @@ object App:
             if q.isEmpty then pure(cleared)
             // A TASK TYPED IN THE CHAT (several sentences): the statement reader first — the model writes it down,
             // the exact solver answers; when the reader does not answer it, the chat's other ways, as before
-            else if !s.chooser && okay.desk.statement.Sentences.of(q).size >= 3 then
+            else if !s.chooser && (okay.desk.statement.Sentences.of(q).size >= 3 || followUp(s, q).nonEmpty) then
+              // A QUESTION AFTER A TASK ("Who drinks milk?" after the zebra): the task's conditions with this
+              // question read as one task — the same reader, the same exact solver; not sure, the chat's other ways
+              val text = followUp(s, q).getOrElse(q)
               val asked = cleared.copy(log = cleared.log :+ Entry("user", q))
               val ready = if asked.model.nonEmpty then pure[State, R](asked) else load[R](asked, asked.modelName)
               ready.flatMap { st =>
                 if st.model.isEmpty then Reasoning.start[R](st, q)
                 else busy[R](st, "the model reads the task into a formal statement, the exact solver solves it…")
-                  .flatMap(_ => Model.state[R](q)).flatMap {
+                  .flatMap(_ => Model.state[R](text)).flatMap {
+                    case Some(reading) if text != q && !reading.shown => Reasoning.start[R](st, q)
                     // answered, or read and doubted: the reader's words — the answer, or the sentence it is unsure
                     // of; a text it could not write down at all goes the chat's other ways
                     case Some(reading) if reading.shown || reading.statement.nonEmpty && reading.doubt.exists {
                         case _: okay.desk.statement.Reader.Doubt.Unsure | _: okay.desk.statement.Reader.Doubt.Unfamiliar
                           => true
                         case _ => false } =>
-                      val ru = okay.desk.statement.Reader.russian(q)
-                      val (said, read) = okay.desk.statement.Said.words(q, reading, ru)
-                      pure(st.copy(log = st.log :+ Entry("model", said, None, read)))
+                      val ru = okay.desk.statement.Reader.russian(text)
+                      val (said, read) = okay.desk.statement.Said.words(text, reading, ru)
+                      pure(st.copy(log = st.log :+ Entry("model", said, None, read),
+                        told = if text == q && reading.shown then Some(q) else st.told))
                     case _ => Reasoning.start[R](st, q) } }
             else Reasoning.start[R](cleared.copy(log = cleared.log :+ Entry("user", q)), q)
+
+  /** a short question after a task the reader answered: the task's conditions (its own questions left out) and
+   * this question, one text — or none: no task, or not a question, or a task of its own */
+  def followUp(s: State, q: String): Option[String] =
+    val asks = q.trim.endsWith("?") && okay.desk.statement.Sentences.of(q).size < 3
+    s.told.filter(_ => asks).map { task =>
+      // the task's own text, its questions cut out: the reader sees the conditions as they were written
+      val questions = okay.desk.statement.Sentences.of(task)
+        .filter(_.in(task).reverse.dropWhile(c => "\"»”’')".contains(c)).startsWith("?"))
+      val kept = questions.foldRight(task)((at, t) => t.substring(0, at.from) + t.substring(at.until)).trim
+      kept + (if kept.contains('\n') then "\n" else " ") + q.trim }
 
   /**
    * A STEP GOING ON, shown where the person is: on the chat, the conversation with the question and what was said

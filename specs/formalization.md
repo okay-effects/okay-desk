@@ -1011,3 +1011,13 @@ texture at most a third taller than needed, the shaders stop at `total`), so tas
 and a full pool lets go of other heights first, so it follows the work of now. With the phone's pool at 64 MB (24
 before): the second task made 16 textures and deleted 9 (was ~180 each), 158–160 MB between tasks, 191 MB at the
 peak (three tasks in a row). The trade: some 40 MB more held, nearly nothing freed late. Build 55c047bc2994.
+
+### 18.4 A question after a task (2026-11-12)
+
+On the iPhone, after the zebra was answered, "Who drinks milk?" went the chat's other ways ("needs external
+evidence"): a one-sentence text was never a task. It asks about the same things: the page keeps the last task the
+statement reader answered (`State.told`), and a short question after it is read with that task's conditions — the
+task's own text, its questions cut out, this question after them (`App.followUp`). The same reader, the same exact
+solver; a reading not sure of itself goes the chat's other ways, as before. Measured (phone profile): milk → the
+Englishman, water → the Norwegian, Kools → the Norwegian, each a whole reading of the task again (no state of the
+last reading reused — a later step could keep the statement and read the question alone).
