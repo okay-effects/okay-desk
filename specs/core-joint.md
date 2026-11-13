@@ -153,3 +153,25 @@ far better sign near the corpus (Collection en 83 / 0, Unseen en 176 / 3) but no
 share a base and a corpus, and err ALIKE. A gate needs a check independent of the reading: the exact side's (every
 clue used, the statement said back and compared with the text), or a reader of another kind. Open; every candidate
 is now measured in minutes.
+
+## 9. A gate learnt from outcomes (2026-11-13)
+
+`scripts/learnt-gate.scala`: a logistic model of "this shown answer is wrong" over a task's signs — each head's least
+margin relative to its bar, for the adapted reader and the plain one; the words and pairs never met; whether the two
+readers give the same answer; the language — fitted on the answers of the UNSEEN families and the TEACHER'S TEST
+(645), its threshold chosen there for at most 1% wrong among shown; judged on sets it never saw. Seed 1, the adapted
+reader (shown / wrong among shown):
+
+| set | the page's gate (novelty) | the learnt gate, α 1% | α 3% |
+|---|---|---|---|
+| Collection en | 63 / 0 | **75 / 0** | 78 / 0 |
+| Collection ru | 63 / 0 | **75 / 0** | 78 / 0 |
+| Sealed en | 0 / 0 | 1 / 0 | 3 / 0 |
+| Sealed ru | 0 / 0 | 8 / 1 | 21 / 2 |
+| Test en / ru | 295 / 1, 294 / 0 | 296 / 1, 300 / 0 | 299 / 1, 300 / 0 |
+
+The strongest sign is the two readers agreeing (weight −3.6 on the log-odds of wrong); a word never met counts, as
+one sign among others instead of a veto. On the collection twelve more right answers in each language, none wrong.
+The sealed set stays asked: there the reader is right on a part only, and the gate says so. One seed, one fit —
+the next check is seeds 2 and 3. Next: the gate on the page — `statement.Gate` in core (one implementation for the
+bench and the browser), its weights a file beside the readers; the page reads a task with both readers.
