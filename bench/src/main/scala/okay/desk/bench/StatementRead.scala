@@ -149,190 +149,201 @@ object StatementRead:
     println(s"d=$d; ${loaded.fold("trained here")(_ => "the reader loaded, nothing trained")}; $minutes")
 
     // READ_SEED: the heads' start and the order of their examples — for the spread of one configuration
-    val seed = env("READ_SEED", 1)
-    val heads = loaded.fold(Heads(d, seed))(_.heads)
-    println(s"seed: $seed")
-    val known = loaded.fold(Known())(_.known)
-    // (its bars are set on Validate below; the sets after it are read with them, as the page reads)
-    var trained = Reader.Trained(mean, std, heads, known, Map.empty, echo)
-    println(s"echo: $echo")
-    val rnd = scala.util.Random(seed)
-    val tagExamples = Vector.newBuilder[(Array[Float], Vector[String], String)]
-    val frameExamples = Vector.fill(depth)(Vector.newBuilder[(Vector[Array[Float]], Int)])
-    val linkExamples = Vector.newBuilder[(Array[Float], Vector[Array[Float]], Int)]
-    val pickExamples = Vector.newBuilder[(Vector[Array[Float]], Vector[Vector[Array[Float]]], Int)]
-    var (read, out) = (0, 0)
-    // READ_TEACHER: the teacher's rewrites of training tasks (`StatementTeacher`), in four languages, taught too
-    val taught = sys.env.get("READ_TEACHER").toVector.flatMap(p => StatementTeacher.load(Path.of(p)))
-      .filter(_._1.split == "Train")
-    println(s"the teacher's rewrites taught: ${taught.size} (" +
-      taught.groupBy(_._1.language).toVector.sortBy(_._1).map((l, xs) => s"$l ${xs.size}").mkString(", ") + ")")
-    def learn(s: okay.desk.statement.Writing.Stated): Unit =
-      val seen = see(reading, s.text, norm)
-      read += 1
-      if read % 100 == 0 then println(s"train: $read texts read; $minutes")
-      Assemble.decisions(s.statement, s.text, seen.tokens) match
-        case Left(_) => out += 1
-        case Right(golden) =>
-          known.learn(seen, golden.tags)
-          for (x, tag) <- seen.reads.zip(golden.tags) if tag != Tag.Outside || rnd.nextFloat() < 0.35f do
-            tagExamples += ((x, tagNames, tag.toString))
-          val asked = Asked(golden.choices)
-          val _ = Assemble.assemble(s.statement.problem, s.text, seen.tokens, golden.tags, asked)
-          for (i, k, con) <- asked.frames if k < depth do
-            frameExamples(k) += ((seen.each(i), heads.frameClass(con)))
-          for (at, earlier, of) <- asked.links if earlier.nonEmpty do
-            val (q, keys) = heads.linkKeys(seen, at, earlier)
-            linkExamples += ((q, keys, of.fold(earlier.size)(earlier.indexOf)))
-          for (i, attributes, p) <- asked.picks if attributes.size > 1 do
-            val (q, keys) = heads.pickKeys(seen, i, attributes)
-            pickExamples += ((q, keys, p))
-    if loaded.isEmpty then
-      for item <- train; (_, s) <- stated(item.task) do learn(s)
-      for (_, s) <- taught do learn(s)
-    val (tagX, linkX, pickX) = (tagExamples.result(), linkExamples.result(), pickExamples.result())
-    println(s"train: $read texts, $out not in reach; examples: tags ${tagX.size}, frames " +
-      s"${frameExamples.map(_.result().size).mkString("/")}, links ${linkX.size}, picks ${pickX.size}; $minutes")
+    // READ_SEEDS (e.g. 1,2,3): the heads trained and measured for each seed over states the model gave ONCE — the
+    // model is the same for every seed, so each text is read once (READ_SAVE and READ_OUT then carry {seed})
+    val seeds = sys.env.get("READ_SEEDS").map(_.split(",").toVector.map(_.trim.toInt))
+      .getOrElse(Vector(env("READ_SEED", 1)))
+    // (kept only when there is more than one seed: some 10 GB of states for the whole corpus)
+    val memo = scala.collection.mutable.HashMap.empty[String, Seen]
+    def seenOf(text: String): Seen =
+      if seeds.size == 1 then see(reading, text, norm) else memo.getOrElseUpdate(text, see(reading, text, norm))
+    def perSeed(path: String, seed: Int): String = path.replace("{seed}", seed.toString)
+    require(seeds.size == 1 || Vector("READ_SAVE", "READ_OUT").forall(k => sys.env.get(k).forall(_.contains("{seed}"))),
+      "with several seeds, READ_SAVE and READ_OUT name each seed's file by {seed}")
+    for seed <- seeds do
+      val heads = loaded.fold(Heads(d, seed))(_.heads)
+      println(s"seed: $seed")
+      val known = loaded.fold(Known())(_.known)
+      // (its bars are set on Validate below; the sets after it are read with them, as the page reads)
+      var trained = Reader.Trained(mean, std, heads, known, Map.empty, echo)
+      println(s"echo: $echo")
+      val rnd = scala.util.Random(seed)
+      val tagExamples = Vector.newBuilder[(Array[Float], Vector[String], String)]
+      val frameExamples = Vector.fill(depth)(Vector.newBuilder[(Vector[Array[Float]], Int)])
+      val linkExamples = Vector.newBuilder[(Array[Float], Vector[Array[Float]], Int)]
+      val pickExamples = Vector.newBuilder[(Vector[Array[Float]], Vector[Vector[Array[Float]]], Int)]
+      var (read, out) = (0, 0)
+      // READ_TEACHER: the teacher's rewrites of training tasks (`StatementTeacher`), in four languages, taught too
+      val taught = sys.env.get("READ_TEACHER").toVector.flatMap(p => StatementTeacher.load(Path.of(p)))
+        .filter(_._1.split == "Train")
+      println(s"the teacher's rewrites taught: ${taught.size} (" +
+        taught.groupBy(_._1.language).toVector.sortBy(_._1).map((l, xs) => s"$l ${xs.size}").mkString(", ") + ")")
+      def learn(s: okay.desk.statement.Writing.Stated): Unit =
+        val seen = seenOf(s.text)
+        read += 1
+        if read % 100 == 0 then println(s"train: $read texts read; $minutes")
+        Assemble.decisions(s.statement, s.text, seen.tokens) match
+          case Left(_) => out += 1
+          case Right(golden) =>
+            known.learn(seen, golden.tags)
+            for (x, tag) <- seen.reads.zip(golden.tags) if tag != Tag.Outside || rnd.nextFloat() < 0.35f do
+              tagExamples += ((x, tagNames, tag.toString))
+            val asked = Asked(golden.choices)
+            val _ = Assemble.assemble(s.statement.problem, s.text, seen.tokens, golden.tags, asked)
+            for (i, k, con) <- asked.frames if k < depth do
+              frameExamples(k) += ((seen.each(i), heads.frameClass(con)))
+            for (at, earlier, of) <- asked.links if earlier.nonEmpty do
+              val (q, keys) = heads.linkKeys(seen, at, earlier)
+              linkExamples += ((q, keys, of.fold(earlier.size)(earlier.indexOf)))
+            for (i, attributes, p) <- asked.picks if attributes.size > 1 do
+              val (q, keys) = heads.pickKeys(seen, i, attributes)
+              pickExamples += ((q, keys, p))
+      if loaded.isEmpty then
+        for item <- train; (_, s) <- stated(item.task) do learn(s)
+        for (_, s) <- taught do learn(s)
+      val (tagX, linkX, pickX) = (tagExamples.result(), linkExamples.result(), pickExamples.result())
+      println(s"train: $read texts, $out not in reach; examples: tags ${tagX.size}, frames " +
+        s"${frameExamples.map(_.result().size).mkString("/")}, links ${linkX.size}, picks ${pickX.size}; $minutes")
 
-    if loaded.isEmpty then
-      heads.tags.train(tagX, epochs = env("READ_TAG_EPOCHS", 6), lr = 0.05f, seed = seed, batch = 32)
-      println(s"tags trained; $minutes")
-      for (head, k) <- heads.frames.zipWithIndex do
-        head.train(frameExamples(k).result(), epochs = env("READ_FRAME_EPOCHS", 10))
-      println(s"frames trained; $minutes")
-      // a pointer in small batches: `Pointer.train` is one step over all it is given
-      for _ <- 1 to env("READ_POINTER_EPOCHS", 12) do
-        rnd.shuffle(linkX).grouped(64).foreach(heads.link.train(_, steps = 1, lr = 0.05f))
-      heads.pick.train(pickX, epochs = env("READ_PICK_EPOCHS", 15), lr = 0.05f)
-    val picked = pickX.count((q, keys, y) => top(heads.pick.scores(q, keys))._1 == y)
-    def fit(p: Probes.Pointer, xs: Vector[(Array[Float], Vector[Array[Float]], Int)]): String =
-      f"${100.0 * xs.count((q, keys, y) => p.predict(q, keys) == y) / math.max(1, xs.size)}%.1f%%"
-    println(s"pointers trained, on Train: link ${fit(heads.link, linkX)}, pick $picked of ${pickX.size}; $minutes")
+      if loaded.isEmpty then
+        heads.tags.train(tagX, epochs = env("READ_TAG_EPOCHS", 6), lr = 0.05f, seed = seed, batch = 32)
+        println(s"tags trained; $minutes")
+        for (head, k) <- heads.frames.zipWithIndex do
+          head.train(frameExamples(k).result(), epochs = env("READ_FRAME_EPOCHS", 10))
+        println(s"frames trained; $minutes")
+        // a pointer in small batches: `Pointer.train` is one step over all it is given
+        for _ <- 1 to env("READ_POINTER_EPOCHS", 12) do
+          rnd.shuffle(linkX).grouped(64).foreach(heads.link.train(_, steps = 1, lr = 0.05f))
+        heads.pick.train(pickX, epochs = env("READ_PICK_EPOCHS", 15), lr = 0.05f)
+      val picked = pickX.count((q, keys, y) => top(heads.pick.scores(q, keys))._1 == y)
+      def fit(p: Probes.Pointer, xs: Vector[(Array[Float], Vector[Array[Float]], Int)]): String =
+        f"${100.0 * xs.count((q, keys, y) => p.predict(q, keys) == y) / math.max(1, xs.size)}%.1f%%"
+      println(s"pointers trained, on Train: link ${fit(heads.link, linkX)}, pick $picked of ${pickX.size}; $minutes")
 
-    def drawn(split: Drawn.Split, count: Int): Vector[Judged] =
-      measure(split.toString, Drawn.items(split, count).map(i => i.family -> i.task))
-    def measure(name: String, tasks: Vector[(String, Task)]): Vector[Judged] =
-      val judged = for (family, task) <- tasks; (language, s) <- stated(task) yield
-        val seen = see(reading, s.text, norm)
-        Assemble.decisions(s.statement, s.text, seen.tokens).toOption.map { golden =>
-          val (decisions, outcome) = judge(seen, s.statement, golden, trained)
-          Judged(language, family, decisions, outcome) }
-      println(s"$name: ${judged.size} texts, ${judged.count(_.isEmpty)} not in reach; $minutes")
-      judged.flatten
+      def drawn(split: Drawn.Split, count: Int): Vector[Judged] =
+        measure(split.toString, Drawn.items(split, count).map(i => i.family -> i.task))
+      def measure(name: String, tasks: Vector[(String, Task)]): Vector[Judged] =
+        val judged = for (family, task) <- tasks; (language, s) <- stated(task) yield
+          val seen = seenOf(s.text)
+          Assemble.decisions(s.statement, s.text, seen.tokens).toOption.map { golden =>
+            val (decisions, outcome) = judge(seen, s.statement, golden, trained)
+            Judged(language, family, decisions, outcome) }
+        println(s"$name: ${judged.size} texts, ${judged.count(_.isEmpty)} not in reach; $minutes")
+        judged.flatten
 
-    val validate = drawn(Drawn.Split.Validate, env("READ_VALIDATE", 300))
-    val kinds = Vector("tag", "piece", "frame", "link", "pick")
-    // THE GATE'S BARS: by language and kind of decision, the least margin that 99 of 100 answers of Validate have
-    def wrongOf(j: Judged): Boolean = j.outcome.how == "silent" || j.outcome.how == "signalled"
-    val quantile = (for language <- Vector("en", "ru"); k <- Reader.kinds yield
-      val of = validate.filter(j => j.language == language && j.outcome.definite).flatMap(_.outcome.least.get(k)).sorted
-      s"$language $k" -> of.lift((of.size - 1) / 100).getOrElse(0f)).toMap
-    // READ_GATE=conformal: ONE threshold per language on a text's least margin in units of its kind's median,
-    // the smallest whose shown answers of Validate keep (wrong + 1) / (shown + 1) under READ_ALPHA (0.01) — the
-    // finite-sample bound of conformal risk control (a guarantee for texts like Validate's, none beyond them)
-    val conformal = (for language <- Vector("en", "ru") yield
-      val mine = validate.filter(j => j.language == language && j.outcome.definite)
-      val scale = Reader.kinds.map(k => k -> {
-        val ms = mine.flatMap(_.outcome.least.get(k)).sorted
-        math.max(1e-3f, ms.lift(ms.size / 2).getOrElse(1f)) }).toMap
-      def score(j: Judged): Float = Reader.kinds.flatMap(k => j.outcome.least.get(k).map(_ / scale(k))).minOption
-        .getOrElse(Float.MaxValue)
-      val alpha = sys.env.get("READ_ALPHA").flatMap(_.toDoubleOption).getOrElse(0.01)
-      val t = (0f +: mine.map(score).sorted).find { t =>
-        val shown = mine.filter(score(_) >= t)
-        (shown.count(wrongOf) + 1.0) / (shown.size + 1.0) <= alpha }.getOrElse(Float.MaxValue)
-      Reader.kinds.map(k => s"$language $k" -> (if t == Float.MaxValue then t else t * scale(k)))).flatten.toMap
-    val bars = loaded.map(_.bars).getOrElse(if sys.env.get("READ_GATE").contains("conformal") then conformal else quantile)
-    println("the gate: " + sys.env.getOrElse("READ_GATE", "quantile"))
-    trained = trained.copy(bars = bars)
-    println("the gate's bars: " + bars.toVector.sorted.map((k, m) => f"$k $m%.2f").mkString(", "))
-    // as the page decides: one answer, no word never met, and every margin over its bar — or the exact side
-    // decided the sentences the heads were unsure of
-    def closed(j: Judged): Boolean = j.outcome.definite && j.outcome.news == (0, 0) && (j.outcome.settled ||
-      Reader.kinds.forall(k => j.outcome.least.get(k).forall(_ >= bars(s"${j.language} $k"))))
-    for path <- sys.env.get("READ_SAVE") do
-      Files.write(Path.of(path), Reader.write(trained.copy(bars = bars)))
-      println(s"the reader is in $path: ${Files.size(Path.of(path)) / 1024} KB, words ${known.words.size}, " +
-        s"pairs ${known.pairs.size}")
+      val validate = drawn(Drawn.Split.Validate, env("READ_VALIDATE", 300))
+      val kinds = Vector("tag", "piece", "frame", "link", "pick")
+      // THE GATE'S BARS: by language and kind of decision, the least margin that 99 of 100 answers of Validate have
+      def wrongOf(j: Judged): Boolean = j.outcome.how == "silent" || j.outcome.how == "signalled"
+      val quantile = (for language <- Vector("en", "ru"); k <- Reader.kinds yield
+        val of = validate.filter(j => j.language == language && j.outcome.definite).flatMap(_.outcome.least.get(k)).sorted
+        s"$language $k" -> of.lift((of.size - 1) / 100).getOrElse(0f)).toMap
+      // READ_GATE=conformal: ONE threshold per language on a text's least margin in units of its kind's median,
+      // the smallest whose shown answers of Validate keep (wrong + 1) / (shown + 1) under READ_ALPHA (0.01) — the
+      // finite-sample bound of conformal risk control (a guarantee for texts like Validate's, none beyond them)
+      val conformal = (for language <- Vector("en", "ru") yield
+        val mine = validate.filter(j => j.language == language && j.outcome.definite)
+        val scale = Reader.kinds.map(k => k -> {
+          val ms = mine.flatMap(_.outcome.least.get(k)).sorted
+          math.max(1e-3f, ms.lift(ms.size / 2).getOrElse(1f)) }).toMap
+        def score(j: Judged): Float = Reader.kinds.flatMap(k => j.outcome.least.get(k).map(_ / scale(k))).minOption
+          .getOrElse(Float.MaxValue)
+        val alpha = sys.env.get("READ_ALPHA").flatMap(_.toDoubleOption).getOrElse(0.01)
+        val t = (0f +: mine.map(score).sorted).find { t =>
+          val shown = mine.filter(score(_) >= t)
+          (shown.count(wrongOf) + 1.0) / (shown.size + 1.0) <= alpha }.getOrElse(Float.MaxValue)
+        Reader.kinds.map(k => s"$language $k" -> (if t == Float.MaxValue then t else t * scale(k)))).flatten.toMap
+      val bars = loaded.map(_.bars).getOrElse(if sys.env.get("READ_GATE").contains("conformal") then conformal else quantile)
+      println("the gate: " + sys.env.getOrElse("READ_GATE", "quantile"))
+      trained = trained.copy(bars = bars)
+      println("the gate's bars: " + bars.toVector.sorted.map((k, m) => f"$k $m%.2f").mkString(", "))
+      // as the page decides: one answer, no word never met, and every margin over its bar — or the exact side
+      // decided the sentences the heads were unsure of
+      def closed(j: Judged): Boolean = j.outcome.definite && j.outcome.news == (0, 0) && (j.outcome.settled ||
+        Reader.kinds.forall(k => j.outcome.least.get(k).forall(_ >= bars(s"${j.language} $k"))))
+      for path <- sys.env.get("READ_SAVE").map(perSeed(_, seed)) do
+        Files.write(Path.of(path), Reader.write(trained.copy(bars = bars)))
+        println(s"the reader is in $path: ${Files.size(Path.of(path)) / 1024} KB, words ${known.words.size}, " +
+          s"pairs ${known.pairs.size}")
 
-    def pct(n: Int, of: Int): String = if of == 0 then "—" else f"${100.0 * n / of}%.1f%%"
-    // `totals`: a set whose families and wordings its reader's author must not see (the sealed one) — sums only
-    def report(name: String, js: Vector[Judged], totals: Boolean = false): Unit =
-      def family(j: Judged): String = if totals then "-" else j.family
-      // READ_OUT: every task's outcome and least margins, a line each — a gate is tried on them without reading again
-      for path <- sys.env.get("READ_OUT") do
-        Files.writeString(Path.of(path), js.map(j => (Vector(name, j.language, family(j), j.outcome.how) ++
-          (j.outcome.least.toVector ++ Vector("word" -> -j.outcome.news._1.toFloat,
-            "pair" -> -j.outcome.news._2.toFloat)).sorted.map((k, m) => s"$k=$m") :+ s"answer=${j.outcome.answer}")
-          .mkString("\t") + "\n").mkString,
-          StandardOpenOption.CREATE, StandardOpenOption.APPEND)
-      for language <- js.map(_.language).distinct.sorted do
-        val mine = js.filter(_.language == language)
-        val ds = mine.flatMap(_.decisions)
-        val perKind = kinds.map { k =>
-          val of = ds.filter(_.kind == k)
-          s"$k ${pct(of.count(_.right), of.size)} of ${of.size}" }
-        val hows = Vector("exact", "harmless", "signalled", "refused", "silent")
-        val (shown, open) = mine.partition(closed)
-        println(s"$name $language: ${mine.size} texts")
-        println("  decisions: " + perKind.mkString("; "))
-        println("  no gate:   " + hows.map(h => s"$h ${pct(mine.count(_.outcome.how == h), mine.size)}").mkString(", "))
-        println(s"  the gate:  asked ${pct(open.size, mine.size)}, shown ${shown.size}: " +
-          hows.map(h => s"$h ${shown.count(_.outcome.how == h)}").mkString(", "))
-        val decided = mine.filter(_.outcome.settled)
-        println(s"  the solver decided ${decided.size}: " +
-          hows.map(h => s"$h ${decided.count(_.outcome.how == h)}").mkString(", "))
-      if !totals then details(js)
-    def details(js: Vector[Judged]): Unit =
-      val families = js.groupBy(_.family).toVector.sortBy(_._1).map { (f, of) =>
-        s"$f ${pct(of.count(j => j.outcome.how == "exact" || j.outcome.how == "harmless"), of.size)}" }
-      println("  right by family (no gate): " + families.mkString(", "))
-      val wrong = js.flatMap(j => j.decisions.filter(x => !x.right && x.kind != "piece").map(x =>
-        s"${j.family.takeWhile(!_.isDigit)} ${j.language} ${x.kind} ${x.said}"))
-      println("  wrong decisions: " + wrong.groupBy(identity).view.mapValues(_.size).toVector.sortBy(-_._2).take(24)
-        .map((w, n) => s"$n × $w").mkString("; "))
-      def words(kind: String) = js.flatMap(j => j.decisions.filter(x => x.kind == kind && x.words.nonEmpty)
-        .map(x => s"${j.language} ${x.said}: ${x.words}"))
-      println("  picks: " + js.flatMap(_.decisions.filter(_.kind == "pick").map(_.said)).groupBy(identity).view
-        .mapValues(_.size).toVector.sortBy(_._1).map((w, n) => s"$n × $w").mkString("; "))
-      println("  wrong picks: " + words("pick").take(16).mkString("; "))
-      println("  wrong frames: " + js.flatMap(j => j.decisions.filter(x => x.kind == "frame" && x.words.nonEmpty)
-        .map(x => s"${j.family} ${x.said}: ${x.words}")).take(60).mkString("; "))
-      println("  wrong tags: " + words("tag").groupBy(identity).view.mapValues(_.size).toVector.sortBy(-_._2).take(30)
-        .map((w, n) => s"$n × $w").mkString("; "))
+      def pct(n: Int, of: Int): String = if of == 0 then "—" else f"${100.0 * n / of}%.1f%%"
+      // `totals`: a set whose families and wordings its reader's author must not see (the sealed one) — sums only
+      def report(name: String, js: Vector[Judged], totals: Boolean = false): Unit =
+        def family(j: Judged): String = if totals then "-" else j.family
+        // READ_OUT: every task's outcome and least margins, a line each — a gate is tried on them without reading again
+        for path <- sys.env.get("READ_OUT").map(perSeed(_, seed)) do
+          Files.writeString(Path.of(path), js.map(j => (Vector(name, j.language, family(j), j.outcome.how) ++
+            (j.outcome.least.toVector ++ Vector("word" -> -j.outcome.news._1.toFloat,
+              "pair" -> -j.outcome.news._2.toFloat)).sorted.map((k, m) => s"$k=$m") :+ s"answer=${j.outcome.answer}")
+            .mkString("\t") + "\n").mkString,
+            StandardOpenOption.CREATE, StandardOpenOption.APPEND)
+        for language <- js.map(_.language).distinct.sorted do
+          val mine = js.filter(_.language == language)
+          val ds = mine.flatMap(_.decisions)
+          val perKind = kinds.map { k =>
+            val of = ds.filter(_.kind == k)
+            s"$k ${pct(of.count(_.right), of.size)} of ${of.size}" }
+          val hows = Vector("exact", "harmless", "signalled", "refused", "silent")
+          val (shown, open) = mine.partition(closed)
+          println(s"$name $language: ${mine.size} texts")
+          println("  decisions: " + perKind.mkString("; "))
+          println("  no gate:   " + hows.map(h => s"$h ${pct(mine.count(_.outcome.how == h), mine.size)}").mkString(", "))
+          println(s"  the gate:  asked ${pct(open.size, mine.size)}, shown ${shown.size}: " +
+            hows.map(h => s"$h ${shown.count(_.outcome.how == h)}").mkString(", "))
+          val decided = mine.filter(_.outcome.settled)
+          println(s"  the solver decided ${decided.size}: " +
+            hows.map(h => s"$h ${decided.count(_.outcome.how == h)}").mkString(", "))
+        if !totals then details(js)
+      def details(js: Vector[Judged]): Unit =
+        val families = js.groupBy(_.family).toVector.sortBy(_._1).map { (f, of) =>
+          s"$f ${pct(of.count(j => j.outcome.how == "exact" || j.outcome.how == "harmless"), of.size)}" }
+        println("  right by family (no gate): " + families.mkString(", "))
+        val wrong = js.flatMap(j => j.decisions.filter(x => !x.right && x.kind != "piece").map(x =>
+          s"${j.family.takeWhile(!_.isDigit)} ${j.language} ${x.kind} ${x.said}"))
+        println("  wrong decisions: " + wrong.groupBy(identity).view.mapValues(_.size).toVector.sortBy(-_._2).take(24)
+          .map((w, n) => s"$n × $w").mkString("; "))
+        def words(kind: String) = js.flatMap(j => j.decisions.filter(x => x.kind == kind && x.words.nonEmpty)
+          .map(x => s"${j.language} ${x.said}: ${x.words}"))
+        println("  picks: " + js.flatMap(_.decisions.filter(_.kind == "pick").map(_.said)).groupBy(identity).view
+          .mapValues(_.size).toVector.sortBy(_._1).map((w, n) => s"$n × $w").mkString("; "))
+        println("  wrong picks: " + words("pick").take(16).mkString("; "))
+        println("  wrong frames: " + js.flatMap(j => j.decisions.filter(x => x.kind == "frame" && x.words.nonEmpty)
+          .map(x => s"${j.family} ${x.said}: ${x.words}")).take(60).mkString("; "))
+        println("  wrong tags: " + words("tag").groupBy(identity).view.mapValues(_.size).toVector.sortBy(-_._2).take(30)
+          .map((w, n) => s"$n × $w").mkString("; "))
 
-    report("Validate", validate)
-    report("Test", drawn(Drawn.Split.Test, env("READ_TEST", 300)))
-    report("Unseen", drawn(Drawn.Split.Unseen, env("READ_UNSEEN", 300)))
-    report("Sealed", drawn(Drawn.Split.Sealed, env("READ_SEALED", 300)), totals = true)
-    // READ_TEACHER_TEST: the teacher's rewrites of TEST tasks — the held-out measure of every language it wrote
-    for p <- sys.env.get("READ_TEACHER_TEST") do
-      val written = StatementTeacher.load(Path.of(p)).filter(_._1.split == "Test")
-      val judged = written.flatMap { (k, s) =>
-        val seen = see(reading, s.text, norm)
-        Assemble.decisions(s.statement, s.text, seen.tokens).toOption.map { golden =>
-          val (decisions, outcome) = judge(seen, s.statement, golden, trained)
-          Judged(k.language, k.family, decisions, outcome) } }
-      println(s"Teacher test: ${written.size} texts, ${written.size - judged.size} not in reach; $minutes")
-      report("Teacher test", judged)
-    // THE STANDARD SET: the tasks of the collection this statement language states (§5), none of them in the corpus
-    report("Collection", measure("Collection", Tasks.entries.map(e => e.kind.toString -> e.task)
-      .filter((_, t) => t.stated.exists(_.en.statement.problem == Problem.Assign))))
-    // THE SAVED FILE, READ BACK: the collection by the reader a page would load — what is shown, and of it wrong
-    for path <- sys.env.get("READ_SAVE"); saved <- Reader.parse(Files.readAllBytes(Path.of(path))).toOption do
-      val read = for e <- Tasks.entries; (language, s) <- stated(e.task)
-        if s.statement.problem == Problem.Assign yield
-        val r = Reader.read(saved, see(reading, s.text, saved.norm))
-        (language, s, r, Faults.result(s.statement, s.text).toOption)
-      for language <- Vector("en", "ru") do
-        val mine = read.filter(_._1 == language)
-        val shown = mine.filter(_._3.shown)
-        println(s"Collection by the saved file, $language: ${mine.size} texts, shown ${shown.size}, of them wrong " +
-          s"${shown.count((_, _, r, right) => r.result != right)}; asked ${mine.size - shown.size}")
-      for (language, s, r, _) <- read.filter(_._3.shown).take(4); st <- r.statement; result <- r.result do
-        println(s"  e.g. ${result.mkString(", ")} — said as ${Reader.answer(s.text, st, result, language == "ru")}")
-      // why the rest is asked: each doubt in its words, with how many texts it stops
-      val doubts = read.filterNot(_._3.shown).map((language, s, r, _) =>
-        okay.desk.statement.Said.words(s.text, r, language == "ru")._1.take(170))
-      for (words, n) <- doubts.groupBy(identity).view.mapValues(_.size).toVector.sortBy(-_._2).take(40) do
-        println(s"  asked $n ×: $words")
+      report("Validate", validate)
+      report("Test", drawn(Drawn.Split.Test, env("READ_TEST", 300)))
+      report("Unseen", drawn(Drawn.Split.Unseen, env("READ_UNSEEN", 300)))
+      report("Sealed", drawn(Drawn.Split.Sealed, env("READ_SEALED", 300)), totals = true)
+      // READ_TEACHER_TEST: the teacher's rewrites of TEST tasks — the held-out measure of every language it wrote
+      for p <- sys.env.get("READ_TEACHER_TEST") do
+        val written = StatementTeacher.load(Path.of(p)).filter(_._1.split == "Test")
+        val judged = written.flatMap { (k, s) =>
+          val seen = seenOf(s.text)
+          Assemble.decisions(s.statement, s.text, seen.tokens).toOption.map { golden =>
+            val (decisions, outcome) = judge(seen, s.statement, golden, trained)
+            Judged(k.language, k.family, decisions, outcome) } }
+        println(s"Teacher test: ${written.size} texts, ${written.size - judged.size} not in reach; $minutes")
+        report("Teacher test", judged)
+      // THE STANDARD SET: the tasks of the collection this statement language states (§5), none of them in the corpus
+      report("Collection", measure("Collection", Tasks.entries.map(e => e.kind.toString -> e.task)
+        .filter((_, t) => t.stated.exists(_.en.statement.problem == Problem.Assign))))
+      // THE SAVED FILE, READ BACK: the collection by the reader a page would load — what is shown, and of it wrong
+      for path <- sys.env.get("READ_SAVE").map(perSeed(_, seed)); saved <- Reader.parse(Files.readAllBytes(Path.of(path))).toOption do
+        val read = for e <- Tasks.entries; (language, s) <- stated(e.task)
+          if s.statement.problem == Problem.Assign yield
+          val r = Reader.read(saved, seenOf(s.text))
+          (language, s, r, Faults.result(s.statement, s.text).toOption)
+        for language <- Vector("en", "ru") do
+          val mine = read.filter(_._1 == language)
+          val shown = mine.filter(_._3.shown)
+          println(s"Collection by the saved file, $language: ${mine.size} texts, shown ${shown.size}, of them wrong " +
+            s"${shown.count((_, _, r, right) => r.result != right)}; asked ${mine.size - shown.size}")
+        for (language, s, r, _) <- read.filter(_._3.shown).take(4); st <- r.statement; result <- r.result do
+          println(s"  e.g. ${result.mkString(", ")} — said as ${Reader.answer(s.text, st, result, language == "ru")}")
+        // why the rest is asked: each doubt in its words, with how many texts it stops
+        val doubts = read.filterNot(_._3.shown).map((language, s, r, _) =>
+          okay.desk.statement.Said.words(s.text, r, language == "ru")._1.take(170))
+        for (words, n) <- doubts.groupBy(identity).view.mapValues(_.size).toVector.sortBy(-_._2).take(40) do
+          println(s"  asked $n ×: $words")
