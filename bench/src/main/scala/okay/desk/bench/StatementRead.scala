@@ -130,6 +130,7 @@ object StatementRead:
       (!i.family.startsWith("comparison") || i.family.drop("comparison".length).toInt < scales))
     println(s"train: ${train.size} tasks of ${train.map(_.family).distinct.size} families")
 
+    val store = sys.env.get("READ_STORE").map(p => StateStore(Path.of(p)))
     // READ_LOAD: a reader saved before (READ_SAVE) measured again with nothing trained — its heads, words, bars;
     // the sets are read in minutes instead of half an hour
     val loaded = sys.env.get("READ_LOAD").map(p =>
@@ -137,7 +138,8 @@ object StatementRead:
     loaded.foreach(l => require(l.echo == echo, s"the reader was trained with echo ${l.echo}; READ_ECHO is $echo"))
     // the states' mean and deviation, from the first tasks of Train
     val (mean, std) = loaded.fold {
-      val sample = train.take(20).flatMap(i => stated(i.task)).flatMap((_, s) => see(reading, s.text, identity).states)
+      def raw(text: String): Seen = store.fold(see(reading, text, identity))(_.seen(text, see(reading, text, identity)))
+      val sample = train.take(20).flatMap(i => stated(i.task)).flatMap((_, s) => raw(s.text).states)
       val d = sample.head.length
       val mean = Array.tabulate(d)(i => (sample.map(_(i).toDouble).sum / sample.size).toFloat)
       val std = Array.tabulate(d)(i => math.max(1e-3,
@@ -155,8 +157,14 @@ object StatementRead:
       .getOrElse(Vector(env("READ_SEED", 1)))
     // (kept only when there is more than one seed: some 10 GB of states for the whole corpus)
     val memo = scala.collection.mutable.HashMap.empty[String, Seen]
-    def seenOf(text: String): Seen =
-      if seeds.size == 1 then see(reading, text, norm) else memo.getOrElseUpdate(text, see(reading, text, norm))
+    // READ_STORE=<dir>: the core's states kept on disk (`StateStore`) — read once by the model, then from the disk by
+    // every later run over the same core (name the directory by the core: base, adapter, echo)
+    def seenOf(text: String): Seen = store match
+      case Some(st) =>
+        val raw = st.seen(text, see(reading, text, identity))
+        Seen(raw.text, raw.tokens, raw.states.map(norm))
+      case None =>
+        if seeds.size == 1 then see(reading, text, norm) else memo.getOrElseUpdate(text, see(reading, text, norm))
     def perSeed(path: String, seed: Int): String = path.replace("{seed}", seed.toString)
     require(seeds.size == 1 || Vector("READ_SAVE", "READ_OUT").forall(k => sys.env.get(k).forall(_.contains("{seed}"))),
       "with several seeds, READ_SAVE and READ_OUT name each seed's file by {seed}")
@@ -236,7 +244,8 @@ object StatementRead:
       // THE GATE'S BARS: by language and kind of decision, the least margin that 99 of 100 answers of Validate have
       def wrongOf(j: Judged): Boolean = j.outcome.how == "silent" || j.outcome.how == "signalled"
       val quantile = (for language <- Vector("en", "ru"); k <- Reader.kinds yield
-        val of = validate.filter(j => j.language == language && j.outcome.definite).flatMap(_.outcome.least.get(k)).sorted
+        val of = validate.filter(j => j.language == language && j.outcome.definite)
+          .flatMap(_.outcome.least.get(k)).sorted
         s"$language $k" -> of.lift((of.size - 1) / 100).getOrElse(0f)).toMap
       // READ_GATE=conformal: ONE threshold per language on a text's least margin in units of its kind's median,
       // the smallest whose shown answers of Validate keep (wrong + 1) / (shown + 1) under READ_ALPHA (0.01) — the
@@ -253,7 +262,8 @@ object StatementRead:
           val shown = mine.filter(score(_) >= t)
           (shown.count(wrongOf) + 1.0) / (shown.size + 1.0) <= alpha }.getOrElse(Float.MaxValue)
         Reader.kinds.map(k => s"$language $k" -> (if t == Float.MaxValue then t else t * scale(k)))).flatten.toMap
-      val bars = loaded.map(_.bars).getOrElse(if sys.env.get("READ_GATE").contains("conformal") then conformal else quantile)
+      val bars = loaded.map(_.bars)
+        .getOrElse(if sys.env.get("READ_GATE").contains("conformal") then conformal else quantile)
       println("the gate: " + sys.env.getOrElse("READ_GATE", "quantile"))
       trained = trained.copy(bars = bars)
       println("the gate's bars: " + bars.toVector.sorted.map((k, m) => f"$k $m%.2f").mkString(", "))
@@ -270,7 +280,8 @@ object StatementRead:
       // `totals`: a set whose families and wordings its reader's author must not see (the sealed one) — sums only
       def report(name: String, js: Vector[Judged], totals: Boolean = false): Unit =
         def family(j: Judged): String = if totals then "-" else j.family
-        // READ_OUT: every task's outcome and least margins, a line each — a gate is tried on them without reading again
+        // READ_OUT: every task's outcome and least margins, a line each — a gate is tried on them without reading
+        // again
         for path <- sys.env.get("READ_OUT").map(perSeed(_, seed)) do
           Files.writeString(Path.of(path), js.map(j => (Vector(name, j.language, family(j), j.outcome.how) ++
             (j.outcome.least.toVector ++ Vector("word" -> -j.outcome.news._1.toFloat,
@@ -287,7 +298,8 @@ object StatementRead:
           val (shown, open) = mine.partition(closed)
           println(s"$name $language: ${mine.size} texts")
           println("  decisions: " + perKind.mkString("; "))
-          println("  no gate:   " + hows.map(h => s"$h ${pct(mine.count(_.outcome.how == h), mine.size)}").mkString(", "))
+          println("  no gate:   " +
+            hows.map(h => s"$h ${pct(mine.count(_.outcome.how == h), mine.size)}").mkString(", "))
           println(s"  the gate:  asked ${pct(open.size, mine.size)}, shown ${shown.size}: " +
             hows.map(h => s"$h ${shown.count(_.outcome.how == h)}").mkString(", "))
           val decided = mine.filter(_.outcome.settled)
@@ -330,7 +342,8 @@ object StatementRead:
       report("Collection", measure("Collection", Tasks.entries.map(e => e.kind.toString -> e.task)
         .filter((_, t) => t.stated.exists(_.en.statement.problem == Problem.Assign))))
       // THE SAVED FILE, READ BACK: the collection by the reader a page would load — what is shown, and of it wrong
-      for path <- sys.env.get("READ_SAVE").map(perSeed(_, seed)); saved <- Reader.parse(Files.readAllBytes(Path.of(path))).toOption do
+      for path <- sys.env.get("READ_SAVE").map(perSeed(_, seed))
+          saved <- Reader.parse(Files.readAllBytes(Path.of(path))).toOption do
         val read = for e <- Tasks.entries; (language, s) <- stated(e.task)
           if s.statement.problem == Problem.Assign yield
           val r = Reader.read(saved, seenOf(s.text))
