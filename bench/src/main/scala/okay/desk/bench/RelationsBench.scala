@@ -83,8 +83,10 @@ object RelationsBench:
     val home = sys.props("user.home")
     val dir = Path.of(sys.env.getOrElse("SMALL_DIR", home +
       "/.cache/huggingface/hub/models--local--Qwen3-0.6B-4bit-cut19-vocab-p12-m4/snapshots/main"))
-    val on = ComputeReading(dir, 12, OnMlx())
-    val classes = FactReader.parse(Files.readString(Path.of(home + "/.cache/okay-desk/facts-readers-small.json")))
+    // LAYERS: the model's last layer; FACTS_FILE: the fact reader trained on the same model
+    val on = ComputeReading(dir, sys.env.get("LAYERS").map(_.toInt).getOrElse(12), OnMlx())
+    val classes = FactReader.parse(Files.readString(Path.of(sys.env.getOrElse("FACTS_FILE",
+      home + "/.cache/okay-desk/facts-readers-small.json"))))
       .fold(sys.error, identity)
     val kinds = FactReader.Kinds.dropRight(1) ++ Relations.kinds
     val trPairs = pairs(forms ++ negativeForms(forms, 0) ++ uncertain(forms, 0), 160, 11) ++
@@ -119,7 +121,7 @@ object RelationsBench:
         if i % 1000 == 0 then println(s"training $i/$steps")
         probe.train(Vector.fill(64)(data(rnd.nextInt(data.size))), steps = 1, lr = 0.01f)
     fit(kind, globals, 6000); fit(roles, words, 6000)
-    def params(km: Float, rm: Float) = FactReader.Parameters(12, mean, std,
+    def params(km: Float, rm: Float) = FactReader.Parameters(sys.env.get("LAYERS").map(_.toInt).getOrElse(12), mean, std,
       kind.w.toVector.map(_.toVector), kind.b.toVector, roles.w.toVector.map(_.toVector), roles.b.toVector, km, rm)
     def evaluate(data: Vector[(Pair, FactReader.Features)], reader: FactReader.Reader): (Int, Int) =
       val accepted = data.flatMap((p, f) => FactReader.combined(reader, classes, "test", p.text, f).map(p -> _))

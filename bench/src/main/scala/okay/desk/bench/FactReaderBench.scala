@@ -77,7 +77,9 @@ object FactReaderBench:
     val home = sys.props("user.home")
     val dir = Path.of(sys.env.getOrElse("SMALL_DIR", home +
       "/.cache/huggingface/hub/models--local--Qwen3-0.6B-4bit-cut19-vocab-p12-m4/snapshots/main"))
-    val reading = ComputeReading(dir, 12, OnMlx())
+    // LAYERS: the model's last layer (the student's 12; another core's its own)
+    val layers = sys.env.get("LAYERS").map(_.toInt).getOrElse(12)
+    val reading = ComputeReading(dir, layers, OnMlx())
     val training = pairs(train, 512, 1,
       Vector("Moby", "Alice", "Bob", "New York", "Белла", "Моби", "green box", "whale", "bird", "robot"))
     val validation = pairs(validate, 32, 2, Vector("Dora", "North Bank", "Дина", "Юрий"))
@@ -102,14 +104,14 @@ object FactReaderBench:
         else if w.from >= p.b.from && w.until <= p.b.until then "b" else "outside"
       FactReader.roleFeatures(norm(state), norm(f.last)) -> tag
     }}
-    val rnd = scala.util.Random(4)
+    val rnd = scala.util.Random(sys.env.get("FACT_SEED").map(_.toInt).getOrElse(4))   // FACT_SEED: the spread of a training
     def fit(probe: Probes.Softmax, examples: Vector[(Array[Float], String)], steps: Int): Unit =
       for i <- 0 until steps do
         if i % 250 == 0 then println(s"training $i/$steps…")
         probe.train(Vector.fill(64)(examples(rnd.nextInt(examples.size))), steps = 1, lr = 0.01f)
     fit(kind, globalPairs, 2400)
     fit(roles, wordPairs, 3600)
-    def parameters(km: Float, rm: Float) = FactReader.Parameters(12, mean, std,
+    def parameters(km: Float, rm: Float) = FactReader.Parameters(layers, mean, std,
       kind.w.toVector.map(_.toVector), kind.b.toVector, roles.w.toVector.map(_.toVector), roles.b.toVector, km, rm)
     def measure(data: Vector[(Pair, FactReader.Features)], km: Float, rm: Float): (Int, Int) =
       val reader = FactReader.Reader(parameters(km, rm))
@@ -125,7 +127,7 @@ object FactReaderBench:
       .getOrElse(sys.error("no validation setting without accepted errors; do not ship this reader"))
     val (km, rm, validationScore) = chosen
     val testScore = measure(te, km, rm)
-    println(s"12-layer fact reader: validation=$validationScore/${va.size}, test=$testScore/${te.size}; " +
+    println(s"$layers-layer fact reader: validation=$validationScore/${va.size}, test=$testScore/${te.size}; " +
       s"margins=$km/$rm")
     for (p, f) <- te do
       val out = FactReader.Reader(parameters(km, rm)).read("test", p.text, f)
@@ -147,7 +149,10 @@ object FactReaderBench:
       audit("Perhaps Europa is a planet.", "other", "Europa", "planet"),
       audit("Europa is outside the class planet.", "not-fact", "Europa", "planet"),
       audit("Europa не принадлежит классу «планета».", "not-fact", "Europa", "планета"))
-    val auditScore = measure(states(auditPairs), km, rm)
+    val auditStates = states(auditPairs)
+    for (p, f) <- auditStates; r <- FactReader.Reader(parameters(km, rm)).read("audit", p.text, f)
+      if r.kind != p.kind || r.a != p.a || r.b != p.b do println(s"AUDIT WRONG: $p -> $r")
+    val auditScore = measure(auditStates, km, rm)
     println(s"post-development regressions: $auditScore/${auditPairs.size}")
     require(auditScore._1 >= 3 && auditScore._2 == 0, "modifier/polarity regression; do not ship this reader")
     val out = Path.of(args.headOption.getOrElse(home + "/.cache/okay-desk/facts-readers-small.json"))
