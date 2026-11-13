@@ -72,7 +72,36 @@ tasks); whether λ can keep the data readers intact while the tags move; what an
 
 ## 6. Results
 
-(filled as they come)
+### The first adapter (2026-11-13): r32
+
+Heads of split A (2000 Train tasks, echo 2, `joint/headsA.bin`); the adapter: rank 32 on every projection, lr 1e-4,
+λ 0.1, one epoch over 4,437 texts (split B en+ru and the teacher's 437 rewrites), 30 min on the M4; the heads' loss on
+texts they had not seen 0.16 → 0.02–0.06. Then the reader trained afresh by the page's recipe over the adapted core,
+seeds 1–3 (`joint/r32-{1,2,3}.txt`), against heads alone (`e2b-{1,2,3}.txt`). Exact with no gate, %:
+
+| set | heads alone (3 seeds) | heads + adapter (3 seeds) |
+|---|---|---|
+| Test en / ru | 96.7–99.7 / 97.3–99.7 | 99.3–99.7 / 99.7–100 |
+| Unseen en / ru | 59–72 / 40–55 | 69–90 / 65 |
+| **Sealed en** | 40–45 | **47–63** |
+| **Sealed ru** | 6.0–9.0 | **23.7–27.0** |
+| Teacher test en / ru | 19–28 / 20–36 | 25–39 / 28–48 |
+| Teacher test uk / pl | 6.3 / 5–11 | 25–34 / 16–37 |
+| Collection en / ru | 74–91 / 69–76 | 95–100 / 89–92 |
+
+Every set above the baseline's range on every seed, except the teacher's English and Russian (overlapping, 25–36 en
+mixed). **Question 3 answered: heads over frozen states were not enough; the core trained through them reads other
+hands' wording and the sealed families far better** — the sealed Russian tripled, where six compressed cores before
+(core-next.md) moved it by ±3.
+
+Silent wrong answers with no gate rose on Sealed (en 10–13 → 10–14, ru 4–5 → 8–10: more answered, a share of them
+wrong); WITH the page's gate there are none in either (Sealed fully asked by the novelty sign in both; Collection
+shown en 61–63 / ru 60–63, every one right — heads alone showed ru 58–63 with 3–8 not right).
+
+The other readers of the base, on the adapted core: the data readers' sample 13/13, 13/13 (unchanged); the fact
+reader 2 wrong on its test (the contract asks 0) — the pull λ 0.1 does not keep the fact sentences' states. So the
+adapter is a MODULE OF THE ABILITY: on while a logic task is read, off for data questions and facts (the base
+unchanged for them by construction). Its cost: 21.7 MB beside the 122 MB base (rank 32 kept at 64 by the export).
 
 ## 7. After the measure: one training pipeline, okay-forge generalized (agreed with the operator, 2026-11-13)
 
