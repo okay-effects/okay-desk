@@ -42,6 +42,12 @@ if [ -f "$STATEMENT" ]; then v=$(echo "$v$(md5 -q "$STATEMENT")" | md5 -q | cut 
 # the logic ability's adapter (specs/core-joint.md §6), on while a task is read
 STATEMENT_ADAPTER=${STATEMENT_ADAPTER:-$HOME/.cache/okay-desk/statement-adapter.safetensors}
 if [ -f "$STATEMENT_ADAPTER" ]; then v=$(echo "$v$(md5 -q "$STATEMENT_ADAPTER")" | md5 -q | cut -c1-12); fi
+# with it, the reader over the plain base and the learnt gate (specs/core-joint.md §9)
+STATEMENT_PLAIN=${STATEMENT_PLAIN:-$HOME/.cache/okay-desk/statement-plain.reader}
+STATEMENT_GATE=${STATEMENT_GATE:-$HOME/.cache/okay-desk/statement.gate}
+for f in "$STATEMENT_PLAIN" "$STATEMENT_GATE"; do
+  if [ -f "$f" ]; then v=$(echo "$v$(md5 -q "$f")" | md5 -q | cut -c1-12); fi
+done
 sed -i "" "s#src=\"main.js\"#src=\"main.js?v=$v\"#" "$out/index.html"
 rm -rf "$out/sample" && cp -r web/page/sample "$out/"
 # the data's own words (§29), a file a table: the examples'
@@ -62,6 +68,8 @@ if [ -f "$RELATIONS" ]; then cp "$RELATIONS" "$out/model-small/relations-v1.skil
 STATEMENT=${STATEMENT:-$HOME/.cache/okay-desk/statement-reader.bin}
 if [ -f "$STATEMENT" ]; then cp "$STATEMENT" "$out/model-small/statement.reader"; fi
 if [ -f "$STATEMENT_ADAPTER" ]; then cp "$STATEMENT_ADAPTER" "$out/model-small/statement-adapter.safetensors"; fi
+if [ -f "$STATEMENT_PLAIN" ]; then cp "$STATEMENT_PLAIN" "$out/model-small/statement-plain.reader"; fi
+if [ -f "$STATEMENT_GATE" ]; then cp "$STATEMENT_GATE" "$out/model-small/statement.gate"; fi
 # Explicit experimental ?understanding path; the normal chat keeps the measured legacy readers.
 if [ -f "$SEMANTIC_ADAPTER" ]; then
   mkdir -p "$out/model-understanding"

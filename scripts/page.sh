@@ -26,6 +26,10 @@ STATEMENT=${STATEMENT:-$HOME/.cache/okay-desk/statement-reader.bin}
 if [ -f "$STATEMENT" ]; then cp "$STATEMENT" "$web/model-small/statement.reader"; fi
 STATEMENT_ADAPTER=${STATEMENT_ADAPTER:-$HOME/.cache/okay-desk/statement-adapter.safetensors}
 if [ -f "$STATEMENT_ADAPTER" ]; then cp "$STATEMENT_ADAPTER" "$web/model-small/statement-adapter.safetensors"; fi
+STATEMENT_PLAIN=${STATEMENT_PLAIN:-$HOME/.cache/okay-desk/statement-plain.reader}
+if [ -f "$STATEMENT_PLAIN" ]; then cp "$STATEMENT_PLAIN" "$web/model-small/statement-plain.reader"; fi
+STATEMENT_GATE=${STATEMENT_GATE:-$HOME/.cache/okay-desk/statement.gate}
+if [ -f "$STATEMENT_GATE" ]; then cp "$STATEMENT_GATE" "$web/model-small/statement.gate"; fi
 
 # another server on the port would answer instead of this build (a stale one did, §29): refuse to measure it
 if lsof -iTCP:8734 -sTCP:LISTEN > /dev/null 2>&1; then echo "port 8734 is taken: $(lsof -iTCP:8734 -sTCP:LISTEN | tail -1)"; exit 1; fi

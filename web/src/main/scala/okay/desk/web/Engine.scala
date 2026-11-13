@@ -5,7 +5,7 @@ import okay.desk.skill.{Adapted, NativeCompiler, OnQwen, Read, Readers as Skill,
 import okay.desk.calc.{Context, Den, Fill, Grammar, Language, Strategy, Term, Ty, Dialogue}
 import okay.desk.ui.Model
 import okay.desk.know.{FactReader, Knowledge}
-import okay.desk.statement.Reader
+import okay.desk.statement.{Reader, Span}
 import okay.llm.compute.{OnCpu, OnWebGl2, OnWebGpu}
 import okay.llm.qwen.{Qwen3Compute, Qwen3Config, Safetensors, Tensors, Tokenizer}
 import okay.scala3.*
@@ -31,6 +31,9 @@ object Engine:
   /** THE LOGIC ABILITY'S ADAPTER (specs/core-joint.md §6): the core trained through the statement reader's heads,
    * beside the unchanged base — on while a task is read, off for data questions and facts */
   private var logicAdapter: Option[Adapted] = None
+  /** the reader over the plain base and the learnt gate (specs/core-joint.md §9), when the model's files have them */
+  private var plainReader: Option[Reader.Trained] = None
+  private var statementGate: Option[okay.desk.statement.Gate] = None
   private var authorQuestion = ""
   private var authorContext = ""
   private var authorHistory = Vector.empty[(String, String)]
@@ -160,7 +163,7 @@ object Engine:
     Option(on).foreach(_.close())
     memoryInfo = () => (0L, 0L)
     on = null; skill = null; blocksOf = None; factReader = None; relationReader = None
-    statementReader = None; generator = None; logicAdapter = None
+    statementReader = None; generator = None; logicAdapter = None; plainReader = None; statementGate = None
     val old = engine
     engine = null
     if old == null then Future.unit
@@ -188,6 +191,12 @@ object Engine:
           .recover { case _ => None }
       logic <- if understanding then Future.successful(None) else
         fetch(Execution.versioned(s"$dir/statement-adapter.safetensors")).map(Some(_)).recover { case _ => None }
+      plain <- if understanding then Future.successful(None) else
+        fetch(Execution.versioned(s"$dir/statement-plain.reader")).map(b => Reader.parse(new Int8Array(b).toArray).toOption)
+          .recover { case _ => None }
+      gated <- if understanding then Future.successful(None) else
+        fetch(Execution.versioned(s"$dir/statement.gate")).map(b => okay.desk.statement.Gate.parse(text(b)).toOption)
+          .recover { case _ => None }
       gpu <- OnWebGpu.create()
       device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 64L * 1048576 else 96L * 1048576,
         headsAtOnce = if phone then 2 else 16, maximum = if phone then 512L * 1048576 else 1536L * 1048576,
@@ -225,6 +234,8 @@ object Engine:
         case _ => () => (0L, 0L)
       on = OnQwen(model, tok, if understanding then config.layers else layer, ensure)
       statementReader = stated.filter(_.heads.d == config.hidden)
+      plainReader = plain.filter(_.heads.d == config.hidden)
+      statementGate = gated
       factReader = if adapter.nonEmpty then None else
         facts.filter(r => r.parameters.layer == layer && r.parameters.mean.size == config.hidden)
       relationReader = if adapter.nonEmpty then None else
@@ -256,12 +267,27 @@ object Engine:
       // the forward of a task said twice keeps every layer's keys and values for reuse — some 100 MB for a long
       // task; nothing reuses them here, and a phone frees a texture late: they are let go before and after
       on.clearCache()
-      logicAdapter.foreach(_.active = true)
       // the states asked once, nothing kept, a layer's keys and values let go as the next is computed
       val once: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => op match
         case Read.States(ids, at) => Execution.model.submit(on.statesOnce(ids, at)).asInstanceOf[Future[X]]
         case other => reading(other)
-      Read.future(Reader.see[Async + Read](text, trained.norm, trained.echo).map(Reader.read(trained, _)), once)
+      def readWith(r: Reader.Trained, adapted: Boolean): Future[Reader.Reading] =
+        logicAdapter.foreach(_.active = adapted)
+        Read.future(Reader.see[Async + Read](text, r.norm, r.echo).map(Reader.read(r, _)), once)
+      // THE LEARNT GATE (specs/core-joint.md §9): with the plain reader and the gate beside the adapted one, the task
+      // is read twice — over the base, then over the adapted core — and the gate decides what is shown
+      val decided = (plainReader, statementGate, logicAdapter) match
+        case (Some(plain), Some(gate), Some(_)) =>
+          for
+            b <- readWith(plain, adapted = false)
+            a <- readWith(trained, adapted = true)
+          yield
+            val shown = gate.shows(a, trained.bars, b, plain.bars, Reader.russian(text))
+            if shown then a.copy(doubt = None)
+            else if a.result.isEmpty then a
+            else a.copy(doubt = a.doubt.orElse(Some(Reader.Doubt.Unsure(Span(0, text.length)))))
+        case _ => readWith(trained, adapted = true)
+      decided
         .map(Option(_)).recover { case e =>
           // a failure on this device is said where the person sees it, not passed by in silence
           status(s"the statement reader failed on this device: ${e.getMessage}")

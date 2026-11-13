@@ -21,16 +21,20 @@ import scala.jdk.CollectionConverters.*
   val (a, barsA) = load(args(0), args(1))
   val (b, barsB) = load(args(2), args(3))
   val alpha = args.lift(4).map(_.toDouble).getOrElse(0.01)
+  // the gate's file for the page (`statement.Gate`): a sixth argument
+  val written = args.lift(5)
   val kinds = Vector("tag", "frame", "link", "pick")
   def answered(r: Row) = r.how != "refused"
   def right(r: Row) = r.how == "exact" || r.how == "harmless"
+  // the language as the page tells it: Cyrillic (ru, uk) or not (en, pl) — `Reader.russian`, `statement.Gate`
+  def page(r: Row): String = if r.lang == "ru" || r.lang == "uk" then "ru" else "en"
   def rel(r: Row, bars: Map[String, Float], k: String): Double =
-    r.m.get(k).fold(3.0)(m => math.max(-3.0, math.min(3.0, m / math.max(1e-3, bars.getOrElse(s"${r.lang} $k", 1f)).toDouble - 1)))
+    r.m.get(k).fold(3.0)(m => math.max(-3.0, math.min(3.0, m / math.max(1e-3, bars.getOrElse(s"${page(r)} $k", 1f)).toDouble - 1)))
   def features(i: Int): Array[Double] =
     val (x, y) = (a(i), b(i))
     Array(1.0) ++ kinds.map(rel(x, barsA, _)) ++ kinds.map(rel(y, barsB, _)) ++ Array(
       math.log1p(-x.m.getOrElse("word", 0f).toDouble), math.log1p(-x.m.getOrElse("pair", 0f).toDouble),
-      if answered(y) && y.answer == x.answer then 1.0 else 0.0, if x.lang == "ru" then 1.0 else 0.0)
+      if answered(y) && y.answer == x.answer then 1.0 else 0.0, if page(x) == "ru" then 1.0 else 0.0)
   val fit = a.indices.filter(i => answered(a(i)) && (a(i).set == "Unseen" || a(i).set == "Teacher test"))
   val xs = fit.map(features); val ys = fit.map(i => if right(a(i)) then 0.0 else 1.0)
   val w = new Array[Double](xs.head.length)
@@ -44,6 +48,9 @@ import scala.jdk.CollectionConverters.*
   val t = scored.indices.reverse.find { n =>
     val shown = scored.take(n + 1); shown.count(!_._2).toDouble / shown.size <= alpha }.map(n => scored(n)._1)
     .getOrElse(0.0)
+  for path <- written do
+    Files.writeString(Path.of(path), s"weights ${w.mkString(" ")}\nthreshold $t\n")
+    println(s"written $path")
   println(f"fitted on ${fit.size} answers of Unseen and the teacher's test; threshold p(wrong) ≤ $t%.3f; weights " +
     w.map(v => f"$v%.2f").mkString(" "))
   println(f"${"set"}%-16s ${"shown"}%6s ${"right"}%6s ${"wrong"}%6s  of")
