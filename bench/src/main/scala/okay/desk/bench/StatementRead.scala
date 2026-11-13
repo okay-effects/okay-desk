@@ -130,21 +130,29 @@ object StatementRead:
       (!i.family.startsWith("comparison") || i.family.drop("comparison".length).toInt < scales))
     println(s"train: ${train.size} tasks of ${train.map(_.family).distinct.size} families")
 
+    // READ_LOAD: a reader saved before (READ_SAVE) measured again with nothing trained — its heads, words, bars;
+    // the sets are read in minutes instead of half an hour
+    val loaded = sys.env.get("READ_LOAD").map(p =>
+      Reader.parse(Files.readAllBytes(Path.of(p))).fold(e => sys.error(s"$p: $e"), identity))
+    loaded.foreach(l => require(l.echo == echo, s"the reader was trained with echo ${l.echo}; READ_ECHO is $echo"))
     // the states' mean and deviation, from the first tasks of Train
-    val sample = train.take(20).flatMap(i => stated(i.task)).flatMap((_, s) => see(reading, s.text, identity).states)
-    val d = sample.head.length
-    val mean = Array.tabulate(d)(i => (sample.map(_(i).toDouble).sum / sample.size).toFloat)
-    val std = Array.tabulate(d)(i => math.max(1e-3,
-      math.sqrt(sample.map(x => math.pow(x(i) - mean(i), 2)).sum / sample.size)).toFloat)
+    val (mean, std) = loaded.fold {
+      val sample = train.take(20).flatMap(i => stated(i.task)).flatMap((_, s) => see(reading, s.text, identity).states)
+      val d = sample.head.length
+      val mean = Array.tabulate(d)(i => (sample.map(_(i).toDouble).sum / sample.size).toFloat)
+      val std = Array.tabulate(d)(i => math.max(1e-3,
+        math.sqrt(sample.map(x => math.pow(x(i) - mean(i), 2)).sum / sample.size)).toFloat)
+      (mean, std) }(l => (l.mean, l.std))
+    val d = mean.length
     def norm(x: Array[Float]): Array[Float] =
       Array.tabulate(d)(i => math.max(-4f, math.min(4f, (x(i) - mean(i)) / std(i))))
-    println(s"d=$d, tokens of a text: ${sample.size / 40} on average; $minutes")
+    println(s"d=$d; ${loaded.fold("trained here")(_ => "the reader loaded, nothing trained")}; $minutes")
 
     // READ_SEED: the heads' start and the order of their examples — for the spread of one configuration
     val seed = env("READ_SEED", 1)
-    val heads = Heads(d, seed)
+    val heads = loaded.fold(Heads(d, seed))(_.heads)
     println(s"seed: $seed")
-    val known = Known()
+    val known = loaded.fold(Known())(_.known)
     // (its bars are set on Validate below; the sets after it are read with them, as the page reads)
     var trained = Reader.Trained(mean, std, heads, known, Map.empty, echo)
     println(s"echo: $echo")
@@ -179,21 +187,23 @@ object StatementRead:
           for (i, attributes, p) <- asked.picks if attributes.size > 1 do
             val (q, keys) = heads.pickKeys(seen, i, attributes)
             pickExamples += ((q, keys, p))
-    for item <- train; (_, s) <- stated(item.task) do learn(s)
-    for (_, s) <- taught do learn(s)
+    if loaded.isEmpty then
+      for item <- train; (_, s) <- stated(item.task) do learn(s)
+      for (_, s) <- taught do learn(s)
     val (tagX, linkX, pickX) = (tagExamples.result(), linkExamples.result(), pickExamples.result())
     println(s"train: $read texts, $out not in reach; examples: tags ${tagX.size}, frames " +
       s"${frameExamples.map(_.result().size).mkString("/")}, links ${linkX.size}, picks ${pickX.size}; $minutes")
 
-    heads.tags.train(tagX, epochs = env("READ_TAG_EPOCHS", 6), lr = 0.05f, seed = seed, batch = 32)
-    println(s"tags trained; $minutes")
-    for (head, k) <- heads.frames.zipWithIndex do
-      head.train(frameExamples(k).result(), epochs = env("READ_FRAME_EPOCHS", 10))
-    println(s"frames trained; $minutes")
-    // a pointer in small batches: `Pointer.train` is one step over all it is given
-    for _ <- 1 to env("READ_POINTER_EPOCHS", 12) do
-      rnd.shuffle(linkX).grouped(64).foreach(heads.link.train(_, steps = 1, lr = 0.05f))
-    heads.pick.train(pickX, epochs = env("READ_PICK_EPOCHS", 15), lr = 0.05f)
+    if loaded.isEmpty then
+      heads.tags.train(tagX, epochs = env("READ_TAG_EPOCHS", 6), lr = 0.05f, seed = seed, batch = 32)
+      println(s"tags trained; $minutes")
+      for (head, k) <- heads.frames.zipWithIndex do
+        head.train(frameExamples(k).result(), epochs = env("READ_FRAME_EPOCHS", 10))
+      println(s"frames trained; $minutes")
+      // a pointer in small batches: `Pointer.train` is one step over all it is given
+      for _ <- 1 to env("READ_POINTER_EPOCHS", 12) do
+        rnd.shuffle(linkX).grouped(64).foreach(heads.link.train(_, steps = 1, lr = 0.05f))
+      heads.pick.train(pickX, epochs = env("READ_PICK_EPOCHS", 15), lr = 0.05f)
     val picked = pickX.count((q, keys, y) => top(heads.pick.scores(q, keys))._1 == y)
     def fit(p: Probes.Pointer, xs: Vector[(Array[Float], Vector[Array[Float]], Int)]): String =
       f"${100.0 * xs.count((q, keys, y) => p.predict(q, keys) == y) / math.max(1, xs.size)}%.1f%%"
@@ -232,7 +242,7 @@ object StatementRead:
         val shown = mine.filter(score(_) >= t)
         (shown.count(wrongOf) + 1.0) / (shown.size + 1.0) <= alpha }.getOrElse(Float.MaxValue)
       Reader.kinds.map(k => s"$language $k" -> (if t == Float.MaxValue then t else t * scale(k)))).flatten.toMap
-    val bars = if sys.env.get("READ_GATE").contains("conformal") then conformal else quantile
+    val bars = loaded.map(_.bars).getOrElse(if sys.env.get("READ_GATE").contains("conformal") then conformal else quantile)
     println("the gate: " + sys.env.getOrElse("READ_GATE", "quantile"))
     trained = trained.copy(bars = bars)
     println("the gate's bars: " + bars.toVector.sorted.map((k, m) => f"$k $m%.2f").mkString(", "))

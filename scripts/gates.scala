@@ -31,11 +31,12 @@ import scala.jdk.CollectionConverters.*
   def over(r: Row, k: Float) = kinds.forall(kind => r.m.get(kind).forall(_ >= k * bars.getOrElse(s"${r.lang} $kind", 0f)))
   def novel(r: Row) = r.m.getOrElse("word", 0f) != 0f || r.m.getOrElse("pair", 0f) != 0f
   def agree(i: Int) = other.exists((o, _) => answered(rows(i)) && answered(o(i)) && rows(i).answer == o(i).answer)
-  val gates: Vector[(String, Int => Boolean)] = Vector(
+  type Gate = (String, Int => Boolean)
+  val gates: Vector[Gate] = Vector[Gate](
     "none" -> (i => answered(rows(i))),
     "novelty" -> (i => answered(rows(i)) && !novel(rows(i)) && over(rows(i), 1f)),
     "margins" -> (i => answered(rows(i)) && over(rows(i), 1f)),
-    "margins×2" -> (i => answered(rows(i)) && over(rows(i), 2f))) ++ (if other.isEmpty then Vector.empty else Vector(
+    "margins×2" -> (i => answered(rows(i)) && over(rows(i), 2f))) ++ (if other.isEmpty then Vector.empty[Gate] else Vector[Gate](
     "agree" -> (i => agree(i)),
     "agree+marg" -> (i => agree(i) && over(rows(i), 1f)),
     "agree|novel" -> (i => agree(i) || (answered(rows(i)) && !novel(rows(i)) && over(rows(i), 1f)))))

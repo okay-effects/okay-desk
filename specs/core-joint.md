@@ -121,3 +121,35 @@ beside it, forge becomes one pipeline with exchangeable parts, and this line's c
 
 Done only once the three seeds of §6 have said whether the adapter helps; the move is a refactoring with the
 numbers unchanged (the same runs, the same results).
+
+## 8. The gate: whether to show an answer or ask (2026-11-13)
+
+**Found in the browser:** the reader over the adapted core answered 65, asked 15, wrong 0 of 80 page tasks, against
+77 / 3 / 0 for the page's reader — while its exact answers with no gate are far higher. The page's gate shows an
+answer only if the text has NO WORD NEVER MET in training (and every margin is over its bar): on the unseen
+families, the sealed set and the teacher's wording it shows nothing at all, for either reader. The adapter's gain
+cannot reach a person through that gate. The page keeps its reader until a gate does better.
+
+**Tools:** `READ_OUT` keeps each task's outcome, margins, novelty and ANSWER; `scripts/gates.scala` tries gates on
+such files without reading again; `READ_LOAD=<reader>` measures a saved reader with nothing trained (7 min instead
+of 30). The law of the last: today's saved reader (r32, seed 1) gives exactly its run's twelve numbers again
+(`joint/load-r32.txt`); yesterday's page reader gives slightly different ones (Sealed en 45.3 → 48.0) — the reading
+code changed since (whole-word pieces), not the file.
+
+**Gates tried** on the adapted reader, seed 1 (shown / wrong among shown; `agree` = the reader without the adapter,
+heads alone, gives the same answer):
+
+| set | novelty (the page's) | margins | agree | agree + margins |
+|---|---|---|---|---|
+| Collection en | 63 / 0 | 83 / 5 | 83 / 0 | 76 / 0 |
+| Collection ru | 63 / 0 | 71 / 1 | 82 / 2 | 70 / 0 |
+| Unseen en | 0 / 0 | 271 / 72 | 176 / 3 | 166 / 3 |
+| Unseen ru | 0 / 0 | 145 / 10 | 179 / 26 | 124 / 6 |
+| Sealed en | 0 / 0 | 180 / 61 | 158 / 29 | 119 / 16 |
+| Sealed ru | 0 / 0 | 69 / 12 | 48 / 18 | 24 / 3 |
+
+What it says: the heads' margins are NOT calibrated out of the corpus (confidently wrong); two readers agreeing is a
+far better sign near the corpus (Collection en 83 / 0, Unseen en 176 / 3) but not on the hard unseen texts — the two
+share a base and a corpus, and err ALIKE. A gate needs a check independent of the reading: the exact side's (every
+clue used, the statement said back and compared with the text), or a reader of another kind. Open; every candidate
+is now measured in minutes.
