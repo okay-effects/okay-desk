@@ -180,3 +180,9 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
     rather than promised; M4 open holes as questions and
     lessons; M5 proof replay and the Horn check; M6 the phone (WebGL2, texture budget, latency, offline reload) and the
     capacity decision. The plan is `~/.opencode/plan/okay-desk-datalog-neuro.md`.
+
+## The training pipeline (specs/core-joint.md §7)
+
+1. **okay-forge generalized** (okay-inlay `forge/`): task sources, verifiers, objectives and measures as exchangeable
+   parts; `HeadGrads`, `JointTrain`, `CoreBench`, `SemanticExport` moved from this bench into okay-inlay; one
+   history of runs. After the joint adapter's three seeds; the numbers unchanged by the move.

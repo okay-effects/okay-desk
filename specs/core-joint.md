@@ -73,3 +73,22 @@ tasks); whether λ can keep the data readers intact while the tags move; what an
 ## 6. Results
 
 (filled as they come)
+
+## 7. After the measure: one training pipeline, okay-forge generalized (agreed with the operator, 2026-11-13)
+
+okay-inlay's `forge/` (specs/forge.md there) is the same method for another task: tasks from a source, a VERIFIER
+instead of people, LoRA in Scala, held-out / transfer / regression measures, every result a row of a history. It
+trains a 4B to generate code; here a 0.6B reads text into a statement on a phone. Rather than a second pipeline
+beside it, forge becomes one pipeline with exchangeable parts, and this line's components move into okay-inlay:
+
+- **a task source**: drawn by a program, rewritten by a teacher, exercises from open textbooks (their answers as the
+  judge), human question sets (Spider/BIRD, PAUQ in Russian — checked by execution);
+- **a verifier**: the Scala compiler and behaviour checks (forge's), the exact solver read back (the statement), the
+  query's result on the data;
+- **an objective**: tokens' cross-entropy (forge's), the heads' gradient through the core (`HeadGrads`,
+  `JointTrain`), a pull toward a reference state (`CoreDistill`);
+- **measures**: held-out, sealed, other hands, seeds, silent wrong answers as a hard limit; one `history.tsv`;
+- **the phone's format**: the adapter beside an unchanged 4-bit base (`SemanticExport`, `Adapted`).
+
+Done only once the three seeds of §6 have said whether the adapter helps; the move is a refactoring with the
+numbers unchanged (the same runs, the same results).
