@@ -29,6 +29,8 @@ RELATIONS=${RELATIONS:-$HOME/.cache/okay-desk/relations-readers-small.json}
 if [ -f "$RELATIONS" ]; then cp "$RELATIONS" "$web/model-small/relations-v1.skill"; fi
 STATEMENT=${STATEMENT:-$HOME/.cache/okay-desk/statement-reader.bin}
 if [ -f "$STATEMENT" ]; then cp "$STATEMENT" "$web/model-small/statement.reader"; fi
+STATEMENT_ADAPTER=${STATEMENT_ADAPTER:-$HOME/.cache/okay-desk/statement-adapter.safetensors}
+if [ -f "$STATEMENT_ADAPTER" ]; then cp "$STATEMENT_ADAPTER" "$web/model-small/statement-adapter.safetensors"; fi
 SEMANTIC_ADAPTER=${SEMANTIC_ADAPTER:-$HOME/.cache/okay-desk/semantic-reference-v5/native-adapter.safetensors}
 SEMANTIC_DIR=${SEMANTIC_DIR:-$HOME/.cache/okay-desk/semantic-full28}
 if [ -f "$SEMANTIC_ADAPTER" ] && [ -f "$SEMANTIC_DIR/model.safetensors" ]; then

@@ -58,7 +58,7 @@ object StatementRead:
    * whether there is an answer to show — a statement that compiles and settles on one result */
   /** `settled`: the exact side decided how some sentences are read (`Reader.read`) */
   final case class Outcome(how: String, least: Map[String, Float], definite: Boolean, news: (Int, Int),
-      settled: Boolean = false)
+      settled: Boolean = false, answer: String = "")
   final case class Judged(language: String, family: String, decisions: Vector[Decision], outcome: Outcome)
 
   def judge(seen: Seen, gold: Statement, golden: Assemble.Decisions, trained: Reader.Trained)
@@ -97,7 +97,8 @@ object StatementRead:
       case (_, Some(r)) if Faults.undecided(r) && !Faults.undecided(right) => "signalled"
       case _ => "silent"
     // an answer there is to show: "none" and "several" are answers (§8, point 4)
-    (decisions, Outcome(how, reading.least, got.nonEmpty, reading.news, reading.settled.nonEmpty))
+    (decisions, Outcome(how, reading.least, got.nonEmpty, reading.news, reading.settled.nonEmpty,
+      got.fold("")(_.mkString("|").replace('\t', ' '))))
 
   private def env(name: String, default: Int): Int = sys.env.get(name).map(_.toInt).getOrElse(default)
 
@@ -252,7 +253,8 @@ object StatementRead:
       for path <- sys.env.get("READ_OUT") do
         Files.writeString(Path.of(path), js.map(j => (Vector(name, j.language, family(j), j.outcome.how) ++
           (j.outcome.least.toVector ++ Vector("word" -> -j.outcome.news._1.toFloat,
-            "pair" -> -j.outcome.news._2.toFloat)).sorted.map((k, m) => s"$k=$m")).mkString("\t") + "\n").mkString,
+            "pair" -> -j.outcome.news._2.toFloat)).sorted.map((k, m) => s"$k=$m") :+ s"answer=${j.outcome.answer}")
+          .mkString("\t") + "\n").mkString,
           StandardOpenOption.CREATE, StandardOpenOption.APPEND)
       for language <- js.map(_.language).distinct.sorted do
         val mine = js.filter(_.language == language)

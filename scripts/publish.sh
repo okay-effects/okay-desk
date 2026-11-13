@@ -39,6 +39,9 @@ else
 fi
 # the statement reader is fetched by the build's address too: a retrained one must change it
 if [ -f "$STATEMENT" ]; then v=$(echo "$v$(md5 -q "$STATEMENT")" | md5 -q | cut -c1-12); fi
+# the logic ability's adapter (specs/core-joint.md §6), on while a task is read
+STATEMENT_ADAPTER=${STATEMENT_ADAPTER:-$HOME/.cache/okay-desk/statement-adapter.safetensors}
+if [ -f "$STATEMENT_ADAPTER" ]; then v=$(echo "$v$(md5 -q "$STATEMENT_ADAPTER")" | md5 -q | cut -c1-12); fi
 sed -i "" "s#src=\"main.js\"#src=\"main.js?v=$v\"#" "$out/index.html"
 rm -rf "$out/sample" && cp -r web/page/sample "$out/"
 # the data's own words (§29), a file a table: the examples'
@@ -58,6 +61,7 @@ if [ -f "$RELATIONS" ]; then cp "$RELATIONS" "$out/model-small/relations-v1.skil
 # The statement reader of logic tasks (specs/formalization.md §12.1): heads over the student, its words, its bars.
 STATEMENT=${STATEMENT:-$HOME/.cache/okay-desk/statement-reader.bin}
 if [ -f "$STATEMENT" ]; then cp "$STATEMENT" "$out/model-small/statement.reader"; fi
+if [ -f "$STATEMENT_ADAPTER" ]; then cp "$STATEMENT_ADAPTER" "$out/model-small/statement-adapter.safetensors"; fi
 # Explicit experimental ?understanding path; the normal chat keeps the measured legacy readers.
 if [ -f "$SEMANTIC_ADAPTER" ]; then
   mkdir -p "$out/model-understanding"

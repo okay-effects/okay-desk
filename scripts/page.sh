@@ -24,6 +24,8 @@ if [ -f "$RELATIONS" ]; then cp "$RELATIONS" "$web/model-small/relations-v1.skil
 # The statement reader of logic tasks (specs/formalization.md §12.1): heads over the student, its words, its bars.
 STATEMENT=${STATEMENT:-$HOME/.cache/okay-desk/statement-reader.bin}
 if [ -f "$STATEMENT" ]; then cp "$STATEMENT" "$web/model-small/statement.reader"; fi
+STATEMENT_ADAPTER=${STATEMENT_ADAPTER:-$HOME/.cache/okay-desk/statement-adapter.safetensors}
+if [ -f "$STATEMENT_ADAPTER" ]; then cp "$STATEMENT_ADAPTER" "$web/model-small/statement-adapter.safetensors"; fi
 
 # another server on the port would answer instead of this build (a stale one did, §29): refuse to measure it
 if lsof -iTCP:8734 -sTCP:LISTEN > /dev/null 2>&1; then echo "port 8734 is taken: $(lsof -iTCP:8734 -sTCP:LISTEN | tail -1)"; exit 1; fi

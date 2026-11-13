@@ -28,6 +28,9 @@ object Engine:
   private var factReader: Option[FactReader.Reader] = None
   private var relationReader: Option[FactReader.Reader] = None
   private var statementReader: Option[Reader.Trained] = None
+  /** THE LOGIC ABILITY'S ADAPTER (specs/core-joint.md §6): the core trained through the statement reader's heads,
+   * beside the unchanged base — on while a task is read, off for data questions and facts */
+  private var logicAdapter: Option[Adapted] = None
   private var authorQuestion = ""
   private var authorContext = ""
   private var authorHistory = Vector.empty[(String, String)]
@@ -157,7 +160,7 @@ object Engine:
     Option(on).foreach(_.close())
     memoryInfo = () => (0L, 0L)
     on = null; skill = null; blocksOf = None; factReader = None; relationReader = None
-    statementReader = None; generator = None
+    statementReader = None; generator = None; logicAdapter = None
     val old = engine
     engine = null
     if old == null then Future.unit
@@ -183,6 +186,8 @@ object Engine:
       stated <- if understanding then Future.successful(None) else
         fetch(Execution.versioned(s"$dir/statement.reader")).map(b => Reader.parse(new Int8Array(b).toArray).toOption)
           .recover { case _ => None }
+      logic <- if understanding then Future.successful(None) else
+        fetch(Execution.versioned(s"$dir/statement-adapter.safetensors")).map(Some(_)).recover { case _ => None }
       gpu <- OnWebGpu.create()
       device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 64L * 1048576 else 96L * 1048576,
         headsAtOnce = if phone then 2 else 16, maximum = if phone then 512L * 1048576 else 1536L * 1048576,
@@ -195,7 +200,16 @@ object Engine:
         stage(s"the weights to ${c.api}…")
         try
           adapter match
-            case None => Qwen3Compute(c, st, config, headOnCpu = phone && c.api != "WebGPU", embedGiven = embed)
+            case None => logic match
+              case None => Qwen3Compute(c, st, config, headOnCpu = phone && c.api != "WebGPU", embedGiven = embed)
+              case Some(bytes) =>
+                val adapted = Adapted(c, st, new Safetensors(TypedArrayBuffer.wrap(bytes)))
+                val loaded = Qwen3Compute(adapted, adapted.tensors, config,
+                  headOnCpu = phone && c.api != "WebGPU", embedGiven = embed)
+                adapted.releaseSources()
+                adapted.active = false
+                logicAdapter = Some(adapted)
+                loaded
             case Some(bytes) =>
               val adapted = Adapted(c, st, new Safetensors(TypedArrayBuffer.wrap(bytes)))
               val loaded = Qwen3Compute(adapted, adapted.tensors, config,
@@ -242,6 +256,7 @@ object Engine:
       // the forward of a task said twice keeps every layer's keys and values for reuse — some 100 MB for a long
       // task; nothing reuses them here, and a phone frees a texture late: they are let go before and after
       on.clearCache()
+      logicAdapter.foreach(_.active = true)
       // the states asked once, nothing kept, a layer's keys and values let go as the next is computed
       val once: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => op match
         case Read.States(ids, at) => Execution.model.submit(on.statesOnce(ids, at)).asInstanceOf[Future[X]]
@@ -252,6 +267,7 @@ object Engine:
           status(s"the statement reader failed on this device: ${e.getMessage}")
           dom.console.log(s"statement reader: $e")
           None }.map { r =>
+          logicAdapter.foreach(_.active = false)
           on.clearCache()
           memoryStage("after the statement reader")
           if r.nonEmpty then idle()

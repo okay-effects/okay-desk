@@ -28,6 +28,9 @@ final class Adapted(val base: Compute, weights: Tensors, adapter: Tensors) exten
           base.quantized(extra.linear(prefix + ".br")))
       q
   /** Called immediately after Qwen3Compute consumes the tensors: the large file buffers are not retained. */
+  /** ON OR OFF: an ability's adapter (specs/core-joint.md §6) is on while its texts are read and off for the
+   * other readers of the base, which then read the base exactly */
+  var active: Boolean = true
   def releaseSources(): Unit =
     sources = None
     require(pending.isEmpty, "unconsumed adapter projections")
@@ -39,6 +42,7 @@ final class Adapted(val base: Compute, weights: Tensors, adapter: Tensors) exten
   def linear(x: T, w: W): T =
     val y = base.linear(x, w._1)
     w._2 match
+      case _ if !active => y
       case None => y
       case Some(d) =>
         def both(input: T, a: base.W, b: base.W): T =
