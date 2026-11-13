@@ -186,3 +186,46 @@ Each component has prior art; the question is whether we use it as well as it is
 - **Decision / System One models** (TypeSafe Jev, Liquid d1, Sept–Oct 2026): one forward, typed answers with
   probabilities — the reader's form, named. GLiNER2 / GLiNER2.5-multi (mDeBERTa 287M): schema-driven spans and
   relations in many languages — the closest ready model to a statement reader; a candidate base (question 3).
+
+## 9. The direction and the tool (the operator, 2026-11-13)
+
+**What the model is for.** A phone's small model does not chat and does not know the world — a large model in the
+cloud does both better. What it does better than any of them: it turns a person's request into an EXACT PROGRAM
+OVER THAT PERSON'S OWN DATA — private (the data stays on the phone), exact (an engine computes every number),
+checkable (the program is shown), offline. So:
+
+1. **Data analysis is the main ability** (`Query`): filters, sums and means, groups, top-N, periods compared,
+   changes in percent, joins, dates — over files a person opens (spreadsheets, statements, sales, stock, marks).
+2. **Calculations** (`Calculate`): everyday arithmetic said in words — discounts, percents, a loan, a bill split,
+   units — the model writes the expression, the engine computes.
+3. **Constraints** (`Assign`): logic tasks are its TRAINING GROUND (perfect labels, endless generators, exact
+   judges); its real use is schedules, shifts, seating — the same reading of conditions.
+4. **Rules** (`Derive`, Datalog): who is entitled to what, chains of "if … then".
+5. **Data from the internet** as a source for 1: the model reads WHAT IT SEEKS into a typed need (entities chosen
+   from a catalogue — Wikidata, World Bank, Eurostat, OWID —, the measure, the period, the unit, the computation)
+   and WHAT IT FOUND into typed evidence (columns, units, period, source); the exact side checks that the evidence
+   meets the need, else searches again or asks; every number shown carries its source. Structured open sources
+   first, tables of Wikipedia next, a general search last.
+
+One base, the abilities as modules, one router choosing the ability. Not on the phone: questions about the world,
+long writing, free conversation; an answer is said from the engine's result.
+
+**The measure of usefulness comes first**: a set of realistic tasks — tables like real ones (expenses, a shop's
+sales, stock, a schedule, shifts, marks, a bank statement) and questions that need the internet, with checked
+answers (the internet's against a fixed snapshot), in the four languages. It replaces puzzles as the main measure;
+puzzles stay the measure of the reading of conditions.
+
+**The aim includes THE TOOL, not only the model.** What is built is a way of making such models: for a new ability
+or a new application, one states its formal language and its solver, and the tool provides the rest —
+- task SOURCES: a program's generator, a teacher's rewrites, exercises from open textbooks, human question sets
+  (Spider/BIRD, PAUQ), each turned into (text → formal statement) pairs;
+- VERIFIERS that keep a pair only if it is right: the exact solver read back, the query's result on the data, a
+  textbook's answer, the compiler;
+- OBJECTIVES: the heads' gradient through the core (`HeadGrads`, `JointTrain`), a pull toward a reference state,
+  tokens' cross-entropy;
+- the BASE chosen and made small (cut, narrowed, distilled — `specs/core-next.md` for what that costs);
+- MEASURES by a fixed protocol: held-out, sealed, other hands, seeds, silent wrong answers as a hard limit; one
+  history of runs;
+- the PHONE'S FORMAT: an adapter and heads beside an unchanged 4-bit base, loaded in a browser on WebGL2.
+It grows from okay-inlay's okay-forge (`specs/core-joint.md` §7): one pipeline with exchangeable parts, okay-desk
+its first user.
