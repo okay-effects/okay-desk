@@ -175,3 +175,28 @@ one sign among others instead of a veto. On the collection twelve more right ans
 The sealed set stays asked: there the reader is right on a part only, and the gate says so. One seed, one fit —
 the next check is seeds 2 and 3. Next: the gate on the page — `statement.Gate` in core (one implementation for the
 bench and the browser), its weights a file beside the readers; the page reads a task with both readers.
+
+### 9.1 The learnt gate over three seeds: it does not carry to the sealed set (2026-11-14)
+
+The same fitting (unseen families + the teacher's test, α 1%) for each seed's pair of readers (`joint/out-{base,r32}-
+{2,3}.tsv`; seed 1 above). Shown / wrong among shown:
+
+| seed | Collection en | Collection ru | Sealed en | Sealed ru |
+|---|---|---|---|---|
+| 1 | 75 / 0 | 75 / 0 | 1 / 0 | 8 / 1 |
+| 2 | 80 / 0 | 74 / 0 | 95 / 8 | 18 / 2 |
+| 3 | 81 / 0 | 56 / 0 | 168 / 24 | 60 / 13 |
+| the page's gate (novelty), seeds 1–3 | 60–63 / 0 | 45–63 / 0 | 0 | 0 |
+
+With the threshold at NO wrong answer on the fitting sets (α 0), seed 3 still shows 8 wrong of 116 on the sealed
+English and 6 of 38 on the Russian. The collection gains on every seed with none wrong; the sealed set — the stand-in
+for what a person types — gets silent wrong answers. A gate fitted on one kind of unfamiliar text (the unseen
+families) is not calibrated for another (the sealed ones): the shift between them is itself unseen. NOT SHIPPED.
+
+What this says about the problem: a gate cannot make a reading more reliable than it is; on wording no corpus had,
+the reader is right 60–85% of the time and its own signs (margins, novelty, a second reader of the same base and
+corpus) do not tell which. Two ways on, both measured by the same tools:
+1. a check of the reading by the EXACT SIDE at the level of each clue — the solution found must satisfy each
+   sentence as the OTHER reader read it, every clue must be used — independent of how sure the heads are;
+2. the reading itself made right more often on unfamiliar wording — the corpus's variety (the teacher in four
+   languages, exercises from textbooks), the cycle of `docs/toolkit.md`.
