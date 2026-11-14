@@ -22,7 +22,10 @@ object CeilingBench:
       val system = Prompt.system(tables) + "\nIf the query language cannot say what is asked exactly, do not " +
         "approximate it: answer in one sentence that it cannot."
       val answer = m.ask(system, text, 600, temperature = 0)
-      val got = Prompt.program(answer).toOption.flatMap(p => Everyday.run(p).toOption.map(p -> _))
+      val ran = Prompt.program(answer).map(p => p -> Everyday.run(p))
+      val got = ran.toOption.flatMap((p, r) => r.toOption.map(p -> _))
+      // a program that did not run: why, for the tools' side (specs/direction.md §2)
+      val why = ran.toOption.flatMap((p, r) => r.left.toOption.map(e => s" [$e] " + p.replaceAll("\\s+", " ")))
       val gold = q.gold.flatMap(Everyday.run(_).toOption)
       val outcome = (gold, got) match
         case (_, None) => if q.gold.isEmpty then "right" else "asked"
@@ -32,7 +35,8 @@ object CeilingBench:
       counts = counts.updated((q.table, lang),
         if outcome == "right" then c.copy(right = c.right + 1)
         else if outcome == "asked" then c.copy(asked = c.asked + 1) else c.copy(wrong = c.wrong + 1))
-      println(f"  [${q.table}%-8s $lang] $outcome%-15s $text → ${got.fold("(asked) " + answer.take(80))(_._1.take(150))}")
+      val said = got.fold("(asked)" + why.getOrElse(" " + answer.take(80)))(_._1.take(150))
+      println(f"  [${q.table}%-8s $lang] $outcome%-15s $text → $said")
     println(f"the teacher as the reader, ${(System.nanoTime() - t0) / 1e9 / (2 * Everyday.questions.size)}%.1f s a question:")
     for t <- Everyday.tables.keys.toVector.sorted do
       val (en, ru) = (counts((t, "en")), counts((t, "ru")))

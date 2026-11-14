@@ -50,3 +50,24 @@ The teacher labels, the phone's model learns from its labels:
 3. `share`, `by_month` and `change`, column against column. Ceiling again.
 4. The teacher as labeller of natural questions over `Domains` (§3), the readers trained; the gap again.
 5. The same for logic: the ceiling on the sealed logic set (the teacher writes the statement), the gap.
+
+## 5. Results (2026-11-14, evening)
+
+The final `Everyday` set: 54 questions a language (48 inside the language, 6 outside: a cause or a forecast); the
+seven former outside questions inside since the language grew (§2).
+
+| reader | en right / asked / wrong | ru right / asked / wrong |
+|---|---|---|
+| the teacher (35B), the language grown, `in` and a group's date part named as grouped | 43 / 0 / 11 | 43 / 0 / 11 |
+| the phone's model, the page's skill | 22 / 16 / 16 | 9 / 29 / 16 |
+| the phone's model, trained with 2967 of the teacher's natural pairs (rewrites of grammar points over `Domains`, judged by read-back) | 22 / 15 / 17 | 10 / 26 / 18 |
+
+- **The tools.** The share, the change between months, the two columns and the having answer right for the teacher
+  where they are read as meant. Its misses now: the six outside questions answered by an approximation (a
+  forecast or a cause read as a sum: the prompt's "do not approximate" is not enough), "spend" and "payment" without
+  `type = out`, a change shown as two monthly totals where the gold asks the difference, a balance's change summed.
+- **The model.** The teacher's natural pairs do not move the phone's readers beyond noise (+1 right in Russian, +1–2
+  wrong). The same as the domains (`specs/everyday.md`), the adapter and the gates (`specs/core-joint.md`): more
+  and better texts through the same heads over the same frozen states move nothing. The readers' design is the
+  limit, not their data. The next step on the model's side is a reader that WRITES the program (constrained by the
+  grammar), distilled from the teacher's own programs — measured against the heads by the same protocol.

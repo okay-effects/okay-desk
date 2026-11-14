@@ -64,3 +64,11 @@ class LanguageSuite extends munit.FunSuite:
     assert(Sample.same(got, gold))
     assert(!Sample.same(Table("r", Vector("jan"), Vector(Vector(Value.Num(40)))), gold))
   }
+
+  test("one of several values; a group's date part named as grouped in order and select") {
+    assertEquals(run("""{"from": "t", "where": [{"column": "kind", "op": "in", "value": ["taxi", "bus"]}],
+      "select": ["amount"]}"""), Right(Vector(Vector("30"), Vector("30"))))
+    assertEquals(run("""{"from": "t", "group": ["month(date)"], "aggregate": [{"fn": "count", "column": "*",
+      "as": "n"}], "order": ["-month(date)"], "select": ["month(date)", "n"]}"""),
+      Right(Vector(Vector("2026-02", "3"), Vector("2026-01", "2"))))
+  }

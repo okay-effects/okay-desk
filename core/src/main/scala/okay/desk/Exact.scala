@@ -7,7 +7,15 @@ package okay.desk
  * order, limit. Numbers come from here and from nowhere else.
  */
 object Exact:
-  def run(tables: Map[String, Table], q: Query.Relational): Either[String, Table] =
+  def run(tables: Map[String, Table], asked: Query.Relational): Either[String, Table] =
+    // a group's date part named as it was grouped ("month(date)") where its column is meant (order, select, having)
+    def named(n: String) = if part(n).nonEmpty then keyName(n) else n
+    def renamed(c: Cond): Cond = c match
+      case Cond.Cmp(col, op, v) => Cond.Cmp(named(col), op, v)
+      case Cond.Col(col, op, other) => Cond.Col(named(col), op, named(other))
+      case other => other
+    val q = asked.copy(select = asked.select.map(named), order = asked.order.map(o => o.copy(column = named(o.column))),
+      having = asked.having.map(renamed))
     for
       base <- tables.get(q.from).toRight(s"no table ${q.from}; the tables: ${tables.keys.toVector.sorted.mkString(", ")}")
       joined <- q.join.fold[Either[String, Table]](Right(base))(j => join(base, tables, j))
@@ -44,6 +52,7 @@ object Exact:
     case Cond.Has(c, _) => Vector(c)
     case Cond.Empty(c, _) => Vector(c)
     case Cond.Col(c, _, other) => Vector(c, other)
+    case Cond.In(c, _) => Vector(c)
 
   private def missingIn(t: Table, names: Vector[String], where: String): Either[String, Unit] =
     val missing = names.filterNot(c => t.column(c).isDefined).distinct
@@ -120,6 +129,7 @@ object Exact:
     case Cond.Col(col, op, other) =>
       val (x, y) = (r(t.column(col).get), r(t.column(other).get))
       x != Value.Empty && y != Value.Empty && test(op, compare(x, y))
+    case Cond.In(col, vs) => vs.exists(v => compare(r(t.column(col).get), v) == 0)
     case Cond.Has(col, text) => r(t.column(col).get).text.toLowerCase.contains(text.toLowerCase)
     case Cond.Empty(col, is) => (r(t.column(col).get) == Value.Empty) == is
 

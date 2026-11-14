@@ -87,6 +87,8 @@ object Understood:
         case other => other
       s"${q(col)} $words ${v.text}"
     case Cond.Col(col, op, other) => s"${q(col)} ${one(Cond.Cmp(col, op, Value.Empty), ru).drop(q(col).length + 1).trim} ${q(other)}"
+    case Cond.In(col, vs) =>
+      s"${q(col)} ${if ru then "одно из" else "one of"} ${vs.map(_.text).mkString(", ")}"
     case Cond.Has(col, text) => if ru then s"${q(col)} содержит «$text»" else s"${q(col)} contains “$text”"
     case Cond.Empty(col, is) =>
       if ru then s"${q(col)} ${if is then "пусто" else "не пусто"}"

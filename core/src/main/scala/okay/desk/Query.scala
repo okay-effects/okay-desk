@@ -14,6 +14,8 @@ enum Cond:
   case Empty(column: String, is: Boolean)
   // one column against another of the same row: quantity < reorder_level (specs/direction.md §2)
   case Col(column: String, op: String, other: String)
+  // one of several values: {"column": "term", "op": "in", "value": [1, 2]}
+  case In(column: String, values: Vector[Value])
 
 /** count sum avg min max (count's column may be "*"); growth and change — the last value against the first in the
  * order of `by` (a time column) within each group: growth as a fraction of the first, change as a difference */
@@ -99,6 +101,9 @@ object Query:
       case (Some(col), Some("contains")) => Vector(Cond.Has(col, str(c, "value").getOrElse("")))
       case (Some(col), Some("empty")) => Vector(Cond.Empty(col, true))
       case (Some(col), Some("not empty")) => Vector(Cond.Empty(col, false))
+      case (Some(col), Some("in")) =>
+        Vector(Cond.In(col, c.fields.collectFirst { case ("value", Json.Arr(vs)) => vs.toVector.map(value)
+          case ("value", v) => Vector(value(v)) }.getOrElse(Vector.empty)))
       // one column against another: {"column": "quantity", "op": "<", "column2": "reorder_level"}
       case (Some(col), Some(op)) if str(c, "column2").nonEmpty => Vector(Cond.Col(col, op, str(c, "column2").get))
       case (Some(col), Some(op)) =>
@@ -112,6 +117,8 @@ object Query:
     case Cond.Has(c, t) => Json.obj("column" -> Json.Str(c), "op" -> Json.Str("contains"), "value" -> Json.Str(t))
     case Cond.Empty(c, is) => Json.obj("column" -> Json.Str(c), "op" -> Json.Str(if is then "empty" else "not empty"))
     case Cond.Col(c, op, other) => Json.obj("column" -> Json.Str(c), "op" -> Json.Str(op), "column2" -> Json.Str(other))
+    case Cond.In(c, vs) => Json.obj("column" -> Json.Str(c), "op" -> Json.Str("in"), "value" -> Json.Arr(vs.map {
+      case Value.Num(d) => Json.Num(BigDecimal(d)); case other => Json.Str(other.text) }))
 
   /** the program as JSON text — shown with its result, so the answer is checkable */
   def print(q: Query): String = q match

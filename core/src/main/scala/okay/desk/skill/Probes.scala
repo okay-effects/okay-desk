@@ -27,14 +27,16 @@ object Probes:
         case Cond.Cmp(_, op, _) => op
         case Cond.Has(_, _) => "contains"
         case Cond.Empty(_, _) => "empty"
-        case Cond.Col(_, op, _) => op }.getOrElse("-"), if group.nonEmpty then "group" else "-",
+        case Cond.Col(_, op, _) => op
+        case Cond.In(_, _) => "in" }.getOrElse("-"), if group.nonEmpty then "group" else "-",
         if order.nonEmpty then "order" else "-", if limit.isDefined then "limit" else "-", "-", // the join is not read from the state: the data decides it (a value or a column of another table named)
         if select.nonEmpty then "select" else "-").mkString(" ")
       Slots(shape, from, where.headOption.map {
         case Cond.Cmp(c, _, _) => c
         case Cond.Has(c, _) => c
         case Cond.Empty(c, _) => c
-        case Cond.Col(c, _, _) => c }, group.headOption, aggs.headOption.map(_.column).filter(_ != "*"),
+        case Cond.Col(c, _, _) => c
+        case Cond.In(c, _) => c }, group.headOption, aggs.headOption.map(_.column).filter(_ != "*"),
         order.headOption.map(_.column))
   }
 

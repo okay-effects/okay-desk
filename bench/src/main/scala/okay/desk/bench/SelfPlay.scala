@@ -53,6 +53,7 @@ object SelfPlay:
           case Cond.Has(c, t) => s" whose $c contains $t"
           case Cond.Empty(c, is) => s" with $c ${if is then "empty" else "not empty"}"
           case Cond.Col(c, op, o) => s" whose $c $op $o"
+          case Cond.In(c, vs) => s" with $c in ${vs.map(_.text).mkString(", ")}"
         }.getOrElse("")
         val agg = aggs.headOption.map(a => a.fn match
           case "count" => s"How many $from$cond"
