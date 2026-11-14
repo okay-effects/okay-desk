@@ -59,7 +59,15 @@ object Teacher:
           Json.Obj(Vector("role" -> Json.Str("user"), "content" -> Json.Str("/no_think\n" + user)))))))
       val req = HttpRequest.newBuilder(URI.create(s"$url/chat/completions")).header("Content-Type", "application/json")
         .POST(HttpRequest.BodyPublishers.ofString(body.render)).build()
-      val res = client.send(req, HttpResponse.BodyHandlers.ofString())
+      // a gateway restarted (memory taken back, the service brought it up again) loses the connection: tried again
+      // for up to ten minutes before the run gives up
+      def send(tries: Int): HttpResponse[String] =
+        try client.send(req, HttpResponse.BodyHandlers.ofString())
+        catch case e: java.io.IOException if tries > 0 =>
+          println(s"  the gateway did not answer (${e.getMessage}); again in 30 s")
+          Thread.sleep(30000)
+          send(tries - 1)
+      val res = send(20)
       JsonText.parse(res.body).toOption.flatMap(_.field("choices")).collect { case Json.Arr(cs) => cs }
         .flatMap(_.headOption).flatMap(_.field("message")).flatMap(_.field("content"))
         .collect { case Json.Str(s) => s.replaceAll("(?s)<think>.*?</think>", "").trim }.getOrElse("")
