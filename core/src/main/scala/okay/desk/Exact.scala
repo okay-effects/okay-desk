@@ -62,8 +62,31 @@ object Exact:
       case "month" => if d.length >= 7 then Value.Str(d.take(7)) else v
       case "year" => if d.length >= 4 then Value.Str(d.take(4)) else v
       case _ =>
-        try Value.Str(java.time.LocalDate.parse(d.take(10)).`with`(java.time.DayOfWeek.MONDAY).toString)
-        catch case _: Exception => v
+        "(\\d{4})-(\\d{2})-(\\d{2})".r.findPrefixMatchOf(d).fold(v) { m =>
+          // the Monday the date's week begins (by the civil calendar's day numbers: no java.time in the page)
+          val day = days(m.group(1).toInt, m.group(2).toInt, m.group(3).toInt)
+          Value.Str(date(day - Math.floorMod(day + 3, 7)))
+        }
+
+  /** days since 1970-01-01 of a civil date, and back (H. Hinnant's algorithms) */
+  private def days(y0: Int, m: Int, d: Int): Long =
+    val y = if m <= 2 then y0 - 1 else y0
+    val era = Math.floorDiv(y, 400)
+    val yoe = y - era * 400
+    val doy = (153 * (if m > 2 then m - 3 else m + 9) + 2) / 5 + d - 1
+    val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    era.toLong * 146097 + doe - 719468
+  private def date(z0: Long): String =
+    val z = z0 + 719468
+    val era = Math.floorDiv(z, 146097L)
+    val doe = z - era * 146097
+    val yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    val doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    val mp = (5 * doy + 2) / 153
+    val d = doy - (153 * mp + 2) / 5 + 1
+    val m = if mp < 10 then mp + 3 else mp - 9
+    val y = yoe + era * 400 + (if m <= 2 then 1 else 0)
+    f"$y%04d-$m%02d-$d%02d"
 
   private def check(t: Table, q: Query.Relational): Either[String, Unit] =
     val named = (q.where ++ q.aggs.flatMap(_.where)).flatMap(columnsOf) ++ q.group.map(grouping) ++
