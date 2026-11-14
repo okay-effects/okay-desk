@@ -98,6 +98,17 @@ object Pairs:
   /** A PAIR FROM THE SPACE (§25): random tables, a point of the space over them drawn (`Space.random`), its question
    * by the grammar (`Phrase`), its program compiled — the pairs are the space × the phrases */
   def fromSpace(rnd: scala.util.Random, ru: Boolean): Pair =
+    // DESK_DOMAINS=<percent>: that share of the pairs over the domains' tables (`Domains`: money, dates, months)
+    if domains > 0 && rnd.nextInt(100) < domains then fromDomain(rnd, ru) else fromGeneric(rnd, ru)
+  private val domains = sys.env.get("DESK_DOMAINS").flatMap(_.toIntOption).getOrElse(0)
+  /** a pair over one domain's table, sometimes beside an edge-like one */
+  def fromDomain(rnd: scala.util.Random, ru: Boolean): Pair =
+    val t = Domains.any(rnd)
+    val tables = Map(t.name -> t) ++ (if rnd.nextInt(10) < 2 then Map("edges" -> edges(rnd)) else Map.empty)
+    val s = Space.Schema(tables)
+    val p = Space.random(rnd, s)
+    Pair(tables, Phrase.say(rnd, p, s, ru), Query.print(Space.compile(p, tables).toOption.get))
+  private def fromGeneric(rnd: scala.util.Random, ru: Boolean): Pair =
     val t = table(rnd, pick(rnd, tableNames), 5 + rnd.nextInt(8))
     val tc = pick(rnd, t.columns.filter(c => textCols.contains(c)))
     val had = t.rows.map(_(t.columns.indexOf(tc)).text)

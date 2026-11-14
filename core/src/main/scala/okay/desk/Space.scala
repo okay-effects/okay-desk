@@ -123,6 +123,12 @@ object Space:
         order.map(o => o.copy(column = aliases.getOrElse(o.column, o.column))), limit)
     case l => l
 
+  /** the month of a day `yyyy-mm-dd` as two conditions: on or after its first day, before the next month's */
+  def month(c: Col, day: String): Vector[(Col, String, Value)] =
+    val (y, m) = (day.take(4).toInt, day.slice(5, 7).toInt)
+    val next = if m == 12 then f"${y + 1}-01-01" else f"$y-${m + 1}%02d-01"
+    Vector((c, ">=", Value.Str(f"$y-$m%02d-01")), (c, "<", Value.Str(next)))
+
   /** A POINT DRAWN AT RANDOM, by the enumeration's structure (the pairs are the space × the phrases: a draw, not a
    * walk over the whole space). The weights keep the plain shapes from swamping the rare ones. */
   def random(rnd: scala.util.Random, s: Schema): Program =

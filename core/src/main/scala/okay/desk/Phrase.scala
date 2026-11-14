@@ -43,6 +43,10 @@ object Phrase:
       "green" -> "зелёные", "gold" -> "золото", "silver" -> "серебро", "home" -> "дом", "work" -> "работа", "spare" -> "запас",
       "paid" -> "оплачено", "unpaid" -> "не оплачено")
 
+  /** the generator's names and the domains' (`Domains`), in Russian */
+  private lazy val ruTables = Russian.tables ++ Domains.russianTables
+  private lazy val ruColumns = Russian.columns ++ Domains.russianColumns
+
   enum Case:
     case Nom, Gen, Prep, Dat
 
@@ -52,10 +56,10 @@ object Phrase:
   final class Saying(rnd: scala.util.Random, ru: Boolean, mix: Mix):
     def pick(xs: String*): String = xs(rnd.nextInt(xs.size))
     def table(t: String, c: Case): String =
-      if !ru || !mix.tables then t else Russian.tables.get(t).fold(t) { (nom, gen, prep, dat) => c match
+      if !ru || !mix.tables then t else ruTables.get(t).fold(t) { (nom, gen, prep, dat) => c match
         case Case.Nom => nom; case Case.Gen => gen; case Case.Prep => prep; case Case.Dat => dat }
     def column(col: Col, c: Case): String =
-      if !ru || !mix.columns then col.name else Russian.columns.get(col.name).fold(col.name) { (nom, gen, dat) => c match
+      if !ru || !mix.columns then col.name else ruColumns.get(col.name).fold(col.name) { (nom, gen, dat) => c match
         case Case.Gen => gen; case Case.Dat => dat; case _ => nom }
     def value(v: Value): String = if !ru || !mix.values then v.text else Russian.values.getOrElse(v.text, v.text)
 
@@ -72,8 +76,25 @@ object Phrase:
           s"где ${column(col, Case.Nom)} это ${value(v)}", s"со значением ${value(v)} в ${column(col, Case.Nom)}")
         else pick(s"with ${col.name} = ${value(v)}", s"where ${col.name} is ${value(v)}", s"whose ${col.name} is ${value(v)}", s"with ${col.name} ${value(v)}")
 
+    /** a month said as one (specs/everyday.md): the pair `Space.month` makes, «в марте», "in March" */
+    private val monthsEn = Vector("January", "February", "March", "April", "May", "June", "July", "August",
+      "September", "October", "November", "December")
+    private val monthsRuIn = Vector("январе", "феврале", "марте", "апреле", "мае", "июне", "июле", "августе",
+      "сентябре", "октябре", "ноябре", "декабре")
+    private val monthsRu = Vector("январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август",
+      "сентябрь", "октябрь", "ноябрь", "декабрь")
+    def monthOf(a: (Col, String, Value), b: (Col, String, Value)): Option[Int] =
+      Option.when(a._1 == b._1 && a._1.kind == Kind.Time && a._2 == ">=" && b._2 == "<" &&
+        Space.month(a._1, a._3.text).map(_._3.text) == Vector(a._3.text, b._3.text))(a._3.text.slice(5, 7).toInt - 1)
+    def month(m: Int): String =
+      if ru then pick(s"в ${monthsRuIn(m)}", s"за ${monthsRu(m)}") else pick(s"in ${monthsEn(m)}", s"for ${monthsEn(m)}",
+        s"during ${monthsEn(m)}")
     def conditions(where: Vector[(Col, String, Value)]): String =
-      if where.isEmpty then "" else " " + where.map(condition).mkString(if ru then " и " else " and ")
+      def said(ws: List[(Col, String, Value)]): List[String] = ws match
+        case a :: b :: rest if monthOf(a, b).isDefined => month(monthOf(a, b).get) :: said(rest)
+        case a :: rest => condition(a) :: said(rest)
+        case Nil => Nil
+      if where.isEmpty then "" else " " + said(where.toList).mkString(if ru then " и " else " and ")
 
     def group(g: Col): String = if ru then pick(s"по каждому ${column(g, Case.Dat)}", s"в разрезе ${column(g, Case.Gen)}", s"по ${column(g, Case.Dat)}")
       else pick(s"per ${g.name}", s"by ${g.name}", s"for each ${g.name}")
