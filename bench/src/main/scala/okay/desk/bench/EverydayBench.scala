@@ -26,8 +26,18 @@ object EverydayBench:
     val chat = Chat.load(dir); val model = Model.load(dir, mapped = true).asInstanceOf[Qwen3]
     val reading = MlxReading(chat, model, layer)
     val skill = okay.desk.skill.Readers()
-    skill.load(Files.readAllBytes(Path.of(sys.env.getOrElse("DESK_SKILL",
-      sys.props("user.home") + "/.cache/okay-desk/readers-Qwen3-0.6B-4bit-cut19-19.skill"))))
+    // DESK_TRAIN=<pairs>: the skill trained here on this core's own states (`Pairs.many(42, n)`; DESK_DOMAINS for the
+    // share over the domains), written to DESK_SKILL_OUT; else the skill file read (the teacher's, by default)
+    sys.env.get("DESK_TRAIN").map(_.toInt) match
+      case Some(n) =>
+        val on = okay.desk.skill.Readers.On(skill, reading)
+        val t0 = System.nanoTime()
+        on.train(okay.desk.skill.Pairs.many(42, n))
+        println(f"skill trained on $n pairs over this core (${(System.nanoTime() - t0) / 6e10}%.1f min)")
+        for p <- sys.env.get("DESK_SKILL_OUT") do Files.write(Path.of(p), on.bytes)
+      case None =>
+        skill.load(Files.readAllBytes(Path.of(sys.env.getOrElse("DESK_SKILL",
+          sys.props("user.home") + "/.cache/okay-desk/readers-Qwen3-0.6B-4bit-cut19-19.skill"))))
     // the page's margin: two candidates closer than ln 3 in log-probability are a question (Engine, `?margin=`)
     val margin = sys.env.get("DESK_MARGIN").map(_.toDouble).getOrElse(math.log(3))
     type S[X] = Strategy.Rest[Read][X]

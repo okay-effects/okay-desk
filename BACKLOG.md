@@ -186,3 +186,17 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
 1. **okay-forge generalized** (okay-inlay `forge/`): task sources, verifiers, objectives and measures as exchangeable
    parts; `HeadGrads`, `JointTrain`, `CoreBench`, `SemanticExport` moved from this bench into okay-inlay; one
    history of runs. After the joint adapter's three seeds; the numbers unchanged by the move.
+
+## The loop (specs/loop.md)
+
+1. **Corrections exported and taught**: the lessons (`learn.Lessons`) as JSON lines with consent, a task source of
+   the cycle; a new adapter and heads shipped from them.
+2. **The query language for everyday questions**: a share, a change between periods, two columns compared, a
+   computed column — each a constructor with its denotation, words and laws.
+3. **Human question sets with formal labels** (licences first): Spider/BIRD and PAUQ → `Query`, GSM8K-like →
+   `Calculate`, FOLIO → `Derive`; part of each held out.
+4. **The teacher as a labeller of real texts**: a program written for a real question, kept when its result is
+   right or two labellings agree.
+5. **Open textbooks' exercises** with their answer keys as the judge.
+6. **Variety by rule**: typos, colloquial forms, follow-ups, numbers in words; "ask" for what the language cannot say.
+7. **Ukrainian and Polish natively.**
