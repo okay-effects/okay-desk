@@ -56,3 +56,13 @@ to a money column. And 15 of the 48 questions cannot be right today whatever the
 language (the right outcome is to ask; the reading answers) and ~6 about months (the calculus has no month).
 Next, in this order: the month in the calculus; the teacher's natural pairs over the domains (its "pairs" mode with
 `Domains` schemas, judged by read-back); "ask" taught for what the language cannot say.
+
+## A month in the calculus (2026-11-14)
+
+The `month` op on a date column (`Months`, the grammar, `Den`, `Space`, the grammar's and the language files'
+phrases in en/ru/uk/pl, the exact source reading month names; laws `MonthsSuite`, the calculus laws with months
+drawn). `EverydayBench`, the page's path: en 23 right / 9 asked / 16 wrong (was 21 / 9 / 18), ru 10 / 23 / 15
+(unchanged). Every month question now reads its range right; what is still wrong in them is another part — "spend"
+read as a count, "restaurant" against the value "restaurants", «на севере» against North — the words people use,
+which the teacher's natural pairs are for. Two questions outside the language (a change between two months) are now
+asked, as they should be.
