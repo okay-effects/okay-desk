@@ -22,3 +22,13 @@ class MonthsSuite extends munit.FunSuite:
     assertEquals(Months.value(3, "in March 2025", dates), Some("2025-03"))
     assertEquals(Months.value(7, "in July", dates), None)
   }
+
+  test("a month in the query's JSON: the dates of that month, the same two conditions the calculus compiles to") {
+    val q = Query.parse("""{"from": "t", "where": [{"column": "date", "op": "month", "value": "2026-12"}]}""")
+    val where = q.toOption.collect { case r: Query.Relational => r.where }.getOrElse(Vector.empty)
+    assertEquals(where, Vector(Cond.Cmp("date", ">=", Value.Str("2026-12-01")),
+      Cond.Cmp("date", "<", Value.Str("2027-01-01"))))
+    val t = Table.parse("t.csv", "date,x\n2026-11-30,1\n2026-12-01,2\n2026-12-31,3\n2027-01-01,4\n").toOption.get
+    val got = q.flatMap { case r: Query.Relational => Exact.run(Map("t" -> t), r); case _ => Left("") }
+    assertEquals(got.map(_.rows.map(_(1).text)), Right(Vector("2", "3")))
+  }

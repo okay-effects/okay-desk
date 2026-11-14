@@ -56,15 +56,24 @@ object Query:
           val joinObj = obj(o, "join").orElse(arr(o, "join").collectFirst { case j: Json.Obj => j })
           val join = joinObj.flatMap(j => str(j, "table").map(t => Join(t, arr(j, "on").collect {
             case Json.Arr(Vector(Json.Str(a), Json.Str(b))) => (a, b) })))
-          val where = arr(o, "where").collect { case c: Json.Obj =>
+          val where = arr(o, "where").collect { case c: Json.Obj => c }.flatMap { c =>
             (str(c, "column"), str(c, "op")) match
+              // a month of a date column ("yyyy-mm"): on or after its first day, before the next month's — the
+              // calculus's month, the same two conditions (specs/direction.md §2)
+              case (Some(col), Some("month")) if str(c, "value").exists(_.matches("\\d{4}-\\d{2}")) =>
+                val m = str(c, "value").get
+                val (y, mm) = (m.take(4).toInt, m.drop(5).toInt)
+                val next = if mm == 12 then f"${y + 1}-01-01" else f"$y-${mm + 1}%02d-01"
+                Vector(Cond.Cmp(col, ">=", Value.Str(m + "-01")), Cond.Cmp(col, "<", Value.Str(next)))
               // a shorthand some models write: {"status": "unpaid"} means status = unpaid
-              case (None, None) if c.fields.size == 1 => Cond.Cmp(c.fields.head._1, "=", value(c.fields.head._2))
-              case (Some(col), Some("contains")) => Cond.Has(col, str(c, "value").getOrElse(""))
-              case (Some(col), Some("empty")) => Cond.Empty(col, true)
-              case (Some(col), Some("not empty")) => Cond.Empty(col, false)
-              case (Some(col), Some(op)) => Cond.Cmp(col, op, c.fields.collectFirst { case ("value", v) => value(v) }.getOrElse(Value.Empty))
-              case _ => Cond.Empty("?", true)
+              case (None, None) if c.fields.size == 1 =>
+                Vector(Cond.Cmp(c.fields.head._1, "=", value(c.fields.head._2)))
+              case (Some(col), Some("contains")) => Vector(Cond.Has(col, str(c, "value").getOrElse("")))
+              case (Some(col), Some("empty")) => Vector(Cond.Empty(col, true))
+              case (Some(col), Some("not empty")) => Vector(Cond.Empty(col, false))
+              case (Some(col), Some(op)) =>
+                Vector(Cond.Cmp(col, op, c.fields.collectFirst { case ("value", v) => value(v) }.getOrElse(Value.Empty)))
+              case _ => Vector(Cond.Empty("?", true))
           }
           val group = arr(o, "group").collect { case Json.Str(s) => s }
           val aggs = arr(o, "aggregate").collect { case a: Json.Obj =>

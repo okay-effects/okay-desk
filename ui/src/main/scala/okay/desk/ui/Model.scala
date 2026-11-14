@@ -162,6 +162,12 @@ object Model:
     Map("readers-small" -> ("model-small", 12), "readers-full" -> ("model-full", 19))
   val nativeModels: Map[String, (String, Int)] = readers + (interpreter -> ("model-understanding", 28))
 
+  /** the models a person picks between by a button (no chooser form): the student and the model it was distilled
+   * from, the same readers on both — to compare them */
+  val picks: List[(String, String)] = List(
+    "readers-small" -> "Student: 12 layers, 122 MB",
+    "readers-full" -> "Original Qwen3 0.6B: 28 layers, 320 MB")
+
   /** the model a page loads unless another is chosen */
   val default = "readers-small"
 

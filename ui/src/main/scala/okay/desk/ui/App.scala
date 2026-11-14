@@ -58,6 +58,8 @@ object App:
     case OpenUrls(urls: Vector[String])
     case Close(table: String)
     case Load(model: String)
+    /** a model picked by its button (no chooser form): remembered on the disk, loaded at once */
+    case Pick(model: String)
     case Unload
     case Ask(question: String)
     /** THE ABSTENTION AS A DIALOGUE (specs/data.md §30): the person's choice among the readings the readers hesitated
@@ -68,6 +70,8 @@ object App:
     case ConstraintForm(clue: String, form: String)
 
   val accept = ".csv,.tsv,.json,.jsonl,.ndjson"
+  /** where the picked model is kept on the disk (under the prefix the tables are not read from) */
+  val picked: String = Clarified.prefix + "model"
 
   /** the program: the tables kept on the disk opened again, the addresses given (a link) fetched, then a screen at a
    * time */
@@ -76,9 +80,13 @@ object App:
       In[Ui, R], In[Model, R], In[Fetch, R], In[Disk, R], In[Clipboard, R]): Unit ! R =
     for
       names <- Disk.names[R]
+      // the model a person picked on an earlier visit (its button), else the browser's own
+      remembered <- Disk.get[R](picked)
       kept <- names.filterNot(_.startsWith(Clarified.prefix)).foldLeft(pure[State, R](
         State(phone = phone, chooser = chooser,
-          modelName = if understanding || recoveredQuestion.nonEmpty then Model.interpreter else Model.auto(phone), log = recoveredQuestion.toVector.map(q => Entry("user", q)),
+          modelName = if understanding || recoveredQuestion.nonEmpty then Model.interpreter
+            else remembered.map(_.trim).filter(k => Model.picks.exists(_._1 == k)).getOrElse(Model.auto(phone)),
+          log = recoveredQuestion.toVector.map(q => Entry("user", q)),
           notice = recoveredQuestion.map(_ => "A question was recovered after a page restart. It has not been rerun."),
           // `logic` (in Russian or not): the page opened on the tasks the statement reader states
           place = if logic.nonEmpty then "logic" else "chat",
@@ -201,6 +209,15 @@ object App:
             .foldLeft(pure[Unit, R](()))((acc, f) => acc.flatMap(_ => Disk.remove[R](f)))))
           .map(_ => cleared.copy(tables = cleared.tables - name, log = cleared.log :+ Entry("system", s"closed $name")))
       case Msg.Load(name) => load[R](cleared, name)
+      case Msg.Pick(name) =>
+        // the other model let go first (two do not fit a phone's tab), the choice kept, the picked one loaded
+        val free = if cleared.model.nonEmpty && name != cleared.modelName then
+          Model.unload[R].map(_ => cleared.copy(model = None)) else pure[State, R](cleared)
+        for
+          _ <- Disk.put[R](picked, name)
+          st <- free
+          next <- if st.model.nonEmpty then pure[State, R](st) else load[R](st.copy(place = "chat"), name)
+        yield next
       case Msg.Unload => Model.unload[R].map(_ => cleared.copy(model = None,
         notice = Some("Model unloaded. Chat, open data and cached files are kept.")))
       case Msg.Clarify(question, choice) =>
@@ -433,14 +450,19 @@ object App:
     // THE MODEL IN THE CHAT, where no person chooses it: which one this browser got and how it is — not loaded
     // yet, loading (its progress), loaded (on which device) — the first line of the conversation
     val modelLine = Part.block("system")(Part.text(s"Model: ${Model.choices.toMap.getOrElse(s.modelName, s.modelName)}"),
-      Part.block("small")(loading.fold(Part.text(s.model.getOrElse(
-        "not loaded yet — it loads by itself when a question needs it")): Part)(words => Part.info(words))))
+      Part.block("small")(loading.fold(Part.text(s.model.fold(
+        "not loaded yet — it loads by itself when a question needs it")("loaded: " + _)): Part)(words =>
+        Part.info(words))))
+    // THE MODEL PICKED BY ITS BUTTON (no chooser form): which one is picked and whether it is loaded, always at the
+    // top; a button a model, the picked one marked; the pick kept for the next visit
+    val pickLine = Part.block("model-pick")(modelLine, Part.slot("model-pick"))
     // the model is said in the chat once it is wanted — loading, then loaded and on what; before, nothing
     // while the model loads its line is the newest part of the conversation, under the question it loads for;
     // loaded, it stands at the top
     val head: List[Part] = if s.chooser then List(modelPart, note, dataNote)
-      else dataNote :: (if s.model.nonEmpty && loading.isEmpty then List(modelLine) else Nil)
-    val loadingLine: List[Part] = if !s.chooser && loading.nonEmpty then List(modelLine) else Nil
+      else List(pickLine, dataNote)
+    // while it loads for a question, its progress under that question too
+    val loadingLine: List[Part] = if !s.chooser && loading.nonEmpty && s.log.nonEmpty then List(modelLine) else Nil
     val log = s.log.zipWithIndex.map { (e, i) =>
       // a question typed as constraints is code; a task in sentences is read as text
       val code = e.role == "result" || e.role == "user" && okay.desk.know.Knowledge.isConstraints(e.text) &&
@@ -486,6 +508,12 @@ object App:
         // (while loading, no other load; while thinking, no question form and no other question)
         (if !s.chooser || loading.isDefined || thinking.isDefined then Nil
          else List(Button.submit("Load the model", models, Style.Plain)(Msg.Load(_): Msg))) ++
+        (if s.chooser || loading.isDefined || thinking.isDefined then Nil
+         else Model.picks.map((key, label) =>
+           if key == s.modelName then
+             Button(if s.model.nonEmpty then s"✓ $label" else s"✓ $label — load", Style.Primary)(Msg.Pick(key): Msg)
+               .at("model-pick")
+           else Button(label)(Msg.Pick(key): Msg).at("model-pick"))) ++
         (if s.chooser && s.model.isDefined && loading.isEmpty && thinking.isEmpty then
           List(Button("Unload model")(Msg.Unload: Msg).at("model-actions")) else Nil) ++
         choices ++ research ++ constraints ++ chatButtons ++ proofButtons ++

@@ -38,8 +38,15 @@ final case class Table(name: String, columns: Vector[String], rows: Vector[Vecto
     val kinds = columns.indices.map { i =>
       val vs = rows.map(_(i)).filter(_ != Value.Empty)
       val numeric = vs.nonEmpty && vs.forall(_.num.isDefined)
-      val sample = vs.take(3).map(_.text.take(20)).mkString(", ")
-      s"  ${columns(i)}: ${if numeric then "number" else "text"}${if sample.nonEmpty then s" (e.g. $sample)" else ""}"
+      // a text column of few values is shown with all of them: a question's "restaurant" or «расходы» is then
+      // matched to the value the data has ("restaurants", type "out") — specs/direction.md §2
+      val distinct = vs.map(_.text).distinct
+      val dates = !numeric && distinct.nonEmpty && distinct.forall(_.matches("\\d{4}-\\d{2}-\\d{2}"))
+      val sample =
+        if dates then s"dates ${distinct.min} to ${distinct.max}"
+        else if !numeric && distinct.size <= 12 then "values: " + distinct.map(_.take(30)).mkString(", ")
+        else "e.g. " + vs.take(3).map(_.text.take(20)).mkString(", ")
+      s"  ${columns(i)}: ${if numeric then "number" else "text"}${if vs.nonEmpty then s" ($sample)" else ""}"
     }
     s"table $name (${rows.size} rows):\n${kinds.mkString("\n")}"
   def render(limit: Int = 50): String =

@@ -51,10 +51,13 @@ class TaskListSuite extends munit.FunSuite:
 
   /** the desk played with a model that writes these programs for these questions, and none for any other */
   def run(app: Unit ! Row, programs: Map[String, String], acts: Act*): Played[Unit] =
+    runOn(Map.empty)(app, programs, acts*)
+  /** played over a disk that already holds `disk` (an earlier visit's) */
+  def runOn(disk: Map[String, String])(app: Unit ! Row, programs: Map[String, String], acts: Act*): Played[Unit] =
     fetched = Vector.empty
     val p = Model.answeredBy[Row, NoModel, Unit](_ => Right("test model"),
       (_, q) => programs.get(q).toRight("no program"), state = reader)(app)
-    val kept = Disk.inMemory[NoModel, NoDisk, Unit](scala.collection.mutable.Map.empty[String, String])(p)
+    val kept = Disk.inMemory[NoModel, NoDisk, Unit](scala.collection.mutable.Map.from(disk))(p)
     val byTable = handle(kept, Handler.Tail[Fetch, NoFetch, Unit, Unit](a => pure(a), [X] => (op: Fetch[X]) => op match
       case Fetch.Call(_, url, _, _, answer) => answer(read(url))
       case Fetch.Send(base, r, answer) => answer(read(Fetch.target(base, r)))))
@@ -192,13 +195,24 @@ class TaskListSuite extends munit.FunSuite:
       assert(text(all).contains("Example questions") && text(all).contains("Page 1 of 24"), text(all))
     finally reader = _ => None
 
-  test("the plain page: two buttons and the question; the model is chosen by itself and said once it is wanted"):
+  test("the plain page: the model picked by a button, said with whether it is loaded; the pick remembered"):
     reader = golden(_ => None)
     try
       val opened = run(App.main[Row](Nil, phone = true, chooser = false), Map.empty)
-      assertEquals(labels(opened), List("Data: open files", "Examples", "Ask"))
-      assert(!text(opened).contains("Model:") && !text(opened).contains("not loaded yet"), text(opened))
+      val picks = Model.picks.map(_._2)
+      assertEquals(labels(opened), List("Data: open files", "Examples", s"✓ ${picks.head} — load", picks(1), "Ask"))
+      assert(text(opened).contains("Model: Qwen3 0.6B student") && text(opened).contains("not loaded yet"),
+        text(opened))
       assert(!text(opened).contains("THE MODEL") && !text(opened).contains("online sources off"), text(opened))
+      // an earlier visit's pick, kept on the disk: the page opens on it
+      val again = runOn(Map(App.picked -> "readers-full"))(App.main[Row](Nil, phone = true, chooser = false), Map.empty)
+      assert(text(again).contains("Model: Qwen3 0.6B as released"), text(again))
+      assert(labels(again).contains(s"✓ ${picks(1)} — load"), labels(again))
+      // a press on the other model: it is loaded and marked, and said loaded
+      val picked = run(App.main[Row](Nil, phone = true, chooser = false), Map.empty, Act.press(picks(1)))
+      assert(text(picked).contains("Model: Qwen3 0.6B as released") && text(picked).contains("loaded: test model"),
+        text(picked))
+      assert(labels(picked).contains(s"✓ ${picks(1)}") && labels(picked).contains(picks.head), labels(picked))
       val at = Tasks.entries.indexWhere(_.task == stated.head)
       val solved = run(App.loop[Row](App.State(chooser = false, place = "examples",
         tasks = TaskList.View(open = Some(at)))), Map.empty, Act.press("Solve"))

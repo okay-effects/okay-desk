@@ -39,7 +39,9 @@ object Prompt:
        |$schema
        |
        |A relational query has: "from" (a table), optional "join" {"table", "on": [["this column", "other column"]]},
-       |"where" (a list of {"column", "op", "value"}; op: = != < <= > >= contains empty "not empty"),
+       |"where" (a list of {"column", "op", "value"}; op: = != < <= > >= contains empty "not empty", and "month" with
+       |a value "yyyy-mm" for the dates of that month:
+       |"in February" → {"column": "date", "op": "month", "value": "2026-02"}),
        |"group" (columns), "aggregate" (a list of {"fn", "column", "as"}; fn: count sum avg min max; column "*" for count;
        |growth or change with "by": the time column — the last value against the first within each group),
        |"select" (columns to show), "order" (columns; "-c" descending), "limit" (a number).
