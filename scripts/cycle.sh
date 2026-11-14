@@ -23,8 +23,8 @@ run() { sbt -batch 'set bench / javaOptions += "-Xmx26g"' "bench/runMain okay.de
   run "JointTrain $repo $C/headsA.bin $C/adapter.safetensors 1 32 1e-4 0.1" > "$C/joint.txt" 2>&1
 [ -f "$C/adapter.page.safetensors" ] || run "SemanticExport $C/adapter.safetensors $C/adapter.page.safetensors" \
   > /dev/null 2>&1
-# 3. the reader by the page's recipe over the adapted core, three seeds; seed 1's reader saved — the core's states kept on disk
-# by seed 1 (`READ_STORE`), read back by seeds 2 and 3: about ten minutes each instead of thirty
+# 3. the reader by the page's recipe over the adapted core, three seeds; seed 1's reader saved — the core's
+# states kept on disk by seed 1 (`READ_STORE`), read back by seeds 2 and 3: about ten minutes each instead of thirty
 for seed in 1 2 3; do
   [ -f "$C/read-$seed.txt" ] && grep -q "^\[info\] Collection ru" "$C/read-$seed.txt" && continue
   # (a subshell: `run` is a function of this script, which `env` cannot call; READ_SAVE for seed 1 alone)
