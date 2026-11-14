@@ -32,6 +32,7 @@ object Say:
       (col.kind, op) match
         case (Kind.Num, ">") => fill(piece("condMore"), c = Some(col), n = vv.text)
         case (Kind.Num, "<") => fill(piece("condLess"), c = Some(col), n = vv.text)
+        case (Kind.Time, "month") => Months.said(lang.code, vv.text.slice(5, 7).toInt)
         case (Kind.Time, _) => fill(piece("condTime"), c = Some(col), v = vv.text)
         case _ => fill(piece("condEq"), c = Some(col), v = value(col, vv))
     p match

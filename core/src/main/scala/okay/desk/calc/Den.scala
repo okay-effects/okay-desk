@@ -59,7 +59,7 @@ object Den:
     case Program.Rel(from, link, where, group, agg, order, limit) =>
       val other = link.map(_.to).toVector
       def condOf(ts: Vector[String], c: Option[(Col, String, Value)]): Term = c.fold(Leaf(Ty.ColumnT(ts, Role.Where, optional = true), "none")) { (cc, op, v) =>
-        Con(Ty.ColumnT(ts, Role.Where, optional = true), cc.name, Vector(Leaf(Ty.OpT(cc.kind), op), Leaf(Ty.ValueT(cc.table, cc.name), v.text))) }
+        Con(Ty.ColumnT(ts, Role.Where, optional = true), cc.name, Vector(Leaf(Ty.OpT(cc.kind), op), Leaf(Ty.ValueT(cc.table, cc.name, op == "month"), v.text))) }
       val cols = s.tables(from).columns
       val owns = where.filter(_._1.table == from).sortBy(w => cols.indexOf(w._1.name)); val own = owns.headOption; val own2 = owns.lift(1); val oth = where.find(w => other.contains(w._1.table))
       val fn = agg.map(_._1).getOrElse("none")
@@ -69,7 +69,7 @@ object Den:
         Leaf(Ty.LinkT(from), link.map(l => s"${l.column}->${l.to}").getOrElse("none")),
         condOf(Vector(from), own),
         own2.fold(Leaf(Ty.ColumnT(if own.isEmpty then Vector.empty else Vector(from), Role.Where, optional = true, except = upTo(own)), "none")) { (cc, op, v) =>
-          Con(Ty.ColumnT(Vector(from), Role.Where, optional = true, except = upTo(own)), cc.name, Vector(Leaf(Ty.OpT(cc.kind), op), Leaf(Ty.ValueT(cc.table, cc.name), v.text))) },
+          Con(Ty.ColumnT(Vector(from), Role.Where, optional = true, except = upTo(own)), cc.name, Vector(Leaf(Ty.OpT(cc.kind), op), Leaf(Ty.ValueT(cc.table, cc.name, op == "month"), v.text))) },
         condOf(other, oth),
         Leaf(Ty.ColumnT(from +: other, Role.Group, optional = true, except = where.map(_._1.name)), group.map(_.name).getOrElse("none")),
         Leaf(Ty.FnT(required = group.isDefined, timed = s.of(from).exists(_.kind == Kind.Time)), fn),
@@ -79,7 +79,7 @@ object Den:
         Leaf(Ty.LimitT(ordered = order.isDefined), limit.map(_.toString).getOrElse("none"))))
     case Program.Absent(target, l, where) =>
       val w = where.headOption.fold(Leaf(Ty.ColumnT(Vector(target), Role.Where, optional = true), "none")) { (cc, op, v) =>
-        Con(Ty.ColumnT(Vector(target), Role.Where, optional = true), cc.name, Vector(Leaf(Ty.OpT(cc.kind), op), Leaf(Ty.ValueT(cc.table, cc.name), v.text))) }
+        Con(Ty.ColumnT(Vector(target), Role.Where, optional = true), cc.name, Vector(Leaf(Ty.OpT(cc.kind), op), Leaf(Ty.ValueT(cc.table, cc.name, op == "month"), v.text))) }
       Con(Ty.Program, "Absent", Vector(Leaf(Ty.TableT, target), Leaf(Ty.ReverseLinkT(target), s"${l.from}.${l.column}"), w))
     case Program.Closure(edges, node, forward) =>
       Con(Ty.Program, "Closure", Vector(Leaf(Ty.DirectionT, if forward then "from" else "to"), Leaf(Ty.NodeT(edges), node)))

@@ -22,7 +22,8 @@ enum Ty:
   /** a column of one of the tables in a role: a condition's, a group's, an aggregate's; `none` allowed when optional */
   case ColumnT(tables: Vector[String], role: Role, optional: Boolean, except: Vector[String] = Vector.empty)
   case OpT(kind: Kind)
-  case ValueT(table: String, column: String)
+  /** a value of a column; `month`: of a date column under the `month` op — the months its dates are in */
+  case ValueT(table: String, column: String, month: Boolean = false)
   /** an aggregate function; required when a group was chosen (a group without an aggregate says nothing) */
   case FnT(required: Boolean, timed: Boolean = false)
   /** an order: none, or by what, in a direction */
@@ -125,8 +126,11 @@ final class Grammar(val schema: Schema) extends Rules:
     case Ty.ColumnT(_, Role.Agg, true, _) => Vector("none")
     case Ty.ColumnT(ts, role, optional, except) => (if optional then Vector("none") else Vector.empty) ++ columns(ts, role).distinct.filterNot(except.contains)
     case Ty.OpT(Kind.Num) => Vector("<", ">")
+    // a date column: a day, or the MONTH it is in (specs/loop.md §2.3)
+    case Ty.OpT(Kind.Time) => Vector("=", "month")
     case Ty.OpT(_) => Vector("=")
-    case Ty.ValueT(t, c) => schema.of(t).find(_.name == c).toVector.flatMap(schema.values).map(_.text)
+    case Ty.ValueT(t, c, true) => schema.of(t).find(_.name == c).toVector.flatMap(schema.months)
+    case Ty.ValueT(t, c, _) => schema.of(t).find(_.name == c).toVector.flatMap(schema.values).map(_.text)
     case Ty.FnT(required, timed) => (if required then Vector.empty else Vector("none")) ++ Vector("count", "sum", "avg", "min", "max") ++ (if timed then Vector("growth") else Vector.empty)
     case Ty.OrderT(_, Some(_), false) => Vector("none")
     case Ty.OrderT(t, agg, _) => "none" +: (agg match
@@ -142,7 +146,9 @@ final class Grammar(val schema: Schema) extends Rules:
     case _ => Vector.empty // the logic fragment's: its own grammar is `logic.LogicGrammar`
 
   override def open(ty: Ty): Boolean = ty match
-    case Ty.ValueT(t, c) => kindOf(t, c) == Kind.Num || kindOf(t, c) == Kind.Time // a number, a year, a date: written in the question, not listed
+    case Ty.ValueT(_, _, true) => false // a month: one of the months the dates are in
+    // a number, a year, a date: written in the question, not listed
+    case Ty.ValueT(t, c, _) => kindOf(t, c) == Kind.Num || kindOf(t, c) == Kind.Time
     case _ => false
 
   /** whether a constructor opens arguments (a node) or is an atom (a leaf) */
@@ -192,7 +198,7 @@ final class Grammar(val schema: Schema) extends Rules:
         val t = ts.find(x => schema.of(x).exists(_.name == c)).getOrElse(ts.head)
         args.size match
           case 0 => Some(Ty.OpT(kindOf(t, c)))
-          case 1 => Some(Ty.ValueT(t, c))
+          case 1 => Some(Ty.ValueT(t, c, month = leaf(0).contains("month")))
           case _ => None
       case (Ty.OrderT(_, _, _), _) => args.size match
         case 0 => Some(Ty.DirT)

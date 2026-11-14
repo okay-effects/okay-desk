@@ -27,6 +27,9 @@ object Space:
     val edgeLike: Vector[String] = tables.values.toVector.filter(t => t.columns.size == 2 && t.rows.nonEmpty &&
       t.columns.forall(c => kindOf(t, c) == Kind.Text) && t.rows.map(_(0).text).toSet.intersect(t.rows.map(_(1).text).toSet).nonEmpty).map(_.name)
     def of(table: String): Vector[Col] = cols.filter(_.table == table)
+    /** the months a date column's days are in (`yyyy-mm`): the values of a `month` condition */
+    def months(c: Col): Vector[String] = tables(c.table).column(c.name).toVector.flatMap(i =>
+      tables(c.table).rows.map(_(i).text).filter(_.matches("\\d{4}-\\d{2}-\\d{2}")).map(_.take(7))).distinct.sorted
     /** the values a condition can name: a text or time column's distinct values; a numeric column's thresholds */
     def values(c: Col): Vector[Value] =
       val t = tables(c.table); val i = t.columns.indexOf(c.name)
@@ -57,7 +60,11 @@ object Space:
   def compile(p: Program, tables: Map[String, Table]): Either[String, Query] = p match
     case Program.Rel(from, link, where, group, agg, order, limit) =>
       Right(Query.Relational(from, link.map(l => Join(l.to, Vector((l.column, tables(l.to).columns.head)))),
-        where.map((c, op, v) => Cond.Cmp(c.name, op, v)), group.map(_.name).toVector,
+        where.flatMap {
+          // a month: on or after its first day, before the next month's
+          case (c, "month", v) => month(c, v.text + "-01").map((cc, op, vv) => Cond.Cmp(cc.name, op, vv))
+          case (c, op, v) => Vector(Cond.Cmp(c.name, op, v))
+        }, group.map(_.name).toVector,
         agg.map((fn, c) => Agg(fn, c.map(_.name).getOrElse("*"), if fn == "count" then "n" else fn,
           by = Option.when(fn == "growth" || fn == "change")(tables(from).columns.find(c => kindOf(tables(from), c) == Kind.Time).getOrElse("")))).toVector, Vector.empty,
         order.map((c, desc) => Order(c, desc)).toVector, limit))
@@ -74,7 +81,8 @@ object Space:
     val limits = Vector(None, Some(1), Some(3), Some(5), Some(10))
     def conds(cs: Vector[Col]): Vector[(Col, String, Value)] = cs.flatMap { c =>
       val ops = c.kind match { case Kind.Num => Vector("<", ">"); case _ => Vector("=") }
-      for v <- s.values(c); op <- ops yield (c, op, v)
+      (for v <- s.values(c); op <- ops yield (c, op, v)) ++
+        (if c.kind == Kind.Time then s.months(c).map(m => (c, "month", Value.Str(m))) else Vector.empty)
     }
     // (an edge-like table is asked through closures, not as rows; a group on a column a condition fixes says nothing;
     // an order or a limit on one aggregate without groups has nothing to order)
@@ -137,7 +145,10 @@ object Space:
       val withValues = cs.filter(c => s.values(c).nonEmpty)
       if withValues.isEmpty then None else
         val c = pick(withValues); val v = pick(s.values(c))
-        Some((c, if c.kind == Kind.Num then pick(Vector("<", ">")) else "=", v))
+        // a date: the day, or the month it is in (specs/loop.md §2.3)
+        if c.kind == Kind.Time && v.text.matches("\\d{4}-\\d{2}-\\d{2}") && rnd.nextInt(10) < 4 then
+          Some((c, "month", Value.Str(v.text.take(7))))
+        else Some((c, if c.kind == Kind.Num then pick(Vector("<", ">")) else "=", v))
     val roll = rnd.nextInt(100)
     if roll < 15 && s.links.nonEmpty then
       val l = pick(s.links)

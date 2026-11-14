@@ -76,6 +76,12 @@ object Fill:
   /** THE DATA AS A SOURCE: what the question writes exactly — a table's name (the language module's dictionary for a
    * Russian form), a column's name, a value of the column, a number, the words of a comparison, of a function, of a
    * direction, of a limit. One candidate when the question names exactly one; no opinion otherwise. */
+  /** a condition whose op is `month` and whose value is still to come: the value hole is a month's */
+  private def monthOpen(t: Term): Boolean = t match
+    case Term.Con(Ty.ColumnT(_, Role.Where, _, _), _, Vector(Term.Leaf(_, "month"))) => true
+    case Term.Con(_, _, args) => args.exists(monthOpen)
+    case _ => false
+
   def exact[R[_]]: Fill[R] = new Fill[R]:
     def apply(ty: Ty, cs: Vector[String], ctx: Context): Dist ! R =
       val q = ctx.lower
@@ -172,13 +178,26 @@ object Fill:
             case Con(_, "Rows", args) => args.collect { case Con(Ty.ColumnT(_, Role.Where, _, _), _, Vector(_, Leaf(_, v))) => v }.toSet
             case _ => Set.empty
           val years = "\\b(1[89]\\d\\d|20\\d\\d)\\b".r.findAllIn(ctx.question).toSet.filterNot(y => usedVals.exists(_.contains(y)))
+            // (a year beside a month named is the month's, not a condition of its own: «в ноябре 2026»)
+            .filterNot(_ => Months.in(ctx.question).nonEmpty)
+          // (a MONTH named — "in March", «в марте» — is a condition on the date column, as a year is; not again once
+          // used)
+          val months = Months.in(ctx.question).filterNot(m => usedVals.exists(u => u.matches(f"\\d{4}-$m%02d")))
+          def inMonth(v: String) = months.exists(m => v.length >= 7 && v.slice(4, 8) == f"-$m%02d-")
           val valued = cs.filter(c => c != "none" && ts.exists(t => ctx.schema.tables.get(t).exists(tb => tb.column(c).exists(i =>
             tb.rows.map(_(i).text).distinct.filter(v => own || !ownValues(v)).exists(v => v.length >= 3 && !v.forall(_.isDigit) && !(v.length <= 3 && v.forall(_.isUpper)) && grams(v.toLowerCase) ||
-              years.contains(v) && ctx.schema.of(t).exists(col => col.name == c && col.kind == Kind.Time) ||
+              (years.contains(v) || inMonth(v)) &&
+                ctx.schema.of(t).exists(col => col.name == c && col.kind == Kind.Time) ||
               v.length >= 2 && v.forall(_.isUpper) && ctx.question.matches(s"(?U).*\\b$v\\b.*") ||
               ruValue(v))))))
           // a number with a comparison word: the numeric column whose range holds it
-          val number = "\\d+(?:\\.\\d+)?".r.findAllIn(ctx.question).toVector.filterNot(n => usedVals.contains(n) || years.contains(n) || usedVals.exists(u => u.toDoubleOption.contains(n.toDouble))).headOption
+          // (a year beside a month named is the month's: not a number to compare either)
+          val monthYears =
+            if Months.in(ctx.question).isEmpty then Set.empty[String]
+            else "\\b(1[89]\\d\\d|20\\d\\d)\\b".r.findAllIn(ctx.question).toSet
+          val number = "\\d+(?:\\.\\d+)?".r.findAllIn(ctx.question).toVector.filterNot(n =>
+            usedVals.contains(n) || years.contains(n) || monthYears.contains(n) ||
+            usedVals.exists(u => u.toDoubleOption.contains(n.toDouble))).headOption
             .filter(_ => ctx.has("more") || ctx.has("less")).map(_.toDouble)
           val numbered = number.toVector.flatMap(x => cs.filter(c => c != "none" && ts.exists(t => ctx.schema.of(t).exists(col => col.name == c && col.kind == Kind.Num &&
             { val vs = ctx.schema.tables(t).rows.flatMap(_(ctx.schema.tables(t).columns.indexOf(c)).num); vs.nonEmpty && vs.min <= x && x <= vs.max }))))
@@ -187,7 +206,9 @@ object Fill:
           // a value written that several columns hold ("green" in kind and in name): the column the question NAMES has it;
           // none named — ambiguous, no opinion (the same value is never two conditions)
           def valuesOf(c: String): Set[String] = ts.flatMap(t => ctx.schema.tables.get(t).toVector.flatMap(tb => tb.column(c).toVector.flatMap(i => tb.rows.map(_(i).text)))).toSet
-          val writtenValues: Set[String] = valued.flatMap(c => valuesOf(c).filter(v => !usedVals(v) && (years.contains(v) || v.length >= 3 && !v.forall(_.isDigit) && !(v.length <= 3 && v.forall(_.isUpper)) && grams(v.toLowerCase) ||
+          val writtenValues: Set[String] = valued.flatMap(c => valuesOf(c).filter(v => !usedVals(v) &&
+            (years.contains(v) || inMonth(v) ||
+            v.length >= 3 && !v.forall(_.isDigit) && !(v.length <= 3 && v.forall(_.isUpper)) && grams(v.toLowerCase) ||
             v.length >= 2 && v.forall(_.isUpper) && ctx.question.matches(s"(?U).*\\b$v\\b.*") || ruValue(v)))).toSet
           val byValue = writtenValues.toVector.map(v => v -> valued.filter(c => valuesOf(c)(v)))
           val ambiguous = byValue.exists((_, cols) => cols.size > 1 && !cols.exists(c => named(c) || ruColumn(c) || namedByWord(c)))
@@ -200,18 +221,35 @@ object Fill:
           // (no value, no number, no year written, and — for a first condition — no word of a condition: no condition; a
           // second condition's words were the first's)
           // (a question that BEGINS with "where"/"где" asks where, it does not condition: "Where does GDP grow fastest?")
-          else if years.isEmpty && optional && (usedVals.nonEmpty || !ctx.has("condition") || ctx.startsWith("condition")) then Vector(("none", 0.0))
+          else if years.isEmpty && months.isEmpty && optional &&
+              (usedVals.nonEmpty || !ctx.has("condition") || ctx.startsWith("condition")) then Vector(("none", 0.0))
           else Vector.empty
         case Ty.OpT(Kind.Num) =>
           // ("over" counts only before a number: "summed over orders" is not a comparison)
           val more = ctx.languages.exists(l => l.list("more").exists(w => if w == "over" then q.matches("(?U).*\\bover \\d.*") else ctx.word(w)))
           val less = ctx.has("less")
           if more && !less then Vector((">", 0.0)) else if less && !more then Vector(("<", 0.0)) else Vector.empty
+        // a date: the month when one is named and not yet a condition, else the day
+        case Ty.OpT(Kind.Time) =>
+          val used = ctx.term match
+            case Con(_, "Rows", args) =>
+              args.collect { case Con(Ty.ColumnT(_, Role.Where, _, _), _, Vector(Leaf(_, "month"), _)) => 1 }.size
+            case _ => 0
+          if Months.in(ctx.question).size > used then Vector(("month", 0.0)) else Vector(("=", 0.0))
         case Ty.OpT(_) => one(cs)
-        case Ty.ValueT(t, c) =>
+        case Ty.ValueT(t, c, _) =>
           val numeric = ctx.schema.of(t).exists(x => x.name == c && x.kind == Kind.Num)
           val timeValues = ctx.schema.cols.filter(_.kind == Kind.Time).flatMap(col => ctx.schema.tables(col.table).column(col.name).toVector.flatMap(i => ctx.schema.tables(col.table).rows.map(_(i).text))).toSet
           if numeric then one("\\d+(?:\\.\\d+)?".r.findAllIn(ctx.question).toVector.distinct.filterNot(timeValues))
+          else if ctx.schema.of(t).exists(col => col.name == c && col.kind == Kind.Time) && monthOpen(ctx.term) then
+            // the month named, in the year written or the column's latest year with it
+            val dates = ctx.schema.tables(t).column(c).toVector.flatMap(i => ctx.schema.tables(t).rows.map(_(i).text))
+            val usedMonths = ctx.term match
+              case Con(_, "Rows", args) =>
+                args.collect { case Con(Ty.ColumnT(_, Role.Where, _, _), _, Vector(Leaf(_, "month"), Leaf(_, v))) => v }
+              case _ => Vector.empty
+            Months.in(ctx.question).drop(usedMonths.size).headOption.flatMap(m => Months.value(m, ctx.question, dates))
+              .toVector.map(v => (v, 0.0))
           else if ctx.schema.of(t).exists(col => col.name == c && col.kind == Kind.Time) then
             // an open type: the year or the date written in the question, whether the examples list it or not
             val yearsWritten = "\\b(1[89]\\d\\d|20\\d\\d)\\b".r.findAllIn(ctx.question).toSet
@@ -340,7 +378,7 @@ object Render:
         case Ty.LinkT(_) => start + ", \"join\": {\"table\": \""
         case Ty.ColumnT(_, Role.Where, _, _) => start + ", \"where\": [{\"column\": \""
         case Ty.OpT(_) => start + s""", "where": [{"column": "${args.lastOption.flatMap(leaf).getOrElse("")}", "op": """"
-        case Ty.ValueT(_, c) => start + s""", "where": [{"column": "$c", "op": "${args.lastOption.collect { case Con(_, _, Vector(Leaf(_, op))) => op }.getOrElse("=")}", "value": """"
+        case Ty.ValueT(_, c, _) => start + s""", "where": [{"column": "$c", "op": "${args.lastOption.collect { case Con(_, _, Vector(Leaf(_, op))) => op }.getOrElse("=")}", "value": """"
         case Ty.ColumnT(_, Role.Group, _, _) => start + ", \"group\": [\""
         case Ty.FnT(_, _) => start + ", \"aggregate\": [{\"fn\": \""
         case Ty.ColumnT(_, Role.Agg, _, _) => start + s""", "aggregate": [{"fn": "${args.lift(6).flatMap(leaf).getOrElse("sum")}", "column": """"

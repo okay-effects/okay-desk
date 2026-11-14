@@ -70,6 +70,7 @@ object Phrase:
         else pick(s"with ${col.name} over ${v.text}", s"with ${col.name} greater than ${v.text}", s"where ${col.name} > ${v.text}")
       case (Kind.Num, "<") => if ru then pick(s"с ${column(col, Case.Nom)} меньше ${v.text}", s"у которых ${column(col, Case.Nom)} ниже ${v.text}")
         else pick(s"with ${col.name} below ${v.text}", s"with ${col.name} less than ${v.text}")
+      case (Kind.Time, "month") => month(v.text.slice(5, 7).toInt - 1) + (if rnd.nextInt(3) == 0 then s" ${v.text.take(4)}" else "")
       case (Kind.Time, _) => if ru then pick(s"за ${v.text}", s"на ${v.text}", s"с ${column(col, Case.Nom)} = ${v.text}")
         else pick(s"on ${v.text}", s"in ${v.text}", s"with ${col.name} = ${v.text}")
       case _ => if ru then pick(s"с ${column(col, Case.Nom)} = ${value(v)}", s"у которых ${column(col, Case.Nom)} равен ${value(v)}",

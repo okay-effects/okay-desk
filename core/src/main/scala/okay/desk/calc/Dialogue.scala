@@ -60,7 +60,7 @@ object Dialogue:
     case Ty.ColumnT(_, Role.Group, _, _) => "group"
     case Ty.ColumnT(_, Role.Agg, _, _) => "aggCol"
     case Ty.OpT(_) => "op"
-    case Ty.ValueT(_, _) => "value"
+    case Ty.ValueT(_, _, _) => "value"
     case Ty.FnT(_, _) => "fn"
     case Ty.OrderT(_, _, _) => "order"
     case Ty.DirT => "dir"
@@ -79,7 +79,7 @@ object Dialogue:
       else "This asks for a comparison or a share, which I do not compute; ask for the figures and compare them.")
     val piece = lang.pieces.get(s"ask:$kind").flatMap(_.headOption)
       .orElse(builtInAsk(lang.code).get(kind)).getOrElse(builtInAsk("en")(kind))
-    piece.replace("{column}", ty match { case Ty.ValueT(_, c) => c; case _ => "" }).replace("{options}", names.mkString(" / "))
+    piece.replace("{column}", ty match { case Ty.ValueT(_, c, _) => c; case _ => "" }).replace("{options}", names.mkString(" / "))
 
   /** a candidate as the person sees it: `none` said in words, a constructor's name otherwise */
   def name(ty: Ty, c: String, lang: Language): String =
