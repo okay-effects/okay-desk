@@ -78,6 +78,14 @@ hours. One MLX job at a time: two on one GPU slow both and have lost lines befor
 | `scripts/core-seeds.sh <name> <dir> <layers> 2 3` | the fact and statement readers again with other seeds | |
 | `scripts/statement.scala` | the real page in Chromium: tasks solved by "Solve", right / asked / wrong and seconds; `GL=1` WebGL2, `PHONE=1` a phone | serve with `PORT=… scripts/dev.sh` (not 8741: Elysion's) |
 
+### 3.1a The cycle and its history
+
+| tool | what it does | how |
+|---|---|---|
+| `scripts/cycle.sh <name> <base repo> <teacher jsonl>` | one turn: heads on split A → the adapter through them → the reader over the adapted core, seeds 1–3 → rows of the history; resumable (each step's file skips it) | `nohup scripts/cycle.sh next local/Qwen3-0.6B-4bit-cut19-vocab-p12-m4 …/teacher/all2.jsonl &` (~2.5 h) |
+| `scripts/history.scala <name> <seed> <log> [note]` | a run's numbers as rows of `~/work/my/okay-desk-private/history.tsv`: set, language, exact and silent with no gate, shown and wrong through the page's gate | |
+| `scripts/compare.scala <old> <new>` | the protocol's verdict, set by set: ranges and means over seeds, "up" / "DOWN" only beyond either side's spread, and the hard limits | e.g. `heads-alone adapter-r32` |
+
 ### 3.2 Training
 
 | tool | what it does | how |
@@ -117,8 +125,7 @@ Next, in order:
    and compared with the text) or a reader of another kind; a gate LEARNT from the outcomes of the unseen families
    and judged on the sealed set. Accepted when the page shows more right answers with no wrong one.
 2. **Ship the adapter** with that gate; the browser and phone runs; a line of history.
-3. **The cycle as one command** with a history file (`history.tsv`: date, base, adapter, reader, corpus, every
-   primary measure, accepted or not and why).
+3. ~~The cycle as one command with a history~~ — built: `cycle.sh`, `history.scala`, `compare.scala` (§3.1a).
 4. **Data questions (Query)** through the same cycle: Spider/BIRD and PAUQ checked by execution, the generator over
    many schemas, the teacher's rewrites; the data readers' heads and their adapter.
 5. **The base made smaller** by the same objective (trained through the heads, not toward a teacher), with Russian
