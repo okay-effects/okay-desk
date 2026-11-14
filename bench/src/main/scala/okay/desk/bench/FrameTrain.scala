@@ -1,7 +1,7 @@
 package okay.desk.bench
 
 import java.nio.file.{Files, Path}
-import mlx.llm.{Adaptable, Chat, Lora, Model, Models, Port, Session, Tokenizer}
+import mlx.llm.{Adaptable, Chat, Lora, Model, Models, Port, Tokenizer}
 import okay.desk.*
 import okay.desk.tasks.Everyday
 import okay.effects.json.Json
@@ -41,9 +41,10 @@ object FrameTrain:
     val dir = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
     val chat = Chat.load(dir); val loaded = Model.load(dir, mapped = true); val tok = chat.tokenizer
     val end = tok.id("<|im_end|>")
-    val items = sys.env("FRAME_TEXTS").split(",").toVector.flatMap(f => FrameTexts.load(Path.of(f)))
-    val held = items.filter(i => i.tables.keySet.exists(Domains.heldOut))
-    require(held.isEmpty, s"${held.size} items over the measure's tables")
+    // none over a table named as one of the measure's (the grammar's generic "sales" is not `Everyday`'s, but kept out)
+    val all = sys.env("FRAME_TEXTS").split(",").toVector.flatMap(f => FrameTexts.load(Path.of(f)))
+    val items = all.filterNot(i => i.tables.keySet.exists(Domains.heldOut))
+    println(s"${all.size - items.size} texts over tables named as the measure's left out")
     val epochs = sys.env.get("FRAME_EPOCHS").map(_.toInt).getOrElse(1)
     println(s"$repo: ${items.size} frames; e.g.\n  " +
       items.take(2).map(i => s"${i.question}\n    → ${i.lines.mkString(" | ")}")
@@ -101,6 +102,8 @@ object FrameBench:
     val stop = tok.id("<|im_end|>"); val newline = tok.encode("\n").head
     final case class Count(right: Int = 0, asked: Int = 0, wrong: Int = 0)
     var counts = Map.empty[(String, String), Count].withDefaultValue(Count())
+    val doubts = scala.collection.mutable.ArrayBuffer.empty[(Option[Table], Vector[String], Double, String,
+      Map[String, Table])]
     val t0 = System.nanoTime()
     val questions = sys.env.get("FRAME_ONLY").fold(Everyday.questions)(n => Everyday.questions.take(n.toInt))
     for q <- questions; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) do
@@ -108,10 +111,9 @@ object FrameBench:
       val (system, user) = Frame.prompt(tables, text)
       val prompt = chat.prompt(Vector(FrameTrain.msg("system", system), FrameTrain.msg("user", user)), Nil,
         Map("enable_thinking" -> false))
-      val port = FramePort(tok, tables, text, stop, newline)
-      val s = Session(model, prompt, 160, chat.stops, port = port)
-      try Iterator.continually(s.next()).takeWhile(_.isDefined).foreach(_ => ()) finally s.close()
-      val lines = port.lines.toVector
+      val read = FrameRead(model, prompt, tok, tables, text, newline, stop)
+      val lines = read.lines
+      doubts += ((q.gold.flatMap(Everyday.run(_).toOption), lines, read.margins.minOption.getOrElse(0.0), lang, tables))
       val got = Frame.query(lines, tables).flatMap(Exact.run(tables, _)).toOption
       val gold = q.gold.flatMap(Everyday.run(_).toOption)
       val outcome = (gold, got) match
@@ -132,4 +134,64 @@ object FrameBench:
       val c = counts.collect { case ((_, l), c) if l == lang => c }
       println(s"total $lang: right ${c.map(_.right).sum}, asked ${c.map(_.asked).sum}, wrong ${c.map(_.wrong).sum} " +
         s"of ${Everyday.questions.size}")
+    // THE DOUBT: a question whose smallest margin is below a bar is asked instead — right, asked, wrong by the bar
+    for bar <- Vector(0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0) do
+      val line = Vector("en", "ru").map { lang =>
+        val mine = doubts.filter(_._4 == lang)
+        val (r, a, w) = mine.foldLeft((0, 0, 0)) { case ((r, a, w), (gold, lines, m, _, tables)) =>
+          val got = if m < bar then None else Frame.query(lines, tables).flatMap(Exact.run(tables, _)).toOption
+          (gold, got) match
+            case (_, None) => if gold.isEmpty then (r + 1, a, w) else (r, a + 1, w)
+            case (None, Some(_)) => (r, a, w + 1)
+            case (Some(want), Some(t)) => if Sample.same(t, want) then (r + 1, a, w) else (r, a, w + 1) }
+        f"$lang $r%2d / $a%2d / $w%2d" }
+      println(f"  doubt below $bar%.2f: ${line.mkString("   ")}")
     model.close()
+
+/**
+ * THE FRAME READ WITH ITS DOUBT (specs/frames.md §2): the same choices as `FramePort`, each line's options scored
+ * by the model from a checkpoint of its state (the mean log-probability of the option's tokens and the line's end),
+ * the best fed on — and the MARGIN of each choice kept: the best's score less the second's. A small margin at any
+ * line is a doubt: the page asks instead of answering.
+ */
+object FrameRead:
+  import mlx.*
+  import mlx.Mlx.*
+
+  final case class Read(lines: Vector[String], margins: Vector[Double])
+
+  def apply(model: Model, prompt: Array[Int], tok: Tokenizer, tables: Map[String, Table], question: String,
+      newline: Int, stop: Int, maxLines: Int = 16): Read =
+    val carry = new Scope
+    val state = model.newState()
+    try
+      Scope(carry)(model.logits(ints(prompt, 1, prompt.length), state).eval())
+      val lines = scala.collection.mutable.ArrayBuffer.empty[String]
+      val margins = scala.collection.mutable.ArrayBuffer.empty[Double]
+      def score(option: Array[Int], after: Int): Double =
+        val at = state.checkpoint()
+        val input = newline +: option
+        val want = option :+ after
+        val lp = Scope(carry) {
+          val logits = astype(model.logitsAll(ints(input, 1, input.length), state), Dtype.Float32)
+          val v = logits.dim(-1)
+          val probs = softmax(reshape(logits, input.length, v), 1)
+          takeAlong(probs, ints(want, input.length, 1), 1).toFloats.take(want.length)
+        }
+        state.rewind(at, 0): Unit
+        at.close()
+        lp.map(p => math.log(math.max(p, 1e-30f).toDouble)).sum / want.length
+      while !lines.lastOption.contains(Frame.end) && lines.size < maxLines do
+        val options = Frame.next(lines.toVector, tables, question)
+        if options.isEmpty then lines += Frame.end
+        else
+          val scored = options.map(o => (o, score(tok.encode(o), if o == Frame.end then stop else newline)))
+            .sortBy(-_._2)
+          val (best, s) = scored.head
+          margins += scored.lift(1).fold(Double.PositiveInfinity)(second => s - second._2)
+          lines += best
+          val fed = newline +: tok.encode(best)
+          Scope(carry)(model.logits(ints(fed, 1, fed.length), state).eval())
+      Read(lines.toVector, margins.toVector)
+    finally
+      state.close(); carry.close()
