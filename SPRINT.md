@@ -3,9 +3,8 @@
 What is being done now, each item with its check; done items move to their spec's results and leave this file.
 The design: `specs/loop.md`, `specs/core-joint.md`, `specs/everyday.md`; the tools: `docs/toolkit.md`.
 
-1. **The data readers with domains, measured** — running. Readers trained on this core's own states, without
-   and with `Domains` pairs (`EverydayBench DESK_TRAIN=1500`, `DESK_DOMAINS=50`). Check: `Everyday` right / asked /
-   wrong by language against the page's skill (en 21/9/18, ru 10/23/15); the result in `specs/everyday.md`.
+1. ~~The data readers with domains, measured~~ — done: no change beyond noise; template pairs teach names, not
+   people's words (`specs/everyday.md`). Next for data: item 4, then the teacher's natural pairs over the domains.
 2. **The teacher's second batch and one turn of the cycle** — running (`cycle-teacher2.sh`). Check:
    `compare.scala adapter-r32 teacher2`; the verdict in `specs/core-joint.md` §11.
 3. **The understanding said** (`specs/loop.md` §2.1) — a program → words (en/ru), exact; laws: every point of the

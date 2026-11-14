@@ -39,3 +39,20 @@ this order:
    teacher's rewrites in four languages, months and money words, the outside questions as "ask";
 3. the readers retrained on it, and the core's adapter through their heads (`JointTrain`, as for the logic tasks);
 4. the same measure again — `EverydayBench` — and in the page on a phone.
+
+## The readers retrained, without and with the domains (2026-11-14)
+
+The skill trained on this core's own states (`EverydayBench DESK_TRAIN=1500`; 20 min each), the same measure:
+
+| data readers | en right / asked / wrong | ru right / asked / wrong |
+|---|---|---|
+| the page's (the teacher's skill file) | 21 / 9 / 18 | 10 / 23 / 15 |
+| retrained on the page's core, the old pairs | 22 / 8 / 18 | 10 / 18 / 20 |
+| + half the pairs over `Domains` (14 schemas) | 23 / 8 / 17 | 10 / 20 / 18 |
+
+No change beyond noise. The template pairs over new schemas teach new column NAMES, not the words people use for
+them: the grammar says "the total amount of donations", a person says "how much did I spend" — no pair ties "spend"
+to a money column. And 15 of the 48 questions cannot be right today whatever the readers learn: 9 outside the
+language (the right outcome is to ask; the reading answers) and ~6 about months (the calculus has no month).
+Next, in this order: the month in the calculus; the teacher's natural pairs over the domains (its "pairs" mode with
+`Domains` schemas, judged by read-back); "ask" taught for what the language cannot say.
