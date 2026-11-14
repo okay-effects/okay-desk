@@ -58,7 +58,7 @@ object StatementRead:
    * whether there is an answer to show — a statement that compiles and settles on one result */
   /** `settled`: the exact side decided how some sentences are read (`Reader.read`) */
   final case class Outcome(how: String, least: Map[String, Float], definite: Boolean, news: (Int, Int),
-      settled: Boolean = false, answer: String = "")
+      settled: Boolean = false, answer: String = "", spare: Int = -1)
   final case class Judged(language: String, family: String, decisions: Vector[Decision], outcome: Outcome)
 
   def judge(seen: Seen, gold: Statement, golden: Assemble.Decisions, trained: Reader.Trained)
@@ -98,7 +98,9 @@ object StatementRead:
       case _ => "silent"
     // an answer there is to show: "none" and "several" are answers (§8, point 4)
     (decisions, Outcome(how, reading.least, got.nonEmpty, reading.news, reading.settled.nonEmpty,
-      got.fold("")(_.mkString("|").replace('\t', ' '))))
+      got.fold("")(_.mkString("|").replace('\t', ' ')),
+      // the clues the reading's answer does not need (§10): a sign independent of the heads' margins
+      read.flatMap(st => ClueCheck.redundant(st, seen.text)).fold(-1)(_._2)))
 
   private def env(name: String, default: Int): Int = sys.env.get(name).map(_.toInt).getOrElse(default)
 
@@ -285,7 +287,8 @@ object StatementRead:
         for path <- sys.env.get("READ_OUT").map(perSeed(_, seed)) do
           Files.writeString(Path.of(path), js.map(j => (Vector(name, j.language, family(j), j.outcome.how) ++
             (j.outcome.least.toVector ++ Vector("word" -> -j.outcome.news._1.toFloat,
-              "pair" -> -j.outcome.news._2.toFloat)).sorted.map((k, m) => s"$k=$m") :+ s"answer=${j.outcome.answer}")
+              "pair" -> -j.outcome.news._2.toFloat)).sorted.map((k, m) => s"$k=$m") :+ s"spare=${j.outcome.spare}" :+
+              s"answer=${j.outcome.answer}")
             .mkString("\t") + "\n").mkString,
             StandardOpenOption.CREATE, StandardOpenOption.APPEND)
         for language <- js.map(_.language).distinct.sorted do

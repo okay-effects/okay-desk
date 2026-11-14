@@ -200,3 +200,29 @@ corpus) do not tell which. Two ways on, both measured by the same tools:
    sentence as the OTHER reader read it, every clue must be used — independent of how sure the heads are;
 2. the reading itself made right more often on unfamiliar wording — the corpus's variety (the teacher in four
    languages, exercises from textbooks), the cycle of `docs/toolkit.md`.
+
+## 10. The exact side's sign: is every clue needed? (2026-11-14)
+
+`ClueCheck`: a clue is spare when dropping it leaves the same definite answer. On the GOLD statements, every clue is
+needed in 70.6% of Test, 81.8% of Unseen, 85.7% of Sealed, 67.5% of the collection; ~5% of all clues are spare (the
+generators do not make minimal tasks). As a gate over the readings (`spare` in `READ_OUT`; seeds 2 and 3, the adapted
+reader; shown / wrong):
+
+| set | tight (no spare clue) | agree & tight | agree & tight & margins |
+|---|---|---|---|
+| Test en | 204 / 1, 204 / 1 | 202 / 1, 199 / 1 | 194 / 0, 197 / 0 |
+| Collection en | 56 / 0, 54 / 0 | 52 / 0, 43 / 0 | 44 / 0, 41 / 0 |
+| Sealed en | 192 / 31, 200 / 23 | 133 / 16, 123 / 11 | 92 / 10, 70 / 7 |
+| Sealed ru | 99 / 21, 88 / 22 | 17 / 4, 21 / 7 | 7 / 2, 14 / 5 |
+
+It does not separate: it drops a third of the right answers in the corpus (their tasks have spare clues), and on
+the sealed set the readings it keeps are still wrong one time in seven to ten. A misreading that gives a definite
+answer is mostly as tight as a right one.
+
+**What the gate experiments (§8–§10) established.** On wording no corpus had, the reader is right 60–85% of the
+time, and none of its own signs — margins, novelty, a second reader of the same base and corpus, a learnt
+combination, the solver's tightness — tells the right from the wrong well enough to show answers with no silent
+error. The page's novelty gate stays: it is the only one with no wrong answer on the sealed set, at the price of
+asking. The lever is the READING on unfamiliar wording itself: more and more varied training text (the teacher's
+rewrites were the one measured lever — formalization.md §18, and the adapter learnt most from them), then the same
+adapter and heads over it. Next: the teacher's corpus at scale.
