@@ -23,7 +23,8 @@ run() { sbt -batch 'set bench / javaOptions += "-Xmx26g"' "bench/runMain okay.de
   run "JointTrain $repo $C/headsA.bin $C/adapter.safetensors 1 32 1e-4 0.1" > "$C/joint.txt" 2>&1
 [ -f "$C/adapter.page.safetensors" ] || run "SemanticExport $C/adapter.safetensors $C/adapter.page.safetensors" \
   > /dev/null 2>&1
-# 3. the reader by the page's recipe over the adapted core, three seeds; seed 1's reader saved
+# 3. the reader by the page's recipe over the adapted core, three seeds; seed 1's reader saved — the core's states kept on disk
+# by seed 1 (`READ_STORE`), read back by seeds 2 and 3: about ten minutes each instead of thirty
 for seed in 1 2 3; do
   [ -f "$C/read-$seed.txt" ] && grep -q "^\[info\] Collection ru" "$C/read-$seed.txt" && continue
   # (a subshell: `run` is a function of this script, which `env` cannot call; READ_SAVE for seed 1 alone)
@@ -31,7 +32,7 @@ for seed in 1 2 3; do
     if [ "$seed" = 1 ]; then export READ_SAVE=$C/reader.bin; fi
     export SMALL_DIR=$base LOGIC_DIR=$base SEMANTIC_NATIVE_ADAPTER=$C/adapter.page.safetensors MLX_SCALA_LIB=$L \
       READ_ECHO=2 READ_SEED=$seed READ_TRAIN=4000 READ_TEACHER=$teacher READ_TEACHER_TEST=$P/teacher/test.jsonl \
-      READ_OUT=$C/out-$seed.tsv
+      READ_OUT=$C/out-$seed.tsv READ_STORE=$C/states
     run StatementRead > "$C/read-$seed.txt" 2>&1
   )
   # 4. its rows in the history
