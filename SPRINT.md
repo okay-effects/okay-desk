@@ -13,5 +13,5 @@ the design before it: `specs/loop.md`, `specs/core-joint.md`, `specs/everyday.md
 4. **The teacher as labeller of natural questions** (direction §3) — the teacher writes the program, a second
    reading agrees; the readers trained. Check: the gap to the ceiling on `Everyday`.
 5. **The ceiling for logic** — the teacher writes the statement of the sealed logic set. Check: the gap.
-6. **The model picked by a button on the page** — built (the student or the released 0.6B, remembered); check:
-   the browser run, then published.
+6. **The reader that writes** (direction §6) — LoRA on the released 0.6B over the teacher's pairs, `GenBench`.
+   Check: `Everyday` right / wrong beside the heads and the ceiling.

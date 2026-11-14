@@ -71,3 +71,18 @@ seven former outside questions inside since the language grew (§2).
   and better texts through the same heads over the same frozen states move nothing. The readers' design is the
   limit, not their data. The next step on the model's side is a reader that WRITES the program (constrained by the
   grammar), distilled from the teacher's own programs — measured against the heads by the same protocol.
+
+## 6. The experiment: the reader that writes (from 2026-11-14)
+
+The question: does a small model that WRITES the program close the gap the heads do not?
+- **The model:** Qwen3 0.6B as released (28 layers, 4-bit), LoRA rank 16 on every projection (`Train`).
+- **The texts:** the teacher's 2967 natural pairs (`Domains` tables, en/ru/uk/pl) and 1500 of the grammar's pairs
+  (`Pairs.many`), each as the page's prompt (`Prompt.system`: the schema with values, the language's forms) and
+  the program as the answer. `Everyday` is never trained on.
+- **The reading:** greedy, free and masked by the grammar (`Grammar`, the port `DeskBench` uses); the program run
+  by the exact engine.
+- **The measure:** `GenBench` — `Everyday` scored as `CeilingBench` and `EverydayBench` score it (right, asked,
+  wrong), beside the ceiling (43/54) and the heads (22/54 en, 9–10/54 ru).
+- **Then, by the result:** writing wins → the teacher labels many more natural questions (it writes the programs
+  itself), the reader on the student (12 layers) to fit the phone, sampling with agreement by execution as the
+  doubt. Writing loses → the model's size is the limit; the student distilled from a larger one.

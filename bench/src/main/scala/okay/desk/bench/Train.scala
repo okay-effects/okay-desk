@@ -19,15 +19,20 @@ object Train:
     val chat = Chat.load(dir); val loaded = Model.load(dir, mapped = true); val tok = chat.tokenizer
     val model = loaded.asInstanceOf[Adaptable]
     val end = tok.id("<|im_end|>")
-    val pairs = Pairs.many(seed = 42, n)
+    // TRAIN_TEACHER_PAIRS: the teacher's natural pairs (`Teacher pairs`) beside the grammar's, over the tables they
+    // were written for (rebuilt from each pair's seed, TEACH_DOMAINS as when written) — specs/direction.md §6
+    val taught = sys.env.get("TRAIN_TEACHER_PAIRS").toVector.flatMap(p => TeacherBench.load(java.nio.file.Path.of(p)))
+      .map(t => Pairs.Pair(Teacher.point(t.seed)._1, t.question, t.program))
+    val pairs = Pairs.many(seed = 42, n) ++ taught
     println(s"$repo: ${pairs.size} pairs (${pairs.count(_.question.exists(c => c >= 'а' && c <= 'я'))} in Russian); e.g.\n  " +
       pairs.take(3).map(p => s"${p.question}\n    → ${p.program}").mkString("\n  "))
     def msg(role: String, content: String) = okay.effects.json.Json.obj("role" -> okay.effects.json.Json.Str(role),
       "content" -> okay.effects.json.Json.Str(content))
-    val projs = loaded match
+    val projs = sys.env.get("TRAIN_PROJS").map(_.split(",").toSeq).getOrElse(loaded match
       case _: Qwen35 => Seq("o", "out", "down")
-      case _ => Seq("q", "v", "o")
-    val lora = Lora(model, rank = 8, projs = projs, lr = 2e-4f)
+      case _ => Seq("q", "v", "o"))
+    val lora = Lora(model, rank = sys.env.get("TRAIN_RANK").map(_.toInt).getOrElse(8), projs = projs,
+      lr = sys.env.get("TRAIN_LR").map(_.toFloat).getOrElse(2e-4f))
     val rnd = new scala.util.Random(3)
     val t0 = System.nanoTime()
     for e <- 1 to epochs do
@@ -39,7 +44,8 @@ object Train:
         sum += lora.step(prompt ++ answer, prompt.length); k += 1
         if k % 100 == 0 then println(f"epoch $e, $k/${pairs.size}: mean loss ${sum / k}%.4f (${(System.nanoTime() - t0) / 1e9}%.0f s)")
       println(f"epoch $e: mean loss ${sum / k}%.4f")
-    val out = java.nio.file.Path.of(sys.props("user.home"), ".cache", "okay-desk", s"lora-${repo.split('/').last}.safetensors")
+    val out = sys.env.get("TRAIN_OUT").map(java.nio.file.Path.of(_)).getOrElse(java.nio.file.Path.of(
+      sys.props("user.home"), ".cache", "okay-desk", s"lora-${repo.split('/').last}.safetensors"))
     java.nio.file.Files.createDirectories(out.getParent)
     lora.save(out.toString)
     println(s"saved $out")
