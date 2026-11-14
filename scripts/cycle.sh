@@ -6,11 +6,12 @@
 # Run it with nohup: a turn takes about two and a half hours on the M4, one MLX job at a time.
 set -e
 cd "$(dirname "$0")/.."
-# a step that fails says so where the turn is followed (it stopped once for five hours with nothing said)
-trap '[ $? -ne 0 ] && echo "FAILED at $(date): see the step'"'s log in $C" >> $C/status' EXIT
 name=$1; repo=$2; teacher=$3
 P=$HOME/work/my/okay-desk-private
 C=$P/cycle/$name
+# a step that fails says so where the turn is followed (it stopped once for five hours with nothing said)
+failed() { s=$?; if [ $s -ne 0 ]; then echo "FAILED at $(date) (exit $s): see the step logs in $C" >> "$C/status"; fi; }
+trap failed EXIT
 L=$HOME/work/my/mlx-scala/native-lib/out/lib
 base=$HOME/.cache/huggingface/hub/models--$(echo "$repo" | sed 's#/#--#')/snapshots/main
 mkdir -p "$C"
