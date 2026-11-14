@@ -32,8 +32,12 @@ object EverydayBench:
       case Some(n) =>
         val on = okay.desk.skill.Readers.On(skill, reading)
         val t0 = System.nanoTime()
-        on.train(okay.desk.skill.Pairs.many(42, n))
-        println(f"skill trained on $n pairs over this core (${(System.nanoTime() - t0) / 6e10}%.1f min)")
+        // DESK_TEACHER_PAIRS: the teacher's natural pairs (`Teacher pairs`) added — over the domains' tables when
+        // TEACH_DOMAINS is set as when they were written (the tables rebuilt from each pair's seed)
+        val taught = sys.env.get("DESK_TEACHER_PAIRS").toVector.flatMap(p => TeacherBench.load(Path.of(p)))
+          .map(t => okay.desk.skill.Pairs.Pair(Teacher.point(t.seed)._1, t.question, t.program))
+        on.train(okay.desk.skill.Pairs.many(42, n) ++ taught)
+        println(f"skill trained on $n pairs and ${taught.size} of the teacher's over this core (${(System.nanoTime() - t0) / 6e10}%.1f min)")
         for p <- sys.env.get("DESK_SKILL_OUT") do Files.write(Path.of(p), on.bytes)
       case None =>
         skill.load(Files.readAllBytes(Path.of(sys.env.getOrElse("DESK_SKILL",
