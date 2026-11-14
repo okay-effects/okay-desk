@@ -149,6 +149,8 @@ object Model:
   /** Native readers, the experimental native program author, and the existing WebLLM models. */
   val choices: List[(String, String)] = List(
     "readers-small" -> "Qwen3 0.6B student, 12 layers + readers (122 MB, no generation)",
+    // the model the student was distilled from, to compare them: the same readers on its own layer-19 states
+    "readers-full" -> "Qwen3 0.6B as released, 28 layers + the same readers at its layer 19 (320 MB, no generation)",
     interpreter -> "Qwen3 0.6B, 28 layers + program adapter (~305 MiB, experimental)",
     "Qwen3-1.7B-q4f16_1-MLC" -> "Qwen3 1.7B (~1 GB, generates)",
     "Qwen3-0.6B-q4f16_1-MLC" -> "Qwen3 0.6B (~0.4 GB, generates)",
@@ -157,7 +159,7 @@ object Model:
 
   /** the models read by the readers: their files' directory on the page and the layer the skill reads */
   val readers: Map[String, (String, Int)] =
-    Map("readers-small" -> ("model-small", 12))
+    Map("readers-small" -> ("model-small", 12), "readers-full" -> ("model-full", 19))
   val nativeModels: Map[String, (String, Int)] = readers + (interpreter -> ("model-understanding", 28))
 
   /** the model a page loads unless another is chosen */

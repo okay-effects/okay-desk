@@ -70,6 +70,15 @@ if [ -f "$STATEMENT" ]; then cp "$STATEMENT" "$out/model-small/statement.reader"
 if [ -f "$STATEMENT_ADAPTER" ]; then cp "$STATEMENT_ADAPTER" "$out/model-small/statement-adapter.safetensors"; fi
 if [ -f "$STATEMENT_PLAIN" ]; then cp "$STATEMENT_PLAIN" "$out/model-small/statement-plain.reader"; fi
 if [ -f "$STATEMENT_GATE" ]; then cp "$STATEMENT_GATE" "$out/model-small/statement.gate"; fi
+# The model the student was distilled from, all 28 layers as released, to compare with it (?models): the same
+# readers, read at its layer 19 (where they were trained); the logic and fact readers are the student's, not here
+FULL_DIR=${FULL_DIR:-$HOME/.cache/huggingface/hub/models--mlx-community--Qwen3-0.6B-4bit/snapshots/main}
+if [ -f "$FULL_DIR/model.safetensors" ]; then
+  mkdir -p "$out/model-full"
+  cp web/page/qwen-LICENSE.txt "$out/model-full/LICENSE"
+  cp "$FULL_DIR/config.json" "$FULL_DIR/tokenizer.json" "$out/model-full/" && cp "$SKILL" "$out/model-full/readers.skill"
+  sbt -batch "bench/runMain okay.desk.bench.SplitWeights $FULL_DIR $out/model-full" > /dev/null
+fi
 # Explicit experimental ?understanding path; the normal chat keeps the measured legacy readers.
 if [ -f "$SEMANTIC_ADAPTER" ]; then
   mkdir -p "$out/model-understanding"

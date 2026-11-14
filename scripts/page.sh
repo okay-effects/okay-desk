@@ -2,6 +2,7 @@
 # THE PAGE'S SELF-TEST: the page linked, served with the student's files and readouts from the caches,
 # run in Chromium by scripts/page.scala (`GL=1` for WebGL2, `PHONE=1` as a phone: WebGL2, the CPU head)
 set -e
+PORT=${PORT:-8734}
 cd "$(dirname "$0")/.."
 SKILL=${SKILL:-$HOME/.cache/okay-desk/readers-Qwen3-0.6B-4bit-cut19-19.skill}
 # the student (§21), the default model: 12 layers distilled toward the cut's layer-19 state, the same skill file
@@ -31,10 +32,19 @@ if [ -f "$STATEMENT_PLAIN" ]; then cp "$STATEMENT_PLAIN" "$web/model-small/state
 STATEMENT_GATE=${STATEMENT_GATE:-$HOME/.cache/okay-desk/statement.gate}
 if [ -f "$STATEMENT_GATE" ]; then cp "$STATEMENT_GATE" "$web/model-small/statement.gate"; fi
 
+# The model the student was distilled from, all 28 layers as released, to compare with it (?models): the same
+# readers, read at its layer 19 (where they were trained); the logic and fact readers are the student's, not here
+FULL_DIR=${FULL_DIR:-$HOME/.cache/huggingface/hub/models--mlx-community--Qwen3-0.6B-4bit/snapshots/main}
+if [ -f "$FULL_DIR/model.safetensors" ]; then
+  mkdir -p "$web/model-full"
+  cp web/page/qwen-LICENSE.txt "$web/model-full/LICENSE"
+  cp "$FULL_DIR/config.json" "$FULL_DIR/tokenizer.json" "$web/model-full/" && cp "$SKILL" "$web/model-full/readers.skill"
+  sbt -batch "bench/runMain okay.desk.bench.SplitWeights $FULL_DIR $PWD/$web/model-full" > /dev/null
+fi
 # another server on the port would answer instead of this build (a stale one did, §29): refuse to measure it
-if lsof -iTCP:8734 -sTCP:LISTEN > /dev/null 2>&1; then echo "port 8734 is taken: $(lsof -iTCP:8734 -sTCP:LISTEN | tail -1)"; exit 1; fi
-jwebserver -d "$PWD/$web" -p 8734 -o none > /dev/null 2>&1 &
+if lsof -iTCP:$PORT -sTCP:LISTEN > /dev/null 2>&1; then echo "port $PORT is taken: $(lsof -iTCP:$PORT -sTCP:LISTEN | tail -1)"; exit 1; fi
+jwebserver -d "$PWD/$web" -p $PORT -o none > /dev/null 2>&1 &
 server=$!
 trap 'kill $server' EXIT
 sleep 1
-scala-cli run scripts/page.scala -- "http://localhost:8734/?selftest"
+scala-cli run scripts/page.scala -- "http://localhost:$PORT/?selftest${MODEL:+&model=$MODEL}"

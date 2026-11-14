@@ -245,7 +245,8 @@ object Engine:
       generator = if generate then Some(tok) else None
       if skill != null then skill.load(new Int8Array(skillBytes).toArray)
       engine = null
-      val name = if generate then "Qwen3 0.6B" else if understanding then "Qwen3 0.6B task interpreter" else "the student"
+      val name = if generate then "Qwen3 0.6B" else if understanding then "Qwen3 0.6B task interpreter"
+        else if dir == "model-full" then "Qwen3 0.6B as released" else "the student"
       Right(s"$name (${config.layers} layers) and ${if generate then "generation" else if understanding then "model program authoring" else "the readers"}" +
         s" on ${c.api}" +
         (if phone && c.api != "WebGPU" then ", the head on the CPU" else "") + device.fold(why => s" ($why)", _ => "")))
