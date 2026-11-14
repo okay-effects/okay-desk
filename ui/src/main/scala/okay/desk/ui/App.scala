@@ -333,7 +333,12 @@ object App:
               else "computed by the exact engine in this page"
             val proofScope = if q.isInstanceOf[Query.Logical] && proof.isEmpty then
               "; expanded proof omitted beyond the current certificate budget" else ""
-            val shown = s.copy(log = s.log :+
+            // HOW THE QUESTION WAS UNDERSTOOD (specs/loop.md §2.1): the program said back in plain words by the exact
+            // side, so that a misreading shows before the figure is believed
+            val cyrillic = question.exists(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я')
+            val understood = Entry("model", (if cyrillic then "Понял так: " else "Understood as: ") +
+              okay.desk.Understood(q, cyrillic))
+            val shown = s.copy(log = s.log :+ understood :+
               Entry("result", result.render(50), Some(Query.print(q)), Some(note + proofScope)))
             // THE ANSWER IN WORDS (specs/calculus.md §10, §14): the answer grammar phrases the exact result;
             // facts are cells or exact derivations from them, never free model-written claims.
