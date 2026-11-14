@@ -277,6 +277,8 @@ object StatementRead:
         Files.write(Path.of(path), Reader.write(trained.copy(bars = bars)))
         println(s"the reader is in $path: ${Files.size(Path.of(path)) / 1024} KB, words ${known.words.size}, " +
           s"pairs ${known.pairs.size}")
+        // READ_SAVE_ONLY: the reader is what was wanted (the heads of a cycle's split A): nothing measured after it
+        if sys.env.contains("READ_SAVE_ONLY") then { System.out.flush(); System.exit(0) }
 
       def pct(n: Int, of: Int): String = if of == 0 then "—" else f"${100.0 * n / of}%.1f%%"
       // `totals`: a set whose families and wordings its reader's author must not see (the sealed one) — sums only

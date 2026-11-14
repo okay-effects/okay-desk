@@ -15,7 +15,7 @@ mkdir -p "$C"
 run() { sbt -batch 'set bench / javaOptions += "-Xmx26g"' "bench/runMain okay.desk.bench.$1"; }
 # 1. the heads of split A: the first 2000 Train tasks, en and ru, read as the page reads (echo 2), no rewrite
 [ -f "$C/headsA.bin" ] || SMALL_DIR=$base LOGIC_DIR=$base MLX_SCALA_LIB=$L READ_ECHO=2 READ_TRAIN=2000 \
-  READ_SAVE=$C/headsA.bin run StatementRead > "$C/headsA.txt" 2>&1
+  READ_SAVE=$C/headsA.bin READ_SAVE_ONLY=1 run StatementRead > "$C/headsA.txt" 2>&1
 # 2. the adapter through them: split B (Train 2000–4000) and the teacher's rewrites
 [ -f "$C/adapter.safetensors" ] || JOINT_TEACHER=$teacher MLX_SCALA_LIB=$L \
   run "JointTrain $repo $C/headsA.bin $C/adapter.safetensors 1 32 1e-4 0.1" > "$C/joint.txt" 2>&1
