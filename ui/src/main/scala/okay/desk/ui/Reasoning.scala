@@ -102,7 +102,7 @@ object Reasoning:
     else readNew[R](s).flatMap(ready => choose[R](ready, observations, searched, round))
 
   private def readNew[R[_]](s: App.State)(using
-      In[Ui, R], In[Model, R], In[Disk, R], In[Fetch, R]
+      In[Ui, R], In[Model, R]
   ): App.State ! R =
     val r = s.reasoning
     val quotes = if Deduction.goal(r.question).isEmpty then Vector.empty
