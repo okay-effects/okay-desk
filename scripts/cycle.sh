@@ -24,10 +24,14 @@ run() { sbt -batch 'set bench / javaOptions += "-Xmx26g"' "bench/runMain okay.de
 # 3. the reader by the page's recipe over the adapted core, three seeds; seed 1's reader saved
 for seed in 1 2 3; do
   [ -f "$C/read-$seed.txt" ] && grep -q "^\[info\] Collection ru" "$C/read-$seed.txt" && continue
-  save=""; [ "$seed" = 1 ] && save=$C/reader.bin
-  env ${save:+READ_SAVE=$save} SMALL_DIR=$base LOGIC_DIR=$base SEMANTIC_NATIVE_ADAPTER=$C/adapter.page.safetensors \
-    MLX_SCALA_LIB=$L READ_ECHO=2 READ_SEED=$seed READ_TRAIN=4000 READ_TEACHER=$teacher \
-    READ_TEACHER_TEST=$P/teacher/test.jsonl READ_OUT=$C/out-$seed.tsv run StatementRead > "$C/read-$seed.txt" 2>&1
+  # (a subshell: `run` is a function of this script, which `env` cannot call; READ_SAVE for seed 1 alone)
+  (
+    if [ "$seed" = 1 ]; then export READ_SAVE=$C/reader.bin; fi
+    export SMALL_DIR=$base LOGIC_DIR=$base SEMANTIC_NATIVE_ADAPTER=$C/adapter.page.safetensors MLX_SCALA_LIB=$L \
+      READ_ECHO=2 READ_SEED=$seed READ_TRAIN=4000 READ_TEACHER=$teacher READ_TEACHER_TEST=$P/teacher/test.jsonl \
+      READ_OUT=$C/out-$seed.tsv
+    run StatementRead > "$C/read-$seed.txt" 2>&1
+  )
   # 4. its rows in the history
   scala-cli run scripts/history.scala -- "$name" "$seed" "$C/read-$seed.txt" "cycle: base $repo, teacher $teacher" \
     > /dev/null 2>&1
