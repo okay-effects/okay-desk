@@ -226,3 +226,13 @@ error. The page's novelty gate stays: it is the only one with no wrong answer on
 asking. The lever is the READING on unfamiliar wording itself: more and more varied training text (the teacher's
 rewrites were the one measured lever — formalization.md §18, and the adapter learnt most from them), then the same
 adapter and heads over it. Next: the teacher's corpus at scale.
+
+## 11. The reading on unfamiliar wording: the teacher's corpus at scale (2026-11-14, running)
+
+The question: does more of the one lever that moved the sealed set — rewrites by the teacher in four languages,
+judged by read-back — keep moving it, through the same adapter and heads? Run: `StatementTeacher 200 400` (Train
+tasks 200–400, en/ru/uk/pl) → `teacher/train2.jsonl`; the first batch took 4 h 27 min for 200 tasks and kept 359 of
+800 rewrites (45%; most refusals one line off after three rounds of repair). The gateway runs on :8093 — :8090 is
+held by a Docker container of okay-chat. Then: the adapter trained again with the doubled rewrites
+(`JOINT_TEACHER`), the reader by the page's recipe with them, seeds 1–3, against r32 (§6) — Sealed and the
+teacher's test as the primary measures.
