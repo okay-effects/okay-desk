@@ -37,7 +37,8 @@ object CeilingBench:
         else if outcome == "asked" then c.copy(asked = c.asked + 1) else c.copy(wrong = c.wrong + 1))
       val said = got.fold("(asked)" + why.getOrElse(" " + answer.take(80)))(_._1.take(150))
       println(f"  [${q.table}%-8s $lang] $outcome%-15s $text → $said")
-    println(f"the teacher as the reader, ${(System.nanoTime() - t0) / 1e9 / (2 * Everyday.questions.size)}%.1f s a question:")
+    val seconds = (System.nanoTime() - t0) / 1e9 / (2 * Everyday.questions.size)
+    println(f"the teacher as the reader, $seconds%.1f s a question:")
     for t <- Everyday.tables.keys.toVector.sorted do
       val (en, ru) = (counts((t, "en")), counts((t, "ru")))
       println(f"  $t%-9s en ${en.right}%2d / ${en.asked}%2d / ${en.wrong}%2d   " +

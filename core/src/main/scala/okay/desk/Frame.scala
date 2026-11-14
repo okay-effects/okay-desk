@@ -133,7 +133,8 @@ object Frame:
       else if v.startsWith("column ") then Right(Vector(Cond.Col(c, op, v.stripPrefix("column "))))
       else Right(Vector(Cond.Cmp(c, op, Value.of(v))))
   private def conds(t: Table, ss: Vector[String]): Either[String, Vector[Cond]] =
-    ss.foldLeft[Either[String, Vector[Cond]]](Right(Vector.empty))((acc, s) => acc.flatMap(got => cond(t, s).map(got ++ _)))
+    ss.foldLeft[Either[String, Vector[Cond]]](Right(Vector.empty))((acc, s) =>
+      acc.flatMap(got => cond(t, s).map(got ++ _)))
 
   /** the lines compiled to a program; `answer: cannot` is no program (the question is outside the language) */
   def query(lines: Vector[String], tables: Map[String, Table]): Either[String, Query.Relational] =

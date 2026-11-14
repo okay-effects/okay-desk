@@ -28,7 +28,8 @@ object Exact:
         Expr.parse(c.expr).flatMap { e =>
           val missing = e.names.filterNot(n => t.column(n).isDefined)
           if missing.nonEmpty then
-            Left(s"compute ${c.as}: no column ${missing.mkString(", ")}; the result's columns: ${t.columns.mkString(", ")}")
+            Left(s"compute ${c.as}: no column ${missing.mkString(", ")}; " +
+              s"the result's columns: ${t.columns.mkString(", ")}")
           else Right(Table(t.name, t.columns :+ c.as, t.rows.map(r =>
             r :+ e.value(n => r(t.column(n).get).num).fold(Value.Empty)(Value.Num(_)))))
         } } }

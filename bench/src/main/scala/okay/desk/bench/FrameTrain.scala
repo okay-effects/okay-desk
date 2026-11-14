@@ -18,7 +18,8 @@ object FrameTexts:
       val tables = j.field("tables") match
         case Some(Json.Arr(ts)) => ts.collect { case Json.Str(s) =>
           val name = s.takeWhile(_ != '\n')
-          Table.parse(name + ".tsv", s.dropWhile(_ != '\n').drop(1) + "\n").toOption.map(t => name -> t.copy(name = name))
+          Table.parse(name + ".tsv", s.dropWhile(_ != '\n').drop(1) + "\n").toOption
+            .map(t => name -> t.copy(name = name))
         }.flatten.toMap
         case _ => j.field("seed").collect { case Json.Num(n) =>
           val t = Domains.any(scala.util.Random(n.toLong)); Map(t.name -> t) }.getOrElse(Map.empty)
@@ -44,7 +45,8 @@ object FrameTrain:
     val held = items.filter(i => i.tables.keySet.exists(Domains.heldOut))
     require(held.isEmpty, s"${held.size} items over the measure's tables")
     val epochs = sys.env.get("FRAME_EPOCHS").map(_.toInt).getOrElse(1)
-    println(s"$repo: ${items.size} frames; e.g.\n  " + items.take(2).map(i => s"${i.question}\n    → ${i.lines.mkString(" | ")}")
+    println(s"$repo: ${items.size} frames; e.g.\n  " +
+      items.take(2).map(i => s"${i.question}\n    → ${i.lines.mkString(" | ")}")
       .mkString("\n  "))
     val lora = Lora(loaded.asInstanceOf[Adaptable], rank = sys.env.get("FRAME_RANK").map(_.toInt).getOrElse(16),
       projs = Seq("q", "k", "v", "o", "gate", "up", "down"),

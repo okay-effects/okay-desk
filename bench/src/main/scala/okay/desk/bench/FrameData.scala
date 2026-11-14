@@ -105,7 +105,8 @@ object FrameData:
     for p <- teacherPairs.toVector.flatMap(f => TeacherBench.load(Path.of(f))) do
       val tables = Teacher.point(p.seed)._1
       Query.parse(p.program).toOption.flatMap(Frame.of(_, tables)).foreach { lines =>
-        write(json(Item(tables, p.question, lines), p.seed, "teacher")); counts += "teacher" -> (counts("teacher") + 1) }
+        write(json(Item(tables, p.question, lines), p.seed, "teacher"))
+        counts += "teacher" -> (counts("teacher") + 1) }
     // the grammar's pairs: their tables written out with them (generic tables, not the domains')
     val grammar = okay.desk.skill.Pairs.many(42, 1500).flatMap(p =>
       Query.parse(p.program).toOption.flatMap(Frame.of(_, p.tables)).map(l => Item(p.tables, p.question, l)))
@@ -126,6 +127,7 @@ object FrameData:
         val lang = langs((seed % 4).toInt)
         val said = Teacher.rewrites(m, items.head.tables, items.head.question, lang, k = 2)
         said.foreach { q =>
-          write(json(items.head.copy(question = q), seed * 104729, "taught")); counts += "taught" -> (counts("taught") + 1) }
+          write(json(items.head.copy(question = q), seed * 104729, "taught"))
+          counts += "taught" -> (counts("taught") + 1) }
       if seed % 50 == 0 then println(s"synthetic $seed of $n: ${counts.toVector.sorted.mkString(", ")}")
     println(s"written $out and $gout: ${counts.toVector.sorted.mkString(", ")}")
