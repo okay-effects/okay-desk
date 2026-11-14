@@ -98,7 +98,7 @@ object Teacher:
 
   // ---- the teacher's rewrites
 
-  val languages = Map("en" -> "English", "ru" -> "Russian", "uk" -> "Ukrainian")
+  val languages = Map("en" -> "English", "ru" -> "Russian", "uk" -> "Ukrainian", "pl" -> "Polish")
 
   def rewrites(m: Model, tables: Map[String, Table], skeleton: String, lang: String, k: Int = 3): Vector[String] =
     val system =

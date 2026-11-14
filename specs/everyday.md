@@ -66,3 +66,11 @@ drawn). `EverydayBench`, the page's path: en 23 right / 9 asked / 16 wrong (was 
 read as a count, "restaurant" against the value "restaurants", «на севере» against North — the words people use,
 which the teacher's natural pairs are for. Two questions outside the language (a change between two months) are now
 asked, as they should be.
+
+## The teacher's natural data questions over the domains (2026-11-14, queued)
+
+`Teacher pairs` with `TEACH_DOMAINS=1`, en/ru/uk/pl, seeds 1–300 (`okay-desk-private/data-teacher/`), after the logic
+cycle frees the GPU; ~130 s a point (three rewrites, each judged by read-back). The probe on seeds 1–2: 6 of 9 kept.
+A known weakness of the judge (the same model): it accepted «сколько литров топлива больше 35 на каждой станции» as
+a count of rows, where a person more likely means the sum of litres — a lenient judge lets some wrong labels in. To
+check later: a second, independent labelling, or the question and the program compared on other data.
