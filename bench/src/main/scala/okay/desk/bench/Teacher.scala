@@ -127,7 +127,7 @@ object Teacher:
       | "conditions": [{"column": "table.column", "op": "=" | ">" | "<" | "month", "value": a value OF THAT COLUMN as
       |   listed, or a number; for "month" (a month of a date column: "in March", «в марте») the month as "yyyy-mm"}],
       | "group": "table.column" or null,
-      | "aggregate": {"fn": "count" | "sum" | "avg" | "min" | "max", "column": "table.column" or null for count} or null,
+      | "aggregate": {"fn": "count" | "sum" | "avg" | "min" | "max" | "growth", "column": "table.column" or null for count} or null,
       | "order": {"by": "table.column" or "aggregate", "desc": true | false} or null,
       | "limit": a number of rows or null,
       | "node": for closure, the node, else null, "forward": for closure, true when asked what it reaches, else false}
@@ -136,8 +136,10 @@ object Teacher:
       |"How many", "number of", "count", "сколько", "количество" is the aggregate count (with a group: per group).
       |"The largest / smallest X among T", "maximum / minimum X", "total / sum of X", "average X" is that aggregate
       |of X (one number) — not an order. "The T row with the largest X", "which T has the highest X" is order by X desc
-      |with limit 1 (the row).""".stripMargin + (if compact then
-      "\nLeave out every key whose value would be null, false or [] — a key left out means none: the shortest JSON."
+      |with limit 1 (the row). "Growth of X", "how X changed / grew", «рост», «как менялся» X is the aggregate
+      |growth of X.""".stripMargin + (if compact then
+      "\nLeave out every key whose value would be null, false or [] — a key left out means none: the shortest JSON." +
+      " Never leave out the aggregate of a question that counts or computes, with a group too (\"how many … per X\")."
     else "")
   /** the judge's answer without its empty keys (`JUDGE_COMPACT`, on unless `0`): the same choices in a third fewer
    * tokens, and the judge's tokens are most of the teacher's time (specs/everyday.md) */
