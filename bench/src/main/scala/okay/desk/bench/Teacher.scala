@@ -44,8 +44,11 @@ object Teacher:
       (if rnd.nextInt(4) == 0 then Vector(Pairs.edges(rnd)) else Vector.empty)
     tables.map(t => t.name -> t).toMap
 
+  // TEACH_DOMAINS: the points over the domains' tables (`Domains`: money, dates, months — specs/everyday.md)
+  private val domains = sys.env.contains("TEACH_DOMAINS")
   def point(seed: Long): (Map[String, Table], Program) =
-    val tables = schema(seed)
+    val tables = if domains then { val t = okay.desk.Domains.any(scala.util.Random(seed)); Map(t.name -> t) }
+      else schema(seed)
     (tables, Space.random(scala.util.Random(seed * 7919 + 1), Schema(tables)))
 
   // ---- the model, through okay-mlx's gateway (OpenAI's chat completions)
@@ -117,7 +120,8 @@ object Teacher:
       | "table": the table whose rows are counted, listed or aggregated (for absent: the table whose rows have none),
       | "absent_from": for absent, the table that has no row for them, else null,
       | "join": a linked table whose column the question also uses, else null,
-      | "conditions": [{"column": "table.column", "op": "=" | ">" | "<", "value": a value OF THAT COLUMN as listed, or a number}],
+      | "conditions": [{"column": "table.column", "op": "=" | ">" | "<" | "month", "value": a value OF THAT COLUMN as
+      |   listed, or a number; for "month" (a month of a date column: "in March", «в марте») the month as "yyyy-mm"}],
       | "group": "table.column" or null,
       | "aggregate": {"fn": "count" | "sum" | "avg" | "min" | "max", "column": "table.column" or null for count} or null,
       | "order": {"by": "table.column" or "aggregate", "desc": true | false} or null,
