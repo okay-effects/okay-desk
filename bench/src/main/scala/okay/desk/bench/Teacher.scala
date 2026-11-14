@@ -101,14 +101,18 @@ object Teacher:
   val languages = Map("en" -> "English", "ru" -> "Russian", "uk" -> "Ukrainian", "pl" -> "Polish")
 
   def rewrites(m: Model, tables: Map[String, Table], skeleton: String, lang: String, k: Int = 3): Vector[String] =
+    // the system text is the same for every language and k (both said in the request), so the gateway keeps its
+    // prefix: the rewrite's prefill is a cache hit, as the judge's is
     val system =
-      s"""You write questions people ask about their data. You get the tables and a question written by a grammar;
-         |rewrite it $k different ways a real person would ask it, in ${languages(lang)}: short or chatty, as typed into a
-         |chat; say the tables, columns and values in ${languages(lang)}'s own words where people would (a status
-         |"unpaid" may become "не оплачено" or "неоплаченные"; "customers" may become "клиенты"). Keep the meaning
-         |EXACTLY: the same table, the same conditions and numbers, the same grouping, aggregate, order, direction and
-         |number of rows; add nothing, leave nothing out. Answer with a JSON array of $k strings, nothing else.""".stripMargin
-    json(m.ask(system, s"Tables:\n${described(tables)}\n\nQuestion: $skeleton"))
+      """You write questions people ask about their data. You get the tables, a question written by a grammar, a
+        |language and a number k; rewrite the question k different ways a real person would ask it, in that language:
+        |short or chatty, as typed into a chat; say the tables, columns and values in the language's own words where
+        |people would (a status "unpaid" may become "не оплачено" or "неоплаченные"; "customers" may become
+        |"клиенты"). Keep the meaning EXACTLY: the same table, the same conditions and numbers, the same grouping,
+        |aggregate, order, direction and number of rows; add nothing, leave nothing out. Answer with a JSON array of k
+        |strings, nothing else.""".stripMargin
+    json(m.ask(system,
+      s"Tables:\n${described(tables)}\n\nQuestion: $skeleton\n\nLanguage: ${languages(lang)}; k = $k"))
       .collect { case Json.Arr(xs) => xs.collect { case Json.Str(s) if s.trim.nonEmpty => s.trim } }
       .getOrElse(Vector.empty)
 
@@ -132,7 +136,12 @@ object Teacher:
       |"How many", "number of", "count", "сколько", "количество" is the aggregate count (with a group: per group).
       |"The largest / smallest X among T", "maximum / minimum X", "total / sum of X", "average X" is that aggregate
       |of X (one number) — not an order. "The T row with the largest X", "which T has the highest X" is order by X desc
-      |with limit 1 (the row).""".stripMargin
+      |with limit 1 (the row).""".stripMargin + (if compact then
+      "\nLeave out every key whose value would be null, false or [] — a key left out means none: the shortest JSON."
+    else "")
+  /** the judge's answer without its empty keys (`JUDGE_COMPACT`, on unless `0`): the same choices in a third fewer
+   * tokens, and the judge's tokens are most of the teacher's time (specs/everyday.md) */
+  lazy val compact: Boolean = !sys.env.get("JUDGE_COMPACT").contains("0")
 
   /** the judge's reading compared with the program: None when every constructor agrees, else the first that does not */
   def disagreement(p: Program, j: Json): Option[String] =
@@ -144,7 +153,7 @@ object Teacher:
       case Program.Closure(_, node, forward) =>
         if !kind.contains("closure") then Some("kind")
         else if !str(j.field("node")).contains(node) then Some("node")
-        else if !j.field("forward").contains(Json.Bool(forward)) then Some("direction")
+        else if !j.field("forward").getOrElse(Json.Bool(false)).equals(Json.Bool(forward)) then Some("direction")
         else None
       case Program.Absent(target, link, where) =>
         if !kind.contains("absent") then Some("kind")
