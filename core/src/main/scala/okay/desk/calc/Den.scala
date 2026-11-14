@@ -105,7 +105,7 @@ object OfQuery:
   private val Cmp = """(\w+)\s*(=|<|>|<=|>=)\s*("([^"]*)"|[^\s,]+)""".r
 
   def apply(s: Schema, q: Query): Option[Program] = q match
-    case Query.Relational(from, join, where, group, aggs, _, order, limit) =>
+    case Query.Relational(from, join, where, group, aggs, _, order, limit, _, _) =>
       val table = s.tables.get(from)
       def col(name: String): Option[Col] = s.cols.find(c => c.table == from && c.name == name)
         .orElse(join.flatMap(j => s.cols.find(c => c.table == j.table && c.name == name)))

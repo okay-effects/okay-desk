@@ -46,12 +46,13 @@ object SelfPlay:
           case GoalFrom(a) => s"What is reachable from $a, directly or through others?"
           case GoalTo(b) => s"Which nodes reach $b, directly or through others?"
           case _ => "What is reachable?"
-      case Query.Relational(from, join, where, group, aggs, select, order, limit) =>
+      case Query.Relational(from, join, where, group, aggs, select, order, limit, _, _) =>
         val cond = where.headOption.map {
           case Cond.Cmp(c, "=", v) => s" with $c = ${v.text}"
           case Cond.Cmp(c, op, v) => s" with $c $op ${v.text}"
           case Cond.Has(c, t) => s" whose $c contains $t"
           case Cond.Empty(c, is) => s" with $c ${if is then "empty" else "not empty"}"
+          case Cond.Col(c, op, o) => s" whose $c $op $o"
         }.getOrElse("")
         val agg = aggs.headOption.map(a => a.fn match
           case "count" => s"How many $from$cond"

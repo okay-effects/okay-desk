@@ -65,7 +65,19 @@ object Sample:
     else
       val idx = gold.columns.map(c => got.column(c))
       if idx.exists(_.isEmpty) then
-        // the names may differ (an aggregate's alias): compare by position when the widths agree
-        got.columns.size == gold.columns.size && rows(got) == rows(gold)
+        // the names may differ (an aggregate's alias): compare by position when the widths agree; else each gold
+        // column found among the answer's by its values (an alias, with the answer's other columns beside it:
+        // "january, february, change" for the gold's "change")
+        got.columns.size == gold.columns.size && rows(got) == rows(gold) || byValues(got, gold)
       else rows(gold) == got.rows.map(r => idx.map(i => r(i.get).text)).toSet
+
+  private def byValues(got: Table, gold: Table): Boolean =
+    def values(t: Table, i: Int) = t.rows.map(_(i).text).sorted
+    val candidates = gold.columns.indices.map(g => got.columns.indices.filter(c => values(got, c) == values(gold, g)))
+    // every choice of one answer column a gold column (few: the columns are few), one of them giving the gold's rows
+    def choices(k: Int): LazyList[Vector[Int]] =
+      if k == candidates.size then LazyList(Vector.empty)
+      else LazyList.from(candidates(k)).flatMap(c => choices(k + 1).map(c +: _))
+    candidates.forall(_.nonEmpty) &&
+      choices(0).take(64).exists(pick => got.rows.map(r => pick.map(r(_).text)).toSet == rows(gold))
 

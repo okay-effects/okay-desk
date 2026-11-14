@@ -42,9 +42,16 @@ object Prompt:
        |"where" (a list of {"column", "op", "value"}; op: = != < <= > >= contains empty "not empty", and "month" with
        |a value "yyyy-mm" for the dates of that month:
        |"in February" → {"column": "date", "op": "month", "value": "2026-02"}),
-       |"group" (columns), "aggregate" (a list of {"fn", "column", "as"}; fn: count sum avg min max; column "*" for count;
-       |growth or change with "by": the time column — the last value against the first within each group),
+       |a condition may compare two columns of a row: {"column": "quantity", "op": "<", "column2": "reorder_level"},
+       |"group" (columns; or a date's "month(date)", "week(date)", "year(date)"),
+       |"aggregate" (a list of {"fn", "column", "as"}; fn: count sum avg min max; column "*" for count;
+       |growth or change with "by": the time column — the last value against the first within each group;
+       |an aggregate may have its own "where": the rows it is over — a part beside the whole, one month beside another),
+       |"compute" (a list of {"as", "expr"}: arithmetic + - * / over the result's columns: "part / total",
+       |"march - january"), "having" (conditions on the result's rows, after compute),
        |"select" (columns to show), "order" (columns; "-c" descending), "limit" (a number).
+       |A share of a total: {"aggregate": [{"fn": "sum", "column": "amount", "as": "part", "where": [...]},
+       |{"fn": "sum", "column": "amount", "as": "total"}], "compute": [{"as": "share", "expr": "part / total"}]}.
        |A datalog query has "datalog" (rules) and "goal" (an atom); the relations are the tables with their columns in order:
        |${Logic.describe(tables)}
        |Variables start with a capital letter; a constant that is not a lowercase word goes in double quotes.

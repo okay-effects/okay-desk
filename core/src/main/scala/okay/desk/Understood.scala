@@ -27,7 +27,7 @@ object Understood:
             val n = bare(node)
             w(s"what $n reaches, directly or through others", s"куда ведёт $n, прямо или через другие")
           case other => w(s"the rules' answer to $other", s"ответ правил на $other")
-      case Query.Relational(from, join, where, group, aggs, select, order, limit) =>
+      case Query.Relational(from, join, where, group, aggs, select, order, limit, compute, having) =>
         val subject = aggs.map { a =>
           val c = q(a.column)
           a.fn match
@@ -39,6 +39,10 @@ object Understood:
             case "growth" | "change" =>
               w(s"how $c changed over ${a.by.fold("time")(q)}", s"как менялось $c по ${a.by.fold("времени")(q)}")
             case other => s"$other $c"
+        }.zip(aggs).map { (words, a) =>
+          // an aggregate over its own rows: "the sum of «amount» (where «category» = transport)"
+          if a.where.isEmpty then words
+          else s"$words (${w("where ", "где ")}${said(a.where.toList, ru).mkString(w(" and ", " и "))})"
         } match
           case Vector() if select.nonEmpty =>
             val cols = select.map(q).mkString(", ")
@@ -47,13 +51,22 @@ object Understood:
           case xs => xs.mkString(", ")
         val joined = join.toVector.map(j => w(s"joined with ${q(j.table)}", s"вместе с ${q(j.table)}"))
         val conditions = said(where.toList, ru)
-        val grouped = group.map(g => w(s"for each ${q(g)}", s"по каждому значению ${q(g)}"))
+        val grouped = group.map { g =>
+          "(month|week|year)\\((.+)\\)".r.findFirstMatchIn(g.trim) match
+            case Some(m) =>
+              val (en, rus) = m.group(1) match
+                case "month" => ("month", "месяцу"); case "week" => ("week", "неделе"); case _ => ("year", "году")
+              w(s"for each $en of ${q(m.group(2))}", s"по каждому $rus ${q(m.group(2))}")
+            case None => w(s"for each ${q(g)}", s"по каждому значению ${q(g)}")
+        }
+        val computed = compute.map(c => w(s"${q(c.as)} = ${c.expr}", s"${q(c.as)} = ${c.expr}"))
+        val kept = said(having.toList, ru).map(c => w("keeping rows where ", "оставляя строки, где ") + c)
         val ordered = order.map(o =>
           w(s"sorted by ${q(o.column)}, ${if o.desc then "largest first" else "smallest first"}",
             s"по ${q(o.column)}, ${if o.desc then "сначала большие" else "сначала меньшие"}"))
         val limited = limit.toVector.map(n =>
           if n == 1 then w("only the first", "только первое") else w(s"the first $n", s"первые $n"))
-        (Vector(subject) ++ joined ++ conditions.map(c => w("where ", "где ") + c) ++ grouped ++ ordered ++ limited)
+        (Vector(subject) ++ joined ++ conditions.map(c => w("where ", "где ") + c) ++ grouped ++ computed ++ kept ++ ordered ++ limited)
           .mkString(" — ")
 
   /** conditions in words: a pair that is one month (on or after its first day, before the next month's) said as it */
@@ -73,6 +86,7 @@ object Understood:
         case "=" => "="; case "!=" => "≠"; case "<" => "<"; case "<=" => "≤"; case ">" => ">"; case ">=" => "≥"
         case other => other
       s"${q(col)} $words ${v.text}"
+    case Cond.Col(col, op, other) => s"${q(col)} ${one(Cond.Cmp(col, op, Value.Empty), ru).drop(q(col).length + 1).trim} ${q(other)}"
     case Cond.Has(col, text) => if ru then s"${q(col)} содержит «$text»" else s"${q(col)} contains “$text”"
     case Cond.Empty(col, is) =>
       if ru then s"${q(col)} ${if is then "пусто" else "не пусто"}"

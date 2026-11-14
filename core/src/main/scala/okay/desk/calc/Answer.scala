@@ -112,7 +112,7 @@ object Answer:
           val forward = args.headOption.exists(a => !variable(a))
           val node = args.find(a => !variable(a)).getOrElse("")
           A.Reach(node, forward, r.rows.indices.map(i => cell(r, i, r.columns.head)).toVector)
-      case Query.Relational(_, _, _, group, aggs, _, order, limit) =>
+      case Query.Relational(_, _, _, group, aggs, _, order, limit, _, _) =>
         (aggs.headOption, group.headOption) match
           case (Some(a), None) if a.fn == "count" => A.Count(cell(r, 0, a.as))
           case (Some(a), None) => A.Scalar(a.fn, a.column, cell(r, 0, a.as))

@@ -124,7 +124,7 @@ object Space:
   /** a query up to what the space does not say: the aggregate's alias, the selection, and WHICH number a comparison
    * names (the space enumerates a few thresholds to count itself; a question's number is free) */
   private def normal(q: Query): Query = q match
-    case Query.Relational(from, join, where, group, aggs, _, order, limit) =>
+    case Query.Relational(from, join, where, group, aggs, _, order, limit, _, _) =>
       val aliases = aggs.map(a => a.as -> (if a.fn == "count" then "n" else a.fn)).toMap
       val cmp = where.map { case Cond.Cmp(c, op, _) if op == "<" || op == ">" => Cond.Cmp(c, op, Value.Empty); case w => w }
       Query.Relational(from, join, cmp, group, aggs.map(a => a.copy(as = if a.fn == "count" then "n" else a.fn)), Vector.empty,

@@ -5,8 +5,9 @@ import okay.desk.{Exact, Query, Table}
 /**
  * THE MEASURE OF USEFULNESS (specs/technology.md §9): tables like a person's own — expenses, a shop's sales, stock,
  * shifts, marks, a bank statement — and questions people ask of them, in English and Russian, each with its gold
- * program; some OUTSIDE what the query language says (a share, a change between months, two columns compared): for
- * those the right outcome is a refusal or a question, never an answer. The tables are drawn by a fixed seed, the
+ * program; a share, a change between months, two columns compared are inside since the language grew
+ * (specs/direction.md §2, 2026-11-14); a cause or a forecast is OUTSIDE what data computes: for those the right
+ * outcome is a refusal or a question, never an answer. The tables are drawn by a fixed seed, the
  * same on the JVM and in the page. Laws: `EverydaySuite` (every gold runs and gives rows).
  */
 object Everyday:
@@ -129,10 +130,20 @@ object Everyday:
       q("expenses", order = Vector("-amount"), limit = Some(1))),
     in("expenses", "Restaurant expenses in February.", "Расходы на рестораны в феврале.",
       q("expenses", Vector(w("category", "=", s("restaurants"))) ++ february)),
-    out("expenses", "How did my spending change from January to February?",
-      "Как изменились мои расходы с января по февраль?"),
-    out("expenses", "What share of my spending went to transport?",
-      "Какая доля расходов ушла на транспорт?"),
+    in("expenses", "How did my spending change from January to February?",
+      "Как изменились мои расходы с января по февраль?",
+      """{"from": "expenses", "aggregate": [{"fn": "sum", "column": "amount", "as": "january", "where": [""" +
+      """{"column": "date", "op": "month", "value": "2026-01"}]}, {"fn": "sum", "column": "amount", "as": "february", """ +
+      """"where": [{"column": "date", "op": "month", "value": "2026-02"}]}], "compute": [{"as": "change", """ +
+      """"expr": "february - january"}], "select": ["change"]}"""),
+    in("expenses", "What share of my spending went to transport?",
+      "Какая доля расходов ушла на транспорт?",
+      """{"from": "expenses", "aggregate": [{"fn": "sum", "column": "amount", "as": "transport", "where": [""" +
+      """{"column": "category", "op": "=", "value": "transport"}]}, {"fn": "sum", "column": "amount", "as": "all"}], """ +
+      """"compute": [{"as": "share", "expr": "transport / all"}], "select": ["share"]}"""),
+    // OUTSIDE what data computes (a cause, a forecast): the right outcome is a refusal or a question
+    out("expenses", "Why did I spend more in February?", "Почему в феврале я потратил больше?"),
+    out("sales", "How much will we sell in April?", "Сколько мы продадим в апреле?"),
 
     in("sales", "What is the total revenue?", "Какая общая выручка?",
       q("sales", aggs = Vector(agg("sum", "revenue", "revenue")))),
@@ -155,8 +166,12 @@ object Everyday:
     in("sales", "Revenue by product in the South.", "Выручка по товарам на юге.",
       q("sales", Vector(w("region", "=", s("South"))), group = Vector("product"),
         aggs = Vector(agg("sum", "revenue", "revenue")))),
-    out("sales", "Which product's revenue grew the most from January to March?",
-      "Выручка какого товара выросла сильнее всего с января по март?"),
+    in("sales", "Which product's revenue grew the most from January to March?",
+      "Выручка какого товара выросла сильнее всего с января по март?",
+      """{"from": "sales", "group": ["product"], "aggregate": [{"fn": "sum", "column": "revenue", "as": "january", """ +
+      """"where": [{"column": "date", "op": "month", "value": "2026-01"}]}, {"fn": "sum", "column": "revenue", """ +
+      """"as": "march", "where": [{"column": "date", "op": "month", "value": "2026-03"}]}], "compute": [""" +
+      """{"as": "growth", "expr": "march - january"}], "order": ["-growth"], "limit": 1, "select": ["product"]}"""),
 
     in("stock", "Which items have fewer than 10 in stock?",
       "Каких товаров на складе меньше 10?",
@@ -174,8 +189,10 @@ object Everyday:
       "Каких товаров нет в наличии?", q("stock", Vector(w("quantity", "=", "0")))),
     in("stock", "Average quantity per category.", "Среднее количество по категориям.",
       q("stock", group = Vector("category"), aggs = Vector(agg("avg", "quantity", "average")))),
-    out("stock", "Which items are below their reorder level?",
-      "Какие товары ниже уровня дозаказа?"),
+    out("stock", "When will we run out of rice?", "Когда у нас закончится рис?"),
+    in("stock", "Which items are below their reorder level?",
+      "Какие товары ниже уровня дозаказа?",
+      """{"from": "stock", "where": [{"column": "quantity", "op": "<", "column2": "reorder_level"}]}"""),
 
     in("shifts", "Total hours per employee.",
       "Сколько часов отработал каждый сотрудник?",
@@ -192,8 +209,11 @@ object Everyday:
         aggs = Vector(agg("count", "*", "n")))),
     in("shifts", "What is the average shift length?", "Какова средняя длина смены?",
       q("shifts", aggs = Vector(agg("avg", "hours", "average")))),
-    out("shifts", "Who worked more than 40 hours in a single week?",
-      "Кто отработал больше 40 часов за одну неделю?"),
+    out("shifts", "Why does Eva work fewer hours than Anna?", "Почему Ева работает меньше часов, чем Анна?"),
+    in("shifts", "Who worked more than 20 hours in a single week?",
+      "Кто отработал больше 20 часов за одну неделю?",
+      """{"from": "shifts", "group": ["employee", "week(date)"], "aggregate": [{"fn": "sum", "column": "hours", """ +
+      """"as": "hours"}], "having": [{"column": "hours", "op": ">", "value": 20}], "select": ["employee"]}"""),
 
     in("marks", "Average mark per subject.", "Средняя оценка по каждому предмету.",
       q("marks", group = Vector("subject"), aggs = Vector(agg("avg", "mark", "average")))),
@@ -208,8 +228,13 @@ object Everyday:
       q("marks", Vector(w("mark", "=", "5")), aggs = Vector(agg("count", "*", "n")))),
     in("marks", "Olga's marks in the second term.", "Оценки Ольги во втором семестре.",
       q("marks", Vector(w("student", "=", s("Olga")), w("term", "=", "2")))),
-    out("marks", "Whose average improved from the first term to the second?",
-      "У кого средняя оценка выросла с первого семестра ко второму?"),
+    out("marks", "Will Olga pass the exam next year?", "Сдаст ли Ольга экзамен в следующем году?"),
+    in("marks", "Whose average improved from the first term to the second?",
+      "У кого средняя оценка выросла с первого семестра ко второму?",
+      """{"from": "marks", "group": ["student"], "aggregate": [{"fn": "avg", "column": "mark", "as": "first", """ +
+      """"where": [{"column": "term", "op": "=", "value": 1}]}, {"fn": "avg", "column": "mark", "as": "second", """ +
+      """"where": [{"column": "term", "op": "=", "value": 2}]}], "having": [{"column": "second", "op": ">", """ +
+      """"column2": "first"}], "select": ["student"]}"""),
 
     in("bank", "What is my total income?", "Какой у меня общий доход?",
       q("bank", Vector(w("type", "=", s("in"))), aggs = Vector(agg("sum", "amount", "total")))),
@@ -224,8 +249,13 @@ object Everyday:
     in("bank", "What is the balance after the last transaction?",
       "Какой баланс после последней операции?",
       q("bank", order = Vector("-date"), limit = Some(1), select = Vector("balance"))),
-    out("bank", "By how much did my balance change each month?",
-      "На сколько менялся мой баланс каждый месяц?")
+    out("bank", "Why did my balance drop in February?", "Почему мой баланс упал в феврале?"),
+    in("bank", "By how much did my balance change each month?",
+      "На сколько менялся мой баланс каждый месяц?",
+      """{"from": "bank", "group": ["month(date)"], "aggregate": [{"fn": "sum", "column": "amount", "as": "in", """ +
+      """"where": [{"column": "type", "op": "=", "value": "in"}]}, {"fn": "sum", "column": "amount", "as": "out", """ +
+      """"where": [{"column": "type", "op": "=", "value": "out"}]}], "compute": [{"as": "change", "expr": "in - out"}], """ +
+      """"select": ["month", "change"]}""")
   )
 
   def run(gold: String): Either[String, Table] = Query.parse(gold).flatMap {

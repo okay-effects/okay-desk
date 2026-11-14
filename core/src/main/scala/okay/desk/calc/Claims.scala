@@ -50,7 +50,7 @@ object Claims:
           val args = goal.trim.dropWhile(_ != '(').drop(1).reverse.dropWhile(_ != ')').drop(1).reverse.split(",").map(_.trim.stripPrefix("\"").stripSuffix("\"")).toVector
           val variable = (a: String) => a.matches("[A-Z]\\w*")
           Claim.Reach(args.find(a => !variable(a)).getOrElse(""), args.headOption.exists(a => !variable(a)), r.rows.map(_.head.text))
-      case Query.Relational(from, join, where, group, aggs, _, order, limit) =>
+      case Query.Relational(from, join, where, group, aggs, _, order, limit, _, _) =>
         val base = tables.get(from)
         val whole = base.map(_.size).getOrElse(r.size)
         (aggs.headOption, group.headOption) match

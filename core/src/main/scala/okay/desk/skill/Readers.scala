@@ -31,7 +31,7 @@ final class Readers:
   private val partNames = Vector("kind", "where", "group", "order", "dir", "limit", "select")
   /** the constructor's classes of a gold program */
   private def partsOf(program: String, sl: Slots): Map[String, String] =
-    val dir = Query.parse(program).toOption.collect { case Query.Relational(_, _, _, _, _, _, o +: _, _) => if o.desc then "desc" else "asc" }.getOrElse("-")
+    val dir = Query.parse(program).toOption.collect { case Query.Relational(_, _, _, _, _, _, o +: _, _, _, _) => if o.desc then "desc" else "asc" }.getOrElse("-")
     val kind = if sl.shape == "absent" || sl.shape.startsWith("closure") then sl.shape else "rows"
     Map("kind" -> kind, "where" -> Readers.part(sl.shape, 2), "group" -> Readers.part(sl.shape, 3), "order" -> Readers.part(sl.shape, 4),
       "dir" -> dir, "limit" -> Readers.part(sl.shape, 5), "select" -> Readers.part(sl.shape, 7))
@@ -199,7 +199,7 @@ final class Readers:
         println(s"  the name reader: ${nameEx.flatten.size} of ${exs.size} pairs name the table in the question")
       // the op and the value's start, on the pairs that have a condition
       withWhere = exs.flatMap { (p, sl, pr) =>
-        Query.parse(p.program).toOption.collect { case Query.Relational(_, _, Cond.Cmp(c, o, v) +: _, _, _, _, _, _) => (p, sl, pr, c, o, v.text) }
+        Query.parse(p.program).toOption.collect { case Query.Relational(_, _, Cond.Cmp(c, o, v) +: _, _, _, _, _, _, _, _) => (p, sl, pr, c, o, v.text) }
       }
       // the aggregate's function read at its own point, where it is written
       fnQs <- each(exs)((_, sl, pr) => query(pr, fnPrefix(sl.table)).map(z))
@@ -779,7 +779,7 @@ final class Readers:
     var abstained = 0; var whole = 0; var failed = 0
     val shown = scala.collection.mutable.Map.empty[String, Int].withDefaultValue(0)
     def parts(q: Query): Map[String, String] = q match
-      case Query.Relational(from, join, where, group, aggs, _, order, limit) =>
+      case Query.Relational(from, join, where, group, aggs, _, order, limit, _, _) =>
         val aliases = aggs.map(a => a.as -> a.fn).toMap
         Map("kind" -> "rows", "table" -> from, "join" -> join.map(_.table).getOrElse("-"),
           "where" -> where.map { case Cond.Cmp(c, op, v) => s"$c $op ${v.text}"; case w => w.toString }.sorted.mkString(";"),

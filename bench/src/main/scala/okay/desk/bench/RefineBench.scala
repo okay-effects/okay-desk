@@ -12,7 +12,7 @@ import okay.desk.skill.{Pairs, Read}
  */
 object RefineBench:
   def parts(q: Query): Map[String, String] = q match
-    case Query.Relational(from, join, where, group, aggs, _, order, limit) =>
+    case Query.Relational(from, join, where, group, aggs, _, order, limit, _, _) =>
       val aliases = aggs.map(a => a.as -> a.fn).toMap
       Map("kind" -> "rows", "table" -> from, "join" -> join.map(_.table).getOrElse("-"),
         "where" -> where.map { case Cond.Cmp(c, op, v) => s"$c $op ${v.text}"; case w => w.toString }.sorted.mkString(";"),

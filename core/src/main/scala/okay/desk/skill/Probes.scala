@@ -22,17 +22,19 @@ object Probes:
         Slots("absent", "\\w+\\(.*?\\)\\s*:-\\s*(\\w+)\\(".r.findFirstMatchIn(rules).map(_.group(1)).getOrElse("-"), None, None, None, None)
       case Query.Logical(_, goal) => Slots(if goal.matches("^\\w+\\(\\s*[A-Z].*") then "closure-to" else "closure-from",
         "edges", None, None, None, None)
-    case Query.Relational(from, join, where, group, aggs, select, order, limit) =>
+    case Query.Relational(from, join, where, group, aggs, select, order, limit, _, _) =>
       val shape = Vector("rel", aggs.headOption.map(_.fn).getOrElse("-"), where.headOption.map {
         case Cond.Cmp(_, op, _) => op
         case Cond.Has(_, _) => "contains"
-        case Cond.Empty(_, _) => "empty" }.getOrElse("-"), if group.nonEmpty then "group" else "-",
+        case Cond.Empty(_, _) => "empty"
+        case Cond.Col(_, op, _) => op }.getOrElse("-"), if group.nonEmpty then "group" else "-",
         if order.nonEmpty then "order" else "-", if limit.isDefined then "limit" else "-", "-", // the join is not read from the state: the data decides it (a value or a column of another table named)
         if select.nonEmpty then "select" else "-").mkString(" ")
       Slots(shape, from, where.headOption.map {
         case Cond.Cmp(c, _, _) => c
         case Cond.Has(c, _) => c
-        case Cond.Empty(c, _) => c }, group.headOption, aggs.headOption.map(_.column).filter(_ != "*"),
+        case Cond.Empty(c, _) => c
+        case Cond.Col(c, _, _) => c }, group.headOption, aggs.headOption.map(_.column).filter(_ != "*"),
         order.headOption.map(_.column))
   }
 
