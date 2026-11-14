@@ -58,7 +58,7 @@ object App:
     case OpenUrls(urls: Vector[String])
     case Close(table: String)
     case Load(model: String)
-    /** a model picked by its button (no chooser form): remembered on the disk, loaded at once */
+    /** a model picked by its button (no chooser form): remembered on the disk, loaded when a question needs it */
     case Pick(model: String)
     case Unload
     case Ask(question: String)
@@ -210,14 +210,14 @@ object App:
           .map(_ => cleared.copy(tables = cleared.tables - name, log = cleared.log :+ Entry("system", s"closed $name")))
       case Msg.Load(name) => load[R](cleared, name)
       case Msg.Pick(name) =>
-        // the other model let go first (two do not fit a phone's tab), the choice kept, the picked one loaded
+        // the other model let go (two do not fit a phone's tab), the choice kept; the picked one is NOT loaded
+        // now: it loads when a question needs it, as the page's own model does
         val free = if cleared.model.nonEmpty && name != cleared.modelName then
           Model.unload[R].map(_ => cleared.copy(model = None)) else pure[State, R](cleared)
         for
           _ <- Disk.put[R](picked, name)
           st <- free
-          next <- if st.model.nonEmpty then pure[State, R](st) else load[R](st.copy(place = "chat"), name)
-        yield next
+        yield st.copy(modelName = name, place = "chat")
       case Msg.Unload => Model.unload[R].map(_ => cleared.copy(model = None,
         notice = Some("Model unloaded. Chat, open data and cached files are kept.")))
       case Msg.Clarify(question, choice) =>
@@ -511,7 +511,7 @@ object App:
         (if s.chooser || loading.isDefined || thinking.isDefined then Nil
          else Model.picks.map((key, label) =>
            if key == s.modelName then
-             Button(if s.model.nonEmpty then s"✓ $label" else s"✓ $label — load", Style.Primary)(Msg.Pick(key): Msg)
+             Button(s"✓ $label", Style.Primary)(Msg.Pick(key): Msg)
                .at("model-pick")
            else Button(label)(Msg.Pick(key): Msg).at("model-pick"))) ++
         (if s.chooser && s.model.isDefined && loading.isEmpty && thinking.isEmpty then

@@ -200,17 +200,17 @@ class TaskListSuite extends munit.FunSuite:
     try
       val opened = run(App.main[Row](Nil, phone = true, chooser = false), Map.empty)
       val picks = Model.picks.map(_._2)
-      assertEquals(labels(opened), List("Data: open files", "Examples", s"✓ ${picks.head} — load", picks(1), "Ask"))
+      assertEquals(labels(opened), List("Data: open files", "Examples", s"✓ ${picks.head}", picks(1), "Ask"))
       assert(text(opened).contains("Model: Qwen3 0.6B student") && text(opened).contains("not loaded yet"),
         text(opened))
       assert(!text(opened).contains("THE MODEL") && !text(opened).contains("online sources off"), text(opened))
       // an earlier visit's pick, kept on the disk: the page opens on it
       val again = runOn(Map(App.picked -> "readers-full"))(App.main[Row](Nil, phone = true, chooser = false), Map.empty)
       assert(text(again).contains("Model: Qwen3 0.6B as released"), text(again))
-      assert(labels(again).contains(s"✓ ${picks(1)} — load"), labels(again))
-      // a press on the other model: it is loaded and marked, and said loaded
+      assert(labels(again).contains(s"✓ ${picks(1)}"), labels(again))
+      // a press on the other model: it is marked and remembered, not loaded until a question needs it
       val picked = run(App.main[Row](Nil, phone = true, chooser = false), Map.empty, Act.press(picks(1)))
-      assert(text(picked).contains("Model: Qwen3 0.6B as released") && text(picked).contains("loaded: test model"),
+      assert(text(picked).contains("Model: Qwen3 0.6B as released") && text(picked).contains("not loaded yet"),
         text(picked))
       assert(labels(picked).contains(s"✓ ${picks(1)}") && labels(picked).contains(picks.head), labels(picked))
       val at = Tasks.entries.indexWhere(_.task == stated.head)
