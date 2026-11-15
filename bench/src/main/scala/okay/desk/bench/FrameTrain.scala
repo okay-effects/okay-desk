@@ -112,16 +112,25 @@ object FrameRead:
   import mlx.*
   import mlx.Mlx.*
 
-  final case class Read(lines: Vector[String], margins: Vector[Double])
+  /** the lines read, each choice's margin, the questions asked of the person, and whether none of the options
+   * offered was theirs (the reading then stops: nothing is answered) */
+  final case class Read(lines: Vector[String], margins: Vector[Double], asked: Int = 0, unresolved: Boolean = false)
+
+  /** THE QUESTION IN DOUBT (the operator, 2026-11-15): where a line's margin is below `bar`, the person is asked —
+   * the best `offer` options of that line (said by `FrameSay` on the page) — and their choice is the line; none of
+   * them: the reading stops, unanswered. At most `maxAsks` questions; past them the best is taken. */
+  final case class Dialogue(bar: Double, ask: (Vector[String], Vector[String]) => Option[String], offer: Int = 4,
+      maxAsks: Int = 2)
 
   def apply(model: Model, prompt: Array[Int], tok: Tokenizer, tables: Map[String, Table], question: String,
-      newline: Int, stop: Int, maxLines: Int = 16): Read =
+      newline: Int, stop: Int, maxLines: Int = 16, dialogue: Option[Dialogue] = None): Read =
     val carry = new Scope
     val state = model.newState()
     try
       Scope(carry)(model.logits(ints(prompt, 1, prompt.length), state).eval())
       val lines = scala.collection.mutable.ArrayBuffer.empty[String]
       val margins = scala.collection.mutable.ArrayBuffer.empty[Double]
+      var asked = 0; var unresolved = false
       def score(option: Array[Int], after: Int): Double =
         val at = state.checkpoint()
         val input = newline +: option
@@ -141,11 +150,21 @@ object FrameRead:
         else
           val scored = options.map(o => (o, score(tok.encode(o), if o == Frame.end then stop else newline)))
             .sortBy(-_._2)
-          val (best, s) = scored.head
-          margins += scored.lift(1).fold(Double.PositiveInfinity)(second => s - second._2)
-          lines += best
-          val fed = newline +: tok.encode(best)
-          Scope(carry)(model.logits(ints(fed, 1, fed.length), state).eval())
-      Read(lines.toVector, margins.toVector)
+          val (top, s) = scored.head
+          val margin = scored.lift(1).fold(Double.PositiveInfinity)(second => s - second._2)
+          margins += margin
+          val chosen = dialogue match
+            case Some(d) if margin < d.bar && asked < d.maxAsks =>
+              asked += 1
+              d.ask(lines.toVector, scored.take(d.offer).map(_._1))
+            case _ => Some(top)
+          chosen match
+            case None => unresolved = true
+            case Some(best) =>
+              lines += best
+              val fed = newline +: tok.encode(best)
+              Scope(carry)(model.logits(ints(fed, 1, fed.length), state).eval())
+        if unresolved then lines += Frame.end
+      Read(lines.toVector, margins.toVector, asked, unresolved)
     finally
       state.close(); carry.close()

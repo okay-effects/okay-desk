@@ -8,29 +8,12 @@ class FrameSuite extends munit.FunSuite:
     lines.indices.collectFirst { case i if !Frame.next(lines.take(i), tables, question).contains(lines(i)) =>
       s"${lines(i)} not among ${Frame.next(lines.take(i), tables, question).take(12).mkString(" | ")}" }
 
-  // the frames of the questions the language grew for, written by hand
-  private val grown: Map[String, Vector[String]] = Map(
-    "How did my spending change from January to February?" -> Vector("table: expenses",
-      "answer: change sum amount", "from: date month 2026-01", "to: date month 2026-02", "end"),
-    "What share of my spending went to transport?" -> Vector("table: expenses", "answer: share sum amount",
-      "part: category = transport", "end"),
-    "Which product's revenue grew the most from January to March?" -> Vector("table: sales",
-      "answer: change sum revenue", "from: date month 2026-01", "to: date month 2026-03", "group: product",
-      "order: answer desc", "limit: 1", "end"),
-    "Which items are below their reorder level?" -> Vector("table: stock",
-      "answer: rows", "where: quantity < column reorder_level", "end"),
-    "Who worked more than 20 hours in a single week?" -> Vector("table: shifts", "answer: sum hours",
-      "group: employee", "group: week(date)", "keep: answer > 20", "end"),
-    "Whose average improved from the first term to the second?" -> Vector("table: marks",
-      "answer: change avg mark", "from: term = 1", "to: term = 2", "group: student", "keep: answer > 0", "end"),
-    "By how much did my balance change each month?" -> Vector("table: bank", "answer: change sum amount",
-      "from: type = out", "to: type = in", "group: month(date)", "end"))
 
   test("every everyday question inside the language: a frame reachable by the options, the gold's answer") {
     val problems = Everyday.questions.filter(_.gold.nonEmpty).flatMap { q =>
       val tables = Map(q.table -> Everyday.tables(q.table))
       val gold = Everyday.run(q.gold.get).toOption.get
-      val frame = grown.get(q.en).orElse(Query.parse(q.gold.get).toOption.flatMap(Frame.of(_, tables)))
+      val frame = Everyday.frame(q)
       frame match
         case None => Vector(s"${q.en}: no frame")
         case Some(lines) =>

@@ -14,12 +14,16 @@ import scala.jdk.CollectionConverters.*
  * record written (its key, language, outcome, smallest margin, frame) for `FrameCalibrate`.
  */
 object FrameBench:
-  final case class Asked(key: String, lang: String, text: String, tables: Map[String, Table], gold: Option[Table])
+  /** a question, its tables, the gold answer, the gold frame (for the person a dialogue plays) */
+  final case class Asked(key: String, lang: String, text: String, tables: Map[String, Table], gold: Option[Table],
+      frame: Option[Vector[String]] = None)
 
   def everyday: Vector[Asked] = Everyday.questions.zipWithIndex.flatMap { (q, i) =>
     val tables = Map(q.table -> Everyday.tables(q.table))
     val gold = q.gold.flatMap(Everyday.run(_).toOption)
-    Vector(Asked(s"${q.table}-$i", "en", q.en, tables, gold), Asked(s"${q.table}-$i", "ru", q.ru, tables, gold))
+    val frame = Everyday.frame(q)
+    Vector(Asked(s"${q.table}-$i", "en", q.en, tables, gold, frame),
+      Asked(s"${q.table}-$i", "ru", q.ru, tables, gold, frame))
   }
 
   /** the teacher's pairs as questions: those whose program is relational and runs */
@@ -27,7 +31,8 @@ object FrameBench:
     val tables = Teacher.point(p.seed)._1
     Query.parse(p.program).toOption.collect { case r: Query.Relational => r }
       .flatMap(r => Exact.run(tables, r).toOption)
-      .map(gold => Asked(s"${p.seed}-$i", p.lang, p.question, tables, Some(gold)))
+      .map(gold => Asked(s"${p.seed}-$i", p.lang, p.question, tables, Some(gold),
+        Query.parse(p.program).toOption.flatMap(Frame.of(_, tables))))
   }
 
   def outcome(gold: Option[Table], got: Option[Table]): String = (gold, got) match
@@ -45,12 +50,19 @@ object FrameBench:
     println(s"$repo${sys.env.get("FRAME_ADAPTER").fold("")(" with " + _)}: ${asked.size} questions")
     val stop = tok.id("<|im_end|>"); val newline = tok.encode("\n").head
     val t0 = System.nanoTime()
+    var asks = 0
     val records = asked.map { a =>
       val (system, user) = Frame.prompt(a.tables, a.text)
       val prompt = chat.prompt(Vector(FrameTrain.msg("system", system), FrameTrain.msg("user", user)), Nil,
         Map("enable_thinking" -> false))
-      val read = FrameRead(model, prompt, tok, a.tables, a.text, newline, stop)
-      val got = Frame.query(read.lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption
+      // FRAME_DIALOGUE=<bar>: where in doubt the person is asked; here the person is played by the gold frame — the
+      // option offered that is one of its lines, else none of them
+      val dialogue = sys.env.get("FRAME_DIALOGUE").map(b => FrameRead.Dialogue(b.toDouble, (prefix, offered) =>
+        a.frame.flatMap(g => offered.find(o => g.contains(o) && !prefix.contains(o)))))
+      val read = FrameRead(model, prompt, tok, a.tables, a.text, newline, stop, dialogue = dialogue)
+      asks += read.asked
+      val got = if read.unresolved then None
+        else Frame.query(read.lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption
       val o = outcome(a.gold, got)
       val margin = read.margins.minOption.getOrElse(0.0)
       val said = read.lines.dropRight(1).drop(1).mkString(" | ")
@@ -58,6 +70,9 @@ object FrameBench:
       (a, o, margin, read.lines)
     }
     println(f"the frame reader, ${(System.nanoTime() - t0) / 1e9 / math.max(1, asked.size)}%.1f s a question")
+    for b <- sys.env.get("FRAME_DIALOGUE") do
+      val each = asks.toDouble / asked.size
+      println(f"the dialogue at the bar $b: $asks questions asked of the person, $each%.2f a question")
     for lang <- records.map(_._1.lang).distinct.sorted do
       val mine = records.filter(_._1.lang == lang)
       println(s"total $lang: right ${mine.count(_._2 == "right")}, asked ${mine.count(_._2 == "asked")}, " +

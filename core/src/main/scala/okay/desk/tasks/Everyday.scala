@@ -262,3 +262,26 @@ object Everyday:
     case r: Query.Relational => Exact.run(tables, r)
     case _ => Left("a relational program expected")
   }
+
+  /** THE GOLD FRAMES (specs/frames.md): the frames of the questions the language grew for, written by hand; the
+   * others read back from their gold programs; an outside question's: cannot */
+  private val grown: Map[String, Vector[String]] = Map(
+    "How did my spending change from January to February?" -> Vector("table: expenses",
+      "answer: change sum amount", "from: date month 2026-01", "to: date month 2026-02", "end"),
+    "What share of my spending went to transport?" -> Vector("table: expenses", "answer: share sum amount",
+      "part: category = transport", "end"),
+    "Which product's revenue grew the most from January to March?" -> Vector("table: sales",
+      "answer: change sum revenue", "from: date month 2026-01", "to: date month 2026-03", "group: product",
+      "order: answer desc", "limit: 1", "end"),
+    "Which items are below their reorder level?" -> Vector("table: stock",
+      "answer: rows", "where: quantity < column reorder_level", "end"),
+    "Who worked more than 20 hours in a single week?" -> Vector("table: shifts", "answer: sum hours",
+      "group: employee", "group: week(date)", "keep: answer > 20", "end"),
+    "Whose average improved from the first term to the second?" -> Vector("table: marks",
+      "answer: change avg mark", "from: term = 1", "to: term = 2", "group: student", "keep: answer > 0", "end"),
+    "By how much did my balance change each month?" -> Vector("table: bank", "answer: change sum amount",
+      "from: type = out", "to: type = in", "group: month(date)", "end"))
+  def frame(q: Q): Option[Vector[String]] = q.gold match
+    case None => Some(Vector(s"table: ${q.table}", "answer: cannot", okay.desk.Frame.end))
+    case Some(g) =>
+      grown.get(q.en).orElse(Query.parse(g).toOption.flatMap(okay.desk.Frame.of(_, Map(q.table -> tables(q.table)))))
