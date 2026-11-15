@@ -171,3 +171,39 @@ Experiments (BACKLOG R.4–R.6):
 - **E2** grouping by answer: decisions per question and asked/wrong on `Everyday` with the same weigher.
 - **E3** one matcher trained on Query frames AND logic statements together; a held-out ability (`Calculate`) read
   with no training of its own — the test of (a).
+
+## 11. Better and cheaper: what the core allows next (2026-11-15)
+
+Each item keeps the core (tools, words, match) and its laws; each is measured by `Everyday` (three seeds) and, where
+it is about speed, by seconds a question on the phone profile.
+
+1. **Match by what the TEXT adds (PMI), not by the words' own likelihood.** The frames now take an option's mean
+   token log-probability after the text; a frequent or short phrase ("count", "rows") scores high whatever was
+   asked — the surface-form competition (Holtzman et al., EMNLP 2021). The fix is known and cheap: score
+   `log P(w | x) − log P(w | x₀)`, x₀ a neutral text ("Answer:") with the same schema — the second term is the same
+   for every question over that table, computed once and cached. Expected: fewer wrong choices among options of
+   unequal length and frequency, no training. (E4)
+2. **Exact first.** Where the question writes an option itself — a column's name, a value of a column, a number, a
+   month — the data's exact words decide the hole (`Fill.exact` of calculus.md) and the model is not run for it.
+   Measure the share of holes decided so: every one is a forward saved on the phone and a choice that cannot be
+   wrong by the model. (E5)
+3. **The surest hole next.** With answers grouped (§10 b), refine next the hole whose groups split the remaining
+   answers most — the decision that matters most is taken while the context is cleanest, the ones that do not matter
+   are never taken. A strategy, no new notion. (E6)
+4. **One forward over the options' shared words.** Canonical words of a hole's options share their beginnings
+   ("the sum of amount", "the sum of price"): scored as a TRIE in one packed forward (each node attending to its
+   ancestors), each shared token computed once — `Qwen3Compute.score` with segments that share prefixes. (E7)
+5. **A memory of readings.** A text read and confirmed (shown and not corrected, or chosen by the person) is kept with
+   its term; the same wording (exactly, or a typo away) over the same table is answered from the memory, the person's
+   own choices first — the cheapest reader and the one that learns each person (TeCoD's templates, BACKLOG A.1). (E8)
+6. **Soft labels from the teacher.** The 35B's match scores over all options (not only its argmax) as the training
+   target: the distribution says which wrong options are near, the signal per example grows. (E9)
+7. **Answers grouped also across paraphrases** — only if a doubt remains: the text rephrased by the matcher's own
+   canonical words of the two best groups, read again; agreement → shown. A second chance before asking, at the price
+   of a reading.
+8. **One code path.** Once frames over words match or beat the page's heads on `Everyday` and the logic set, the
+   heads and their assembler leave the page (kept in the benches as a weigher to compare): one reader to keep fast,
+   small and correct on the phone.
+
+The order, by cost and expected gain: E4 (no training, one line of scoring) → E5 (no training) → E2 / E6 (the
+strategy) → E1 (the words as options) → E7 (speed) → E8 (the person) → E3 / E9 (training) → 8 (the code).

@@ -20,6 +20,17 @@ does is the point) — `specs/phone.md`; these go before item 7's later parts an
 - P5 **the size**, only if P3/P4 say 28 layers do not fit (a reload or > ~15 s a question): distilled on the choices
   or looped shared layers (guarantees.md §6.4).
 
+**T. The theory's experiments** (specs/theory.md §10–§11; BACKLOG R) — after P, in this order, each against `Everyday`
+over three seeds with right / asked / wrong, the phone profile's seconds where speed is the point:
+
+- T1 **E4 PMI scoring** — no training; one change in how `Read.Score` weighs options.
+- T2 **E5 exact first** — the data's exact words decide the holes the question writes itself.
+- T3 **the Root** (R.1) — the router as the first refinement, refuted by the checks; replaces the page's heuristic.
+- T4 **E2 / E6 decide only what changes the answer**, the surest hole next.
+- T5 **E1 canonical words as the options**.
+- T6 **E7 trie-packed scoring** — speed on the phone.
+- Then: E8 (memory), E3 / E9 (one matcher, soft labels), one code path.
+
 1. **The schema with values; `month` in `Query`** (direction §4.1) — built; check: `CeilingBench` again (first run
    en 41/7, ru 40/8).
 2. **The first night's pairs measured** — the teacher's rewrites over `Domains` (1200 points, judged by

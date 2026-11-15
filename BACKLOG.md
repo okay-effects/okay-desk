@@ -242,3 +242,12 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
    decisions per question, asked and wrong on `Everyday`; the engine's cost per question on the phone profile.
 6. **E3 one matcher for all abilities**: trained on Query frames and logic statements together, read `Calculate`
    with no training of its own; the 0.6B's probabilities against a ~300M multilingual cross-encoder.
+7. **E4 PMI scoring** (theory.md §11.1): `log P(w|x) − log P(w|x₀)`, x₀ neutral, cached per table; `Everyday` ×3
+   seeds against the mean log-probability now. No training.
+8. **E5 exact first**: holes the question writes itself decided by the data's words; the share of holes so decided;
+   right/asked/wrong unchanged or better.
+9. **E6 the surest hole next**: with answers grouped, the hole that splits the answers most refined first.
+10. **E7 trie-packed scoring**: options' shared word prefixes scored once in one forward; seconds a question.
+11. **E8 a memory of readings**: confirmed texts → terms per table and person; exact or near wording answered from it.
+12. **E9 soft labels**: the teacher's match distribution over all options as the target.
+13. **One code path**: heads and assembler off the page once frames over words match them on `Everyday` and logic.

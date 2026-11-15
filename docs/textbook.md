@@ -439,3 +439,21 @@ They are the research programme; `specs/technology.md` §6 keeps their state.
 8. How small can the base go — 2-bit MLPs, a narrower student — before the reading breaks?
 9. Does "in weights" buy anything a CPU tool does not?
 10. A real phone: speed, memory, stability.
+
+## 17. The theory: reading is refining typed holes
+
+Everything in this book is one idea (`specs/theory.md`). The tools define a grammar of meanings over the person's
+data: types, constructors, and for each hole a finite set of options — the tables, columns, values, operations and
+the question's own words. A reading starts with one hole and refines it, one offered option at a time, until a
+closed term remains; the engine computes its answer exactly, and checks refute wrong partial terms early. Only one
+thing is learned: how well a text matches the canonical words of an option. So a new ability is a grammar, an
+engine and a way of saying its terms — no training of its own — and the model's job is the smallest one there is:
+meaning against meaning.
+
+Why the earlier readers behaved as they did, in this light: the heads were a matcher trained from nothing beside the
+model's own language head (they did not learn other people's wording); writing the program let the model choose
+outside the options (it made up values); the frames choose among the tools' options by the model's own probabilities
+(the best so far). The cost of a reading is the product of its decisions' accuracies, so the grammar is designed for
+few decisions with few options, the decisive first, refutation early — and a decision is taken only where the
+options lead to different answers. The guarantee follows from the parts: the answer exact, the words faithful, the
+error rate bounded by calibration, the rest asked.
