@@ -3,7 +3,6 @@ package okay.desk.bench
 import java.nio.file.{Files, Path}
 import mlx.llm.{Adaptable, Chat, Lora, Model, Models, Port, Tokenizer}
 import okay.desk.*
-import okay.desk.tasks.Everyday
 import okay.effects.json.Json
 import scala.jdk.CollectionConverters.*
 
@@ -102,63 +101,6 @@ final class FramePort(tok: Tokenizer, tables: Map[String, Table], question: Stri
     else
       val options = Frame.next(lines.toVector, tables, question)
       Option.when(options.nonEmpty)(options.map(o => tok.encode(o)))
-
-/** THE FRAME READER MEASURED on `Everyday`, as `CeilingBench` and `GenBench` score: right, asked, wrong */
-object FrameBench:
-  def main(args: Array[String]): Unit =
-    val repo = sys.env.getOrElse("FRAME_MODEL", "mlx-community/Qwen3-0.6B-4bit")
-    val dir = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
-    val chat = Chat.load(dir); val model = Model.load(dir, mapped = true); val tok = chat.tokenizer
-    sys.env.get("FRAME_ADAPTER").foreach(f => Lora.attach(model.asInstanceOf[Adaptable], f))
-    println(s"$repo${sys.env.get("FRAME_ADAPTER").fold("")(" with " + _)}")
-    val stop = tok.id("<|im_end|>"); val newline = tok.encode("\n").head
-    final case class Count(right: Int = 0, asked: Int = 0, wrong: Int = 0)
-    var counts = Map.empty[(String, String), Count].withDefaultValue(Count())
-    val doubts = scala.collection.mutable.ArrayBuffer.empty[(Option[Table], Vector[String], Double, String,
-      Map[String, Table])]
-    val t0 = System.nanoTime()
-    val questions = sys.env.get("FRAME_ONLY").fold(Everyday.questions)(n => Everyday.questions.take(n.toInt))
-    for q <- questions; (lang, text) <- Seq("en" -> q.en, "ru" -> q.ru) do
-      val tables = Map(q.table -> Everyday.tables(q.table))
-      val (system, user) = Frame.prompt(tables, text)
-      val prompt = chat.prompt(Vector(FrameTrain.msg("system", system), FrameTrain.msg("user", user)), Nil,
-        Map("enable_thinking" -> false))
-      val read = FrameRead(model, prompt, tok, tables, text, newline, stop)
-      val lines = read.lines
-      doubts += ((q.gold.flatMap(Everyday.run(_).toOption), lines, read.margins.minOption.getOrElse(0.0), lang, tables))
-      val got = Frame.query(lines, tables).flatMap(Exact.run(tables, _)).toOption
-      val gold = q.gold.flatMap(Everyday.run(_).toOption)
-      val outcome = (gold, got) match
-        case (_, None) => if q.gold.isEmpty then "right" else "asked"
-        case (None, Some(_)) => "WRONG (outside)"
-        case (Some(want), Some(t)) => if Sample.same(t, want) then "right" else "WRONG"
-      val c = counts((q.table, lang))
-      counts = counts.updated((q.table, lang),
-        if outcome == "right" then c.copy(right = c.right + 1)
-        else if outcome == "asked" then c.copy(asked = c.asked + 1) else c.copy(wrong = c.wrong + 1))
-      println(f"  [${q.table}%-8s $lang] $outcome%-15s $text → ${lines.dropRight(1).drop(1).mkString(" | ")}")
-    println(f"the frame reader, ${(System.nanoTime() - t0) / 1e9 / (2 * Everyday.questions.size)}%.1f s a question:")
-    for t <- Everyday.tables.keys.toVector.sorted do
-      val (en, ru) = (counts((t, "en")), counts((t, "ru")))
-      println(f"  $t%-9s en ${en.right}%2d / ${en.asked}%2d / ${en.wrong}%2d   " +
-        f"ru ${ru.right}%2d / ${ru.asked}%2d / ${ru.wrong}%2d")
-    for lang <- Vector("en", "ru") do
-      val c = counts.collect { case ((_, l), c) if l == lang => c }
-      println(s"total $lang: right ${c.map(_.right).sum}, asked ${c.map(_.asked).sum}, wrong ${c.map(_.wrong).sum} " +
-        s"of ${Everyday.questions.size}")
-    // THE DOUBT: a question whose smallest margin is below a bar is asked instead — right, asked, wrong by the bar
-    for bar <- Vector(0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0) do
-      val line = Vector("en", "ru").map { lang =>
-        val mine = doubts.filter(_._4 == lang)
-        val (r, a, w) = mine.foldLeft((0, 0, 0)) { case ((r, a, w), (gold, lines, m, _, tables)) =>
-          val got = if m < bar then None else Frame.query(lines, tables).flatMap(Exact.run(tables, _)).toOption
-          (gold, got) match
-            case (_, None) => if gold.isEmpty then (r + 1, a, w) else (r, a + 1, w)
-            case (None, Some(_)) => (r, a, w + 1)
-            case (Some(want), Some(t)) => if Sample.same(t, want) then (r + 1, a, w) else (r, a, w + 1) }
-        f"$lang $r%2d / $a%2d / $w%2d" }
-      println(f"  doubt below $bar%.2f: ${line.mkString("   ")}")
-    model.close()
 
 /**
  * THE FRAME READ WITH ITS DOUBT (specs/frames.md §2): the same choices as `FramePort`, each line's options scored
