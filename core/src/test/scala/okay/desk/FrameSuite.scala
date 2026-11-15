@@ -32,3 +32,11 @@ class FrameSuite extends munit.FunSuite:
     assertEquals(Frame.next(Vector("table: expenses", "answer: cannot"), t, "Why?"), Vector(Frame.end))
     assert(Frame.query(Vector("table: expenses", "answer: cannot", "end"), t).isLeft)
   }
+
+  test("a number said in words is an option: three largest, «три самых», «п'ять»") {
+    val t = Map("expenses" -> Everyday.tables("expenses"))
+    val so = Vector("table: expenses", "answer: rows", "order: amount desc")
+    assert(Frame.next(so, t, "Show the three largest expenses").contains("limit: 3"))
+    assert(Frame.next(so, t, "Покажи три самых больших расхода").contains("limit: 3"))
+    assert(Frame.next(so, t, "Покажи п'ять найбільших").contains("limit: 5"))
+  }

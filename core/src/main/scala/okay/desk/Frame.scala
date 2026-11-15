@@ -36,9 +36,20 @@ object Frame:
     if vs.nonEmpty && vs.forall(_.num.isDefined) then "number"
     else if vs.nonEmpty && vs.forall(_.text.matches("\\d{4}-\\d{2}-\\d{2}.*")) then "date"
     else "text"
+  // the numbers said in words (one to twelve, en/ru/uk/pl stems): "three largest", «три самых», «п'ять»
+  private val spoken: Vector[(String, Vector[String])] = Vector(
+    "1" -> Vector("one", "одн", "один", "одна", "jeden", "jedn"), "2" -> Vector("two", "два", "две", "двох", "dwa", "dwie"),
+    "3" -> Vector("three", "три", "трьох", "trzy"), "4" -> Vector("four", "четыр", "чотир", "cztery"),
+    "5" -> Vector("five", "пять", "п'ять", "пяти", "pięć"), "6" -> Vector("six", "шесть", "шість", "sześć"),
+    "7" -> Vector("seven", "семь", "сім", "siedem"), "8" -> Vector("eight", "восемь", "вісім", "osiem"),
+    "9" -> Vector("nine", "девять", "дев'ять", "dziewięć"), "10" -> Vector("ten", "десять", "dziesięć"),
+    "12" -> Vector("twelve", "двенадцать", "дванадцять", "dwanaście"))
   private def numbers(question: String): Vector[String] =
-    "(?<![\\d.])-?\\d+(?:[.,]\\d+)?(?![\\d])".r.findAllIn(question).map(_.replace(',', '.')).toVector
-      .filterNot(_.matches("(19|20)\\d\\d")).distinct
+    val words = "(?U)\\b\\w[\\w']*\\b".r.findAllIn(question.toLowerCase).toVector
+    val said = spoken.collect { case (n, stems)
+        if words.exists(w => stems.exists(s => w == s || w.startsWith(s) && s.length >= 4)) => n }
+    ("(?<![\\d.])-?\\d+(?:[.,]\\d+)?(?![\\d])".r.findAllIn(question).map(_.replace(',', '.')).toVector
+      .filterNot(_.matches("(19|20)\\d\\d")) ++ said).distinct
   private def dates(question: String): Vector[String] = "\\d{4}-\\d{2}-\\d{2}".r.findAllIn(question).toVector.distinct
   /** the months a question names, as `yyyy-mm` of the column's own dates */
   private def months(t: Table, c: String, question: String): Vector[String] =

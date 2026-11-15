@@ -50,7 +50,9 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     case Read.Decode(ids) => Future.successful(tok.decode(ids))
     case Read.Prompt(system, user) => Future.successful(tok.encode(OnQwen.template(system, user)))
     case Read.Note(_) => Future.unit
-    // a line's options weighed in one packed forward after the context's cache (okay-llm's `Qwen3Compute.score`)
+    // a line's options weighed in one packed forward after the context's cache (okay-llm's `Qwen3Compute.score`);
+    // the log-softmax within the options' tokens (the head a few hundred rows: a phone's; Everyday 62 of 108 right as over
+    // the whole vocabulary, 0.91 s a question on the JVM)
     case Read.Score(context, options) =>
       val head = context.init
       // (a def: run only after the blocks are loaded)
@@ -64,7 +66,8 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
           model.run(head, layer, Nil, withLogits = false, None, keep = true).map { (_, _, next) =>
             cached = next.map(head -> _); next.get }
       // (the options' tokens' embedding blocks loaded first: the head knows only the loaded rows)
-      ensure(context ++ options.flatten).flatMap(_ => ready).flatMap(cache => model.score(cache, context.last, options))
+      ensure(context ++ options.flatten).flatMap(_ => ready)
+        .flatMap(cache => model.score(cache, context.last, options, within = true))
   def handler: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => answer[X](op)
 
   /**

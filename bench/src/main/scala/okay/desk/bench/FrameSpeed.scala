@@ -23,7 +23,7 @@ object FrameMerge:
  * the browser, the tokenizer mlx-scala's. `packed`: a line's options weighed in one forward (`Qwen3Compute.score`),
  * else one option a forward (the same engine and weights: the packing's gain alone).
  */
-final class QwenReading(dir: Path, packed: Boolean)(using ExecutionContext) extends Reading:
+final class QwenReading(dir: Path, packed: Boolean, within: Boolean = false)(using ExecutionContext) extends Reading:
   private val chat = Chat.load(dir); private val tok = chat.tokenizer
   private val config = Qwen3Config.parse(Files.readString(dir.resolve("config.json")))
   val model = Qwen3Compute(OnMlx(), Safetensors(Files.readAllBytes(dir.resolve("model.safetensors"))), config)
@@ -47,8 +47,8 @@ final class QwenReading(dir: Path, packed: Boolean)(using ExecutionContext) exte
     case Read.Decode(ids) => tok.decode(ids)
     case Read.Score(context, options) =>
       val c = cacheOf(context.init)
-      if packed then await(model.score(c, context.last, options))
-      else options.map(o => await(model.score(c, context.last, Vector(o))).head)
+      if packed then await(model.score(c, context.last, options, within))
+      else options.map(o => await(model.score(c, context.last, Vector(o), within)).head)
     case Read.Note(_) => ()
     case other => sys.error(s"not answered here: $other")).asInstanceOf[X]
 
@@ -68,8 +68,14 @@ object FrameSpeed:
       val frames = asked.map(a => Read.run(handle(FrameReading.read[RP](a.tables, a.text),
         Person.silent[Read, FrameReading.Reading]), r).lines)
       (frames, (System.nanoTime() - t0) / 1e9 / asked.size)
-    val (one, tOne) = readAll(QwenReading(dir, packed = false))
-    val (pack, tPack) = readAll(QwenReading(dir, packed = true))
+    // FRAME_WITHIN=1: the packed weighing over the whole vocabulary against the one within the options' tokens
+    val within = sys.env.get("FRAME_WITHIN").contains("1")
+    val (one, tOne) = readAll(QwenReading(dir, packed = !within))
+    val (pack, tPack) = readAll(QwenReading(dir, packed = true, within = within))
+    if within then
+      val rightFull = asked.zip(one).count((a, lines) => FrameBench.outcome(a.gold,
+        Frame.query(lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption) == "right")
+      println(s"the whole vocabulary: right $rightFull of ${asked.size}")
     val same = one.zip(pack).count(_ == _)
     val right = asked.zip(pack).count((a, lines) =>
       FrameBench.outcome(a.gold, Frame.query(lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption) == "right")
