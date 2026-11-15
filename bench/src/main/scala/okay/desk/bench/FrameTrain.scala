@@ -13,7 +13,9 @@ object FrameTexts:
    * random — the first night's had 40% of them and the reader took a plain sum for a share */
   def load(path: Path): Vector[FrameData.Item] =
     val all = Files.readAllLines(path).asScala.toVector.filter(_.trim.nonEmpty)
-    val synth = all.filter(l => l.contains("\"source\":\"template\"") || l.contains("\"source\":\"taught\""))
+    // (the questions outside — "answer: cannot" — all kept: bounding them away lost every refusal, round 2)
+    val synth = all.filter(l => (l.contains("\"source\":\"template\"") || l.contains("\"source\":\"taught\"")) &&
+      !l.contains("answer: cannot"))
     val keep = sys.env.get("FRAME_SYNTH_MAX").map(_.toInt).fold(synth.toSet)(n =>
       scala.util.Random(11).shuffle(synth).take(n).toSet)
     val synthetic = synth.toSet
