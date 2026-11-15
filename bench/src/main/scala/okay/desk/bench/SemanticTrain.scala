@@ -22,7 +22,8 @@ object SemanticTrain:
     val model = Model.load(src, mapped = true)
     val lora = Lora(model.asInstanceOf[Adaptable], rank = 16, projs = Seq("q", "k", "v", "o", "gate", "up", "down"),
       lr = sys.env.get("SEMANTIC_LR").map(_.toFloat).getOrElse(3e-4f))
-    sys.env.get("SEMANTIC_RESTORE").foreach(lora.restoreParameters)
+    // (restoring a saved adapter needs mlx-scala's Lora.restoreParameters, not in its release yet)
+    sys.env.get("SEMANTIC_RESTORE").foreach(_ => sys.error("SEMANTIC_RESTORE needs Lora.restoreParameters (unreleased)"))
     val synthetic = SemanticCorpus.pairs(461, steps)
     val extra = sys.env.get("SEMANTIC_PAIRS").map { filename =>
       require(!filename.endsWith(".heldout"), "held-out tasks must not be used for training")

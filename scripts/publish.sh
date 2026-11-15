@@ -23,8 +23,9 @@ sbt -batch coreJVM/test uiJVM/test web/fullLinkJS worker/fullLinkJS > /dev/null
 out=/tmp/okay-desk-pages
 # THE BRANCH HAS NO HISTORY: every publish is one orphan commit, force-pushed — each kept a 250 MB copy of the weights
 # and the branch grew past what GitHub Pages builds ("Page build failed" with no reason, 2026-11-06)
-git worktree prune
 rm -rf "$out"
+# (the directory first, then its registration: a publish that failed left one registered and missing)
+git worktree prune
 git branch -D gh-pages-next >/dev/null 2>&1 || true
 git worktree add -q --orphan -b gh-pages-next "$out"
 cp web/page/index.html "$out/" && cp web/target/scala-3.3.8/okay-desk-web-opt/main.js "$out/"
