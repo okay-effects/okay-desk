@@ -54,3 +54,15 @@ reader (27/20 en, 21/27 ru wrong) and the ceiling (43/54).
   aggregate missed ("revenue by region" read as rows ordered by region), sum and count confused, `type = in` /
   `out` not read for income and spending, the row of the largest read as the largest value.
 - Next: the synthetic forms bounded (700), two epochs; the same on the student (12 layers).
+
+### 5.2 The student (12 layers, the phone's), the same texts, one epoch
+
+| reader | en right / asked / wrong | ru right / asked / wrong |
+|---|---|---|
+| the frame by choices | 25 / 0 / 29 | 18 / 1 / 35 |
+| the frame, a doubt below 0.5 asked | 18 / 25 / 11 | 14 / 26 / 14 |
+| the frame, a doubt below 0.75 asked | 18 / 28 / 8 | 14 / 30 / 10 |
+
+Fewer wrong than the heads in both languages at 0.75, more right in Russian, fewer in English; its loss at the
+epoch's end 0.18 (the released model's 0.04): its language head reads states distilled toward layer 19, not
+made for words — under-trained. Next: three epochs.
