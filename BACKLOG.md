@@ -221,3 +221,18 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
    same protocol; size and speed on the phone if it wins.
 4. **Reinforcement with the executed result** on the frame reader (FINER-SQL's dense reward: each line right).
 5. **Temperature scaling** of the margins before conformal calibration; the bar's stability across seeds.
+
+## R. The theory's next steps (specs/theory.md §8, 2026-11-15)
+
+1. **The Root: the router as the first refinement.** Line 0 of every reading: `Query | Assign | Plan | Derive |
+   Calculate | Cannot`, weighed by `Read.Score` among the abilities the context allows (Query only with a table
+   open); CHECKED by refutation — a kind whose frames cannot cover the text's sentences is refuted, the next kind
+   tried, none left → asked. Replaces the page's "three sentences or more → the statement reader". Labels free: the
+   kind of every gold statement and every `Everyday` frame. First measure, before any training: the kind's accuracy
+   on the sealed logic set and `Everyday` with the released model's own weighing — if ≥ 95%, no training for it.
+   Hard negatives (texts that sound alike, kinds that differ) only if it is lower.
+2. **The statement as refinement**: the logic reading as frames — the constructor per sentence, its arguments
+   chosen among the sentence's spans — by `Read.Score`; the heads kept as a weigher to compare on the sealed set.
+   Training in order: kind, then frames given the gold kind, then given the predicted kind. Assembly stays exact (L6).
+3. **`Ability`, one interface** (options, den, check, say, parse) and one law suite L1–L6 every ability passes;
+   `Calculate` the first built by it alone.
