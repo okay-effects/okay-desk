@@ -226,3 +226,21 @@ class TaskListSuite extends munit.FunSuite:
       val p = run(App.main[Row](Nil, chooser = false), Map.empty, Act.press("Ask", ask -> t.text.en))
       assert(text(p).contains("Read as:") && text(p).contains(t.answer.en.stripPrefix("the ")), text(p))
     finally reader = _ => None
+
+  test("a question about someone of the solved task: the grid's lines naming them, from the exact solver"):
+    val task = "The Norwegian lives in house 1. The Japanese lives in house 3. The Spaniard keeps the dog. " +
+      "Who keeps the zebra?"
+    val kept = "The Norwegian lives in house 1. The Japanese lives in house 3. The Spaniard keeps the dog."
+    val grid = Vector("1: Norwegian, yellow, water, fox", "2: Spaniard, blue, tea, dog", "3: Japanese, green, coffee, zebra")
+    def reading(result: Vector[String], doubt: Option[Reader.Doubt]) =
+      Some(Reader.Reading(None, Some(result), Map.empty, (0, 0), doubt))
+    reader = text =>
+      if text == task then reading(Vector("the Japanese"), None)
+      else if text == kept then reading(grid, None)
+      else reading(Vector.empty, Some(Reader.Doubt.NoStatement("no goal for it")))
+    try
+      val p = run(App.main[Row](Nil, chooser = false), Map.empty, Act.press("Ask", ask -> task),
+        Act.press("Ask", ask -> "What does the Japanese do?"))
+      assert(text(p).contains("3: Japanese, green, coffee, zebra") && text(p).contains("the task's solved grid"), text(p))
+      assert(!text(p).contains("2: Spaniard"), text(p))
+    finally reader = _ => None

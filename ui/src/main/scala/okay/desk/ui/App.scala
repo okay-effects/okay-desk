@@ -271,7 +271,15 @@ object App:
                 if st.model.isEmpty then Reasoning.start[R](st, q)
                 else busy[R](st, "the model reads the task into a formal statement, the exact solver solves it…")
                   .flatMap(_ => Model.state[R](text)).flatMap {
-                    case Some(reading) if text != q && !reading.shown => Reasoning.start[R](st, q)
+                    case Some(reading) if text != q && !reading.shown =>
+                      // the grid itself asked about someone in it: the conditions alone, the lines naming them
+                      conditions(s).fold(Reasoning.start[R](st, q))(kept => Model.state[R](kept).flatMap {
+                        case Some(grid) if grid.shown && about(grid.result.getOrElse(Vector.empty), q).nonEmpty =>
+                          pure(st.copy(log = st.log :+ Entry("model",
+                            about(grid.result.get, q).mkString("\n"), None, Some(if okay.desk.statement.Reader
+                              .russian(q) then "из решённой сетки задачи: точный решатель" else
+                              "from the task's solved grid: the exact solver"))))
+                        case _ => Reasoning.start[R](st, q) })
                     // answered, or read and doubted: the reader's words — the answer, or the sentence it is unsure
                     // of; a text it could not write down at all goes the chat's other ways
                     case Some(reading) if reading.shown || reading.statement.nonEmpty && reading.doubt.exists {
@@ -300,12 +308,23 @@ object App:
    * this question, one text — or none: no task, or not a question, or a task of its own */
   def followUp(s: State, q: String): Option[String] =
     val asks = q.trim.endsWith("?") && okay.desk.statement.Sentences.of(q).size < 3
-    s.told.filter(_ => asks).map { task =>
-      // the task's own text, its questions cut out: the reader sees the conditions as they were written
-      val questions = okay.desk.statement.Sentences.of(task)
-        .filter(_.in(task).reverse.dropWhile(c => "\"»”’')".contains(c)).startsWith("?"))
-      val kept = questions.foldRight(task)((at, t) => t.substring(0, at.from) + t.substring(at.until)).trim
-      kept + (if kept.contains('\n') then "\n" else " ") + q.trim }
+    conditions(s).filter(_ => asks).map(kept => kept + (if kept.contains('\n') then "\n" else " ") + q.trim)
+
+  /** the last task's own text, its questions cut out: the reader sees the conditions as they were written */
+  def conditions(s: State): Option[String] = s.told.map { task =>
+    val questions = okay.desk.statement.Sentences.of(task)
+      .filter(_.in(task).reverse.dropWhile(c => "\"»”’')".contains(c)).startsWith("?"))
+    questions.foldRight(task)((at, t) => t.substring(0, at.from) + t.substring(at.until)).trim }
+
+  /** A QUESTION ABOUT SOMEONE OF THE SOLVED TASK ("What does the Japanese do?", «Что делает японец?»), which the
+   * statement language has no goal for: the task's conditions alone read — the whole solved grid, a line a
+   * position — and the lines naming them; none: no answer from here */
+  def about(lines: Vector[String], q: String): Vector[String] =
+    val stop = Set("what", "who", "does", "do", "did", "the", "a", "an", "is", "of", "about", "tell", "me", "and",
+      "что", "кто", "делает", "про", "о", "об", "расскажи", "чем", "занимается")
+    val words = "(?U)\\w+".r.findAllIn(q.toLowerCase).filter(w => w.length > 2 && !stop(w)).toVector
+    // a name matched by its stem (the Japanese, японец / японца: the first five letters)
+    lines.filter(l => words.exists(w => l.toLowerCase.contains(w.take(math.max(4, math.min(w.length, 5))))))
 
   /**
    * A STEP GOING ON, shown where the person is: on the chat, the conversation with the question and what was said
