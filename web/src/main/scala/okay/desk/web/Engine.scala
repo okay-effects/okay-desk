@@ -446,7 +446,9 @@ object Engine:
    * constructors, one line, `|` between) — `Clarified.readings` reads them back for the buttons */
   private def asked(ty: Ty, cs: Vector[String], languages: Vector[Language]): String =
     val lang = languages.headOption.getOrElse(Language.En.language)
-    if cs.isEmpty then Dialogue.question(ty, cs, lang) else s"ask: ${Dialogue.question(ty, cs, lang)}\n${cs.mkString(" | ")}"
+    // each option with its words ("value=>words"): its button says the words, the choice carries the value
+    if cs.isEmpty then Dialogue.question(ty, cs, lang)
+    else s"ask: ${Dialogue.question(ty, cs, lang)}\n${cs.map(c => s"$c=>${Dialogue.name(ty, c, lang)}").mkString(" | ")}"
   private def readByCalculus(tables: Map[String, Table], question: String, words: Words, languages: Vector[Language],
       answers: Vector[(Ty, String)]): (Either[String, String] ! (Async + Read)) =
     val s = okay.desk.Space.Schema(tables); val g = new Grammar(s)

@@ -87,8 +87,44 @@ object Dialogue:
       if lang.code == "ru" then (if c == "desc" then "по убыванию" else "по возрастанию") else (if c == "desc" then "largest first" else "smallest first"))
     else if c == "none" then (ty match
       case Ty.LimitT(_) => lang.pieces.get("ask:all").flatMap(_.headOption).getOrElse(if lang.code == "ru" then "все" else "all")
-      case _ => lang.pieces.get("ask:none").flatMap(_.headOption).getOrElse(if lang.code == "ru" then "без этого" else "none"))
-    else c
+      case _ => lang.pieces.get("ask:none").flatMap(_.headOption).getOrElse {
+        val ru = lang.code == "ru"
+        Dialogue.kind(ty) match
+          case "where" => if ru then "без условия" else "no condition"
+          case "group" => if ru then "без группировки" else "no grouping"
+          case "aggCol" | "fn" => if ru then "ничего — сами строки" else "nothing — the rows themselves"
+          case "order" => if ru then "без порядка" else "no order"
+          case "link" => if ru then "только эта таблица" else "this table alone"
+          case _ => if ru then "без этого" else "none"
+      })
+    else
+      // the options in words a person reads at once (a button each): a constructor's meaning, a name in «»
+      val ru = lang.code == "ru"
+      def w(en: String, russian: String) = if ru then russian else en
+      ty match
+        case Ty.Program | Ty.KindT => c.toLowerCase match
+          case "rows" => w("rows of a table: a count, a sum, a list", "строки таблицы: число, сумма, список")
+          case "absent" => w("what has no match in another table", "чего нет в другой таблице")
+          case "closure" => w("what reaches what, through others", "что куда ведёт, через другие")
+          case other => other
+        case Ty.FnT(_, _) => c match
+          case "count" => w("the number", "количество")
+          case "sum" => w("the sum", "сумму")
+          case "avg" => w("the average", "среднее")
+          case "min" => w("the smallest", "наименьшее")
+          case "max" => w("the largest", "наибольшее")
+          case other => other
+        case Ty.LinkT(_) | Ty.ReverseLinkT(_) => c.split("->").toVector match
+          case Vector(col, table) => w(s"together with «$table» (by $col)", s"вместе с «$table» (по $col)")
+          case _ => c
+        case Ty.OpT(_) => c match
+          case "=" => w("equal to", "равно"); case "!=" => w("not equal to", "не равно")
+          case "<" => w("less than", "меньше"); case "<=" => w("at most", "не больше")
+          case ">" => w("more than", "больше"); case ">=" => w("at least", "не меньше")
+          case "month" => w("in the month", "в месяце")
+          case other => other
+        case Ty.TableT | Ty.ColumnT(_, _, _, _) | Ty.OrderT(_, _, _) => s"«$c»"
+        case _ => c
 
   /** the built-in questions; a language file's `pieces` under `ask:<kind>` override them */
   def builtInAsk(code: String): Map[String, String] = if code == "ru" then Map(

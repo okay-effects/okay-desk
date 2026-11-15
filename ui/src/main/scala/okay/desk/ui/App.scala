@@ -25,6 +25,8 @@ object App:
     phone: Boolean = false, notice: Option[String] = None, chatVersion: Int = 0,
     /** a question the readers were not sure about and the readings they hesitated between: offered as buttons */
     asking: Option[(String, Vector[String])] = None,
+    /** the options' words, where the asking named them (an option's value → what its button says) */
+    labels: Map[String, String] = Map.empty,
     /** the dialogue's ask (specs/pilot.md §3.2): the hole's question, when `asking` came from the calculus — the choice
      * then answers the hole and the same term is refined, instead of the question rewritten */
     hole: Option[String] = None,
@@ -65,6 +67,8 @@ object App:
     /** THE ABSTENTION AS A DIALOGUE (specs/data.md §30): the person's choice among the readings the readers hesitated
      * between — the question asked again with the choice written into it (an exact fact for the rules) */
     case Clarify(question: String, choice: String)
+    /** none of the options offered: the asking put away, the person rephrases */
+    case Dismiss
     case AllowSources
     case Offline
     case ConstraintForm(clue: String, form: String)
@@ -220,6 +224,10 @@ object App:
         yield st.copy(modelName = name, place = "chat")
       case Msg.Unload => Model.unload[R].map(_ => cleared.copy(model = None,
         notice = Some("Model unloaded. Chat, open data and cached files are kept.")))
+      case Msg.Dismiss =>
+        val ru = s.asking.exists(_._1.exists(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я'))
+        pure(cleared.copy(hole = None, labels = Map.empty, log = cleared.log :+ Entry("system",
+          if ru then "Хорошо — перефразируйте вопрос." else "All right — rephrase the question.")))
       case Msg.Clarify(question, choice) =>
         val asked = cleared.copy(log = cleared.log :+ Entry("user", Clarified.saying(question, choice)), hole = None)
         // the dialogue's hole answered: the SAME question, the choice as a source; else the question rewritten
@@ -330,7 +338,8 @@ object App:
         val offered = Clarified.readings(words).map(cs => (question, cs))
         val asked = Clarified.askedQuestion(words)
         if offered.isEmpty && asked.isEmpty then Reasoning.general[R](s, question)
-        else pure(s.copy(log = s.log :+ Entry("model", asked.getOrElse(words)), asking = offered, hole = asked))
+        else pure(s.copy(log = s.log :+ Entry("model", asked.getOrElse(words)), asking = offered, hole = asked,
+          labels = Clarified.labels(words)))
       case Right(json) =>
         val computed = Query.parse(json) match
           case Left(error) =>
@@ -486,7 +495,10 @@ object App:
       Part.slot("clarify"))) ++ List(questionInput: Part) ++ tools)(
       lines => List(steps(lines)))
     val choices = if thinking.isDefined then Nil
-      else s.asking.toList.flatMap((q, cs) => cs.map(c => Button(Clarified.button(q, c, s.hole.isDefined))(Msg.Clarify(q, c): Msg).at("clarify")))
+      // ONE PRESS A CHOICE: each option a button with its words, numbered; and "none of these"
+      else s.asking.toList.flatMap((q, cs) => cs.zipWithIndex.map((c, i) =>
+        Button(s.labels.get(c).fold(Clarified.button(q, c, s.hole.isDefined))(l => s"${i + 1} · $l"))(
+          Msg.Clarify(q, c): Msg).at("clarify")) :+ Button(Clarified.none(q))(Msg.Dismiss: Msg).at("clarify"))
     val research = if s.reasoning.pending.isEmpty then Nil else List(
       Button("Use online sources", Style.Primary)(Msg.AllowSources: Msg).at("research"),
       Button("Stay offline")(Msg.Offline: Msg).at("research"))

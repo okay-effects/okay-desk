@@ -196,7 +196,7 @@ class ClarifySuite extends munit.FunSuite:
       case Fetch.Send(_, _, answer) => answer(Response(404))))
     val ask = "Ask anything: a question, a problem, or data to reason about"
     val played = Play(steps(copiedTo[NoFetch, Ui, Unit](copied)(fetchless)), Act.press("Ask", ask -> "thanks"), Act.press("Ask", ask -> "yes"), Act.press("Ask", ask -> vague),
-      Act.press("customers"), Act.press("Ask", ask -> "no"))
+      Act.press("2 · customers"), Act.press("Ask", ask -> "no"))
     assert(played.problems.isEmpty, played.problems.toString)
     val shown = played.at.toList.flatMap(_.parts).mkString(" ")
     assert(shown.contains("You're welcome"), shown)
@@ -205,6 +205,29 @@ class ClarifySuite extends munit.FunSuite:
     // the button answers the same question (not rewritten); "no" to the re-asked hole takes its second option
     assert(shown.contains("I mean customers"), shown)
     assert(shown.split("I mean customers").length == 3, s"the choice twice (the button, then «no»): $shown")
+
+  test("a question in doubt: each option a button with its words, numbered — one press answers; none of these"):
+    val disk = scala.collection.mutable.Map("orders.csv" -> csv(Sample.orders), "customers.csv" -> csv(Sample.customers))
+    val p = Model.answeredBy[Row, NoModel, Unit](_ => Right("readers loaded"), (_, q) =>
+      if q == "сколько заказов" then Left("ask: Что посчитать: количество, сумму?\ncount=>количество | sum=>сумму")
+      else Left("no program for that"))(App.main[Row](Nil))
+    val kept = Disk.inMemory[NoModel, NoDisk, Unit](disk)(p)
+    val fetchless = handle(kept, Handler.Tail[Fetch, NoFetch, Unit, Unit](a => pure(a), [X] => (op: Fetch[X]) => op match
+      case Fetch.Call(_, _, _, _, answer) => answer(Response(404))
+      case Fetch.Send(_, _, answer) => answer(Response(404))))
+    val ask = "Ask anything: a question, a problem, or data to reason about"
+    def play(acts: Act*) = Play(steps(copiedTo[NoFetch, Ui, Unit](copied)(fetchless)), acts*)
+    val asked = play(Act.press("Ask", ask -> "сколько заказов"))
+    assert(asked.problems.isEmpty, asked.problems.toString)
+    val labels = asked.at.toList.flatMap(_.buttons).map(_.label)
+    assert(labels.containsSlice(List("1 · количество", "2 · сумму", "Ничего из этого — перефразирую")), labels.toString)
+    val chosen = play(Act.press("Ask", ask -> "сколько заказов"), Act.press("1 · количество"))
+    assert(chosen.problems.isEmpty, chosen.problems.toString)
+    assert(chosen.at.toList.flatMap(_.parts).mkString(" ").contains("Я имею в виду count"), chosen.at.toString)
+    val dismissed = play(Act.press("Ask", ask -> "сколько заказов"), Act.press("Ничего из этого — перефразирую"))
+    val shown = dismissed.at.toList.flatMap(_.parts).mkString(" ")
+    assert(shown.contains("перефразируйте вопрос"), shown)
+    assert(!dismissed.at.toList.flatMap(_.buttons).map(_.label).contains("1 · количество"), "the options put away")
 
   test("the same chat solves the classic and clarifies an unknown constraint as a lesson"):
     val ask = "Ask anything: a question, a problem, or data to reason about"

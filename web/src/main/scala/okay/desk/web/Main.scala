@@ -197,6 +197,15 @@ object Look:
        |body .okay-face .okay-mark-check { padding: 8px 12px; border-radius: 12px; margin: 4px 0; font-weight: 600;
        |  border: 1px solid var(--okay-accent); }
        |body .okay-face .okay-mark-source { padding: 8px 12px; border-left: 2px solid var(--okay-border); }
+       |/* A QUESTION OF THE PAGE (a doubt): a card in the conversation, each option one press — a full-width button */
+       |body .okay-face .okay-mark-clarify { padding: 10px 12px; border-radius: 12px; margin: 6px 0;
+       |  border: 2px solid var(--okay-accent); }
+       |body .okay-face .okay-mark-clarify .okay-group { display: flex; flex-direction: column; align-items: stretch;
+       |  gap: 8px; margin-top: 8px; }
+       |/* (a button of okay-faces is a link, a.okay-ref, in an inline mark) */
+       |body .okay-face .okay-mark-clarify .okay-mark-button { display: block; width: 100%; }
+       |body .okay-face .okay-mark-clarify a.okay-ref { display: flex; width: 100%; box-sizing: border-box; text-align: left;
+       |  justify-content: flex-start; min-height: 44px; padding: 10px 14px; font-size: 1rem; }
        |body .okay-face .okay-mark-chat-actions { order: 3; }
        |body .okay-face > div > nav.okay-actions > form:has([id^="f-ask"]) { order: 4; }
        |/* a question's steps where its answer will be: after the conversation, in the question form's place */

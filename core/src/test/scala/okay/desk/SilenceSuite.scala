@@ -25,7 +25,8 @@ class SilenceSuite extends munit.FunSuite:
         case Outcome.Open(ty, _, cs, _) =>
           assert(ty.isInstanceOf[Ty.FnT], s"$q stopped at $ty")
           assertEquals(cs.toSet, Set("count", "sum"), q)
-          assert(cs.forall(c => Dialogue.question(ty, cs, Language.En.language).contains(c)))
+          assert(cs.forall(c => Dialogue.question(ty, cs, Language.En.language)
+            .contains(Dialogue.name(ty, c, Language.En.language))))
         case other => fail(s"$q: $other")
       assert(!reached, s"$q: a reader decided the disputed hole")
     // a plain count stays a count: the dispute is a word, not the function

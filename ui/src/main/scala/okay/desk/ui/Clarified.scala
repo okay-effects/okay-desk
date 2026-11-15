@@ -19,7 +19,7 @@ object Clarified:
   /** the readings of a hesitation, if the words are one: "not sure: A or B" (the readers' abstention), or the
    * dialogue's ask (specs/pilot.md §3.2) — "ask: <the hole's question>" and, on the next line, the options */
   def readings(words: String): Option[Vector[String]] =
-    if words.startsWith("ask: ") then words.split("\n").lift(1).map(_.split("\\|").toVector.map(_.trim).filter(_.nonEmpty)).filter(_.size >= 2)
+    if words.startsWith("ask: ") then options(words).map(_.map(_._1)).filter(_.size >= 2)
     else "^not sure: (.+?)(?: — .*)?$".r.findFirstMatchIn(words).map(_.group(1).split(" or ").toVector.map(_.trim))
       .filter(_.size >= 2)
   /** the hole's question, where the words are the dialogue's ask */
@@ -33,7 +33,9 @@ object Clarified:
   def welcome(q: String): String = if russian(q) then "Пожалуйста. Спрашивайте ещё." else "You're welcome. Ask on."
   def forgot(q: String, n: Int): String = if russian(q) then (if n > 0 then s"Забыл: $n." else "Нечего забывать.") else (if n > 0 then s"Forgotten: $n." else "Nothing to forget.")
   def nothingPending(q: String): String = if russian(q) then "Ничего не ожидает ответа — задайте вопрос о данных." else "Nothing is pending — ask about the data."
-  def prompt(q: String, asked: Option[String] = None): String = asked.getOrElse(
+  def prompt(q: String, asked: Option[String] = None): String = asked.map(_ =>
+    // the question itself stands just above, in the conversation: the card says only what to do
+    if russian(q) then "Выберите одно — одним нажатием:" else "Choose one — a single press:").getOrElse(
     if russian(q) then "Не уверен, о какой таблице вопрос — выберите:" else "Not sure which table the question means — choose:")
   def button(q: String, choice: String, asked: Boolean = false): String =
     if asked then choice match
@@ -51,3 +53,17 @@ object Clarified:
   /** the clarification appended to the disk's file */
   def keep[R[_]](q: String, choice: String, program: String)(using In[Disk, R]): Unit ! R =
     Disk.get[R](file).flatMap(was => Disk.put[R](file, was.fold("")(_ + "\n") + line(q, choice, program)))
+
+  /** the ask's options, each its value and its words: "value=>words", or the value alone (its own words) */
+  private def options(words: String): Option[Vector[(String, String)]] =
+    words.split("\n").lift(1).map(_.split("\\|").toVector.map(_.trim).filter(_.nonEmpty).map { o =>
+      o.split("=>", 2) match
+        case Array(v, l) => (v.trim, l.trim)
+        case _ => (o, o)
+    })
+  /** the options' words by their values, where the ask named them */
+  def labels(words: String): Map[String, String] =
+    if !words.startsWith("ask: ") then Map.empty
+    else options(words).fold(Map.empty[String, String])(_.toMap)
+  /** the button that says none of the options is meant */
+  def none(q: String): String = if russian(q) then "Ничего из этого — перефразирую" else "None of these — I'll rephrase"
