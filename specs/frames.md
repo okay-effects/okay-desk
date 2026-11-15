@@ -90,3 +90,11 @@ one run each, and the spread between runs is as large as the differences — the
 
 Two readers' agreement as the doubt (the same frame from rounds 1 and 3, else asked): en 27 / 17 / 10, ru
 21 / 22 / 11 — a doubt as good as the margin's at 0.3, not better.
+
+### 5.5 The student, round 3's mix, two epochs
+
+en 21 / 1 / 32, ru 20 / 2 / 32; at the doubt 0.3: 15 / 20 / 19 and 13 / 15 / 26 — worse than its first night
+(25 / 0 / 29, 18 / 1 / 35) and its margins a weaker doubt (two epochs: surer of its wrong frames). The student
+reads frames worse than the model it was distilled from: its states were made to be read by heads at layer 19, not
+by the language head. Next for the phone: the student distilled toward the frame reader itself (its choices), or
+the released model's first layers with the frame adapter.
