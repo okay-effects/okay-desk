@@ -66,3 +66,11 @@ reader (27/20 en, 21/27 ru wrong) and the ceiling (43/54).
 Fewer wrong than the heads in both languages at 0.75, more right in Russian, fewer in English; its loss at the
 epoch's end 0.18 (the released model's 0.04): its language head reads states distilled toward layer 19, not
 made for words — under-trained. Next: three epochs.
+
+### 5.3 Round 2: the synthetic forms bounded to 700, two epochs (the released model)
+
+en 24 / 0 / 30, ru 23 / 0 / 31 (with the doubt below 0.75: 16 / 33 / 5 and 14 / 35 / 5) — worse than the first
+night. Question by question: aggregates read better ("revenue by region", "hours by role" now right), but every
+refusal lost — the bound took away the "cannot" examples with the other synthetic forms, and the ten outside
+questions were answered. Round 3: every refusal kept, the other synthetic forms bounded to 1000, one epoch (only
+the mix changed from the first night); the student two epochs.
