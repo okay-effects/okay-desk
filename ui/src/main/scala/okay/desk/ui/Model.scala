@@ -151,6 +151,8 @@ object Model:
     "readers-small" -> "Qwen3 0.6B student, 12 layers + readers (122 MB, no generation)",
     // the model the student was distilled from, to compare them: the same readers on its own layer-19 states
     "readers-full" -> "Qwen3 0.6B as released, 28 layers + the same readers at its layer 19 (320 MB, no generation)",
+    // the frame reader (specs/frames.md): the formal model of a question built by choices, a doubt asked with buttons
+    "readers-frames" -> "Qwen3 0.6B frame reader: the question's formal model built by choices (335 MB)",
     interpreter -> "Qwen3 0.6B, 28 layers + program adapter (~305 MiB, experimental)",
     "Qwen3-1.7B-q4f16_1-MLC" -> "Qwen3 1.7B (~1 GB, generates)",
     "Qwen3-0.6B-q4f16_1-MLC" -> "Qwen3 0.6B (~0.4 GB, generates)",
@@ -159,14 +161,16 @@ object Model:
 
   /** the models read by the readers: their files' directory on the page and the layer the skill reads */
   val readers: Map[String, (String, Int)] =
-    Map("readers-small" -> ("model-small", 12), "readers-full" -> ("model-full", 19))
+    Map("readers-small" -> ("model-small", 12), "readers-full" -> ("model-full", 19),
+      "readers-frames" -> ("model-frames", 28))
   val nativeModels: Map[String, (String, Int)] = readers + (interpreter -> ("model-understanding", 28))
 
   /** the models a person picks between by a button (no chooser form): the student and the model it was distilled
    * from, the same readers on both — to compare them */
   val picks: List[(String, String)] = List(
     "readers-small" -> "Student: 12 layers, 122 MB",
-    "readers-full" -> "Original Qwen3 0.6B: 28 layers, 320 MB")
+    "readers-full" -> "Original Qwen3 0.6B: 28 layers, 320 MB",
+    "readers-frames" -> "Frame reader (new): 28 layers, 335 MB")
 
   /** the model a page loads unless another is chosen */
   val default = "readers-small"
@@ -176,6 +180,7 @@ object Model:
     * loads. A stronger model for a stronger browser enters here.
     */
   def auto(phone: Boolean): String =
+    // the student: its readers read the logic tasks too (the frame reader is picked by its button: data questions)
     val _ = phone
     default
 

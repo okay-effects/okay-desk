@@ -32,6 +32,14 @@ if [ -f "$STATEMENT_PLAIN" ]; then cp "$STATEMENT_PLAIN" "$web/model-small/state
 STATEMENT_GATE=${STATEMENT_GATE:-$HOME/.cache/okay-desk/statement.gate}
 if [ -f "$STATEMENT_GATE" ]; then cp "$STATEMENT_GATE" "$web/model-small/statement.gate"; fi
 
+# The frame reader (specs/frames.md): the released 0.6B with the frame adapter merged (bench FrameMerge)
+FRAMES_DIR=${FRAMES_DIR:-$HOME/.cache/okay-desk/frame-0.6b-r3}
+if [ -f "$FRAMES_DIR/model.safetensors" ]; then
+  mkdir -p "$web/model-frames"
+  cp web/page/qwen-LICENSE.txt "$web/model-frames/LICENSE"
+  cp "$FRAMES_DIR/config.json" "$FRAMES_DIR/tokenizer.json" "$web/model-frames/"
+  sbt -batch "bench/runMain okay.desk.bench.SplitWeights $FRAMES_DIR $PWD/$web/model-frames" > /dev/null
+fi
 # The model the student was distilled from, all 28 layers as released, to compare with it (?models): the same
 # readers, read at its layer 19 (where they were trained); the logic and fact readers are the student's, not here
 FULL_DIR=${FULL_DIR:-$HOME/.cache/huggingface/hub/models--mlx-community--Qwen3-0.6B-4bit/snapshots/main}

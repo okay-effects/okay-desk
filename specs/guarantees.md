@@ -95,3 +95,20 @@ model chooses one line, the tools narrow the next line's options, the checks loo
   person: training data, and the calibration of people's own questions (§3.1). `FrameRead.Dialogue`; measured by
   `FrameBench` with `FRAME_DIALOGUE`, the person played by the gold frame: the right after the dialogue, the
   questions it cost.
+
+## 8. The first calibration (2026-11-15): one reader (round 3), 1004 questions never trained on
+
+The frame reader on the teacher's natural questions over the domains' tables (new seeds, 4 languages): right
+en 243/263 (92%), ru 214/256 (84%), pl 176/245 (72%), uk 176/240 (73%) — 81% of all with no doubt.
+
+| ε | λ̂ | calibration right / asked / wrong | `Everyday` (other tables) right / asked / wrong | `Everyday`'s risk |
+|---|---|---|---|---|
+| 0.02 | 0.947 | 461 / 523 / 19 | 21 / 85 / 2 | 0.019 |
+| 0.05 | 0.635 | 652 / 302 / 49 | 28 / 71 / 9 | 0.083 |
+| 0.10 | 0.278 | 766 / 138 / 99 | 50 / 37 / 20 | 0.185 |
+
+- In its own distribution the bound holds by construction (conformal): at ε = 2% the reader answers 46% of the
+  questions and is wrong on under 2%; the rest it asks.
+- On `Everyday` — other tables, other people's wording — the 2% bound held (0.019), the looser ones did not
+  (0.083 for 5%, 0.185 for 10%): the shift costs a factor near two. A bound for people's questions needs a
+  calibration of people's questions (their choices on the page: §3).

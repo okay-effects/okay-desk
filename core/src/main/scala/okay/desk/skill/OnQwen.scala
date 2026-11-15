@@ -53,7 +53,8 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     // a line's options weighed in one packed forward after the context's cache (okay-llm's `Qwen3Compute.score`)
     case Read.Score(context, options) =>
       val head = context.init
-      val ready = cached match
+      // (a def: run only after the blocks are loaded)
+      def ready: Future[model.Cache] = cached match
         case Some((prefix, cache)) if prefix.sameElements(head) => Future.successful(cache)
         case Some((prefix, cache)) if head.startsWith(prefix) =>
           model.run(head, layer, Nil, withLogits = false, Some(cache), keep = true).map { (_, _, next) =>
@@ -62,7 +63,8 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
           clearCache()
           model.run(head, layer, Nil, withLogits = false, None, keep = true).map { (_, _, next) =>
             cached = next.map(head -> _); next.get }
-      ready.flatMap(cache => model.score(cache, context.last, options))
+      // (the options' tokens' embedding blocks loaded first: the head knows only the loaded rows)
+      ensure(context ++ options.flatten).flatMap(_ => ready).flatMap(cache => model.score(cache, context.last, options))
   def handler: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => answer[X](op)
 
   /**

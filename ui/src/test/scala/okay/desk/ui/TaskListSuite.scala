@@ -200,7 +200,7 @@ class TaskListSuite extends munit.FunSuite:
     try
       val opened = run(App.main[Row](Nil, phone = true, chooser = false), Map.empty)
       val picks = Model.picks.map(_._2)
-      assertEquals(labels(opened), List("Data: open files", "Examples", s"✓ ${picks.head}", picks(1), "Ask"))
+      assertEquals(labels(opened), List("Data: open files", "Examples", s"✓ ${picks.head}") ++ picks.tail :+ "Ask")
       assert(text(opened).contains("Model: Qwen3 0.6B student") && text(opened).contains("not loaded yet"),
         text(opened))
       assert(!text(opened).contains("THE MODEL") && !text(opened).contains("online sources off"), text(opened))

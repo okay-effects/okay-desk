@@ -175,7 +175,8 @@ object Engine:
     (for
       config <- fetch(s"$dir/config.json").map(text).map(Qwen3Config.parse)
       tok <- fetch(s"$dir/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
-      skillBytes <- if understanding then Future.successful(new ArrayBuffer(0)) else fetch(s"$dir/readers.skill")
+      skillBytes <- if understanding || dir == framesDir then Future.successful(new ArrayBuffer(0))
+        else fetch(s"$dir/readers.skill")
       adapter <- if understanding && !generate then
         fetch(Execution.versioned(s"$dir/semantic-adapter.safetensors")).map(Some(_))
         else Future.successful(None)
@@ -241,12 +242,14 @@ object Engine:
       relationReader = if adapter.nonEmpty then None else
         relations.filter(r => r.parameters.layer == layer && r.parameters.mean.size == config.hidden)
       idle()
-      skill = if adapter.nonEmpty || generate then null else Skill()
+      frames = dir == framesDir; paused = None
+      skill = if adapter.nonEmpty || generate || frames then null else Skill()
       generator = if generate then Some(tok) else None
       if skill != null then skill.load(new Int8Array(skillBytes).toArray)
       engine = null
       val name = if generate then "Qwen3 0.6B" else if understanding then "Qwen3 0.6B task interpreter"
-        else if dir == "model-full" then "Qwen3 0.6B as released" else "the student"
+        else if dir == "model-full" then "Qwen3 0.6B as released"
+        else if frames then "the frame reader" else "the student"
       Right(s"$name (${config.layers} layers) and ${if generate then "generation" else if understanding then "model program authoring" else "the readers"}" +
         s" on ${c.api}" +
         (if phone && c.api != "WebGPU" then ", the head on the CPU" else "") + device.fold(why => s" ($why)", _ => "")))
@@ -470,6 +473,7 @@ object Engine:
   private var since = 0.0
   private def ask(tables: Map[String, Table], question: String, retry: Option[(String, String)], choice: Option[String]): Unit =
     since = js.Date.now()
+    if frames then return askFrames(tables, question, choice)
     val answers = answersFor(question, choice)
     said = Vector(
       if skill != null then "the question goes to the model in the page…"
@@ -689,6 +693,66 @@ object Engine:
 
 /** THE DISK: `Disk` by the browser's Cache API — every file opened kept under `data/<name>` (its text a response),
  * the names in local storage; the tables are there again at the next visit */
+
+  // ---- THE FRAME READER (specs/frames.md §6): the frame built by choices, a program over `Read` and `Person`
+  val framesDir = "model-frames"
+  private var frames = false
+  type FrameRow[X] = (Async + Read + Person)[X]
+  type AsyncRead[X] = (Async + Read)[X]
+  private type Paused = Option[String] => Either[(Vector[String], Vector[String]), FrameReading.Reading] ! AsyncRead
+  /** the reading paused at a question, its continuation a value: the person's choice resumes it (never a replay) */
+  private var paused: Option[(String, Paused)] = None
+  /** the doubt's bar: a line's margin below it asks the person (the calibration's λ̂ replaces it) */
+  private val frameBar = "frameBar=([0-9.]+)".r.findFirstMatchIn(dom.window.location.search).map(_.group(1).toDouble)
+    .getOrElse(0.3)
+  /** THE PERSON ON THE PAGE: asked, the reading stops with the question and keeps `k`; the buttons resume it */
+  private def pausing: Handler[Person, AsyncRead, FrameReading.Reading,
+      Either[(Vector[String], Vector[String]), FrameReading.Reading]] =
+    Handler.general[Person, AsyncRead, FrameReading.Reading, Either[(Vector[String], Vector[String]),
+      FrameReading.Reading]](r => pure(Right(r)))(
+      [X] => (op: Person[X], k: X => Either[(Vector[String], Vector[String]), FrameReading.Reading] ! AsyncRead) =>
+        op match
+          case Person.Choose(decided, options) =>
+            pause = Some((c: Option[String]) => k(c.asInstanceOf[X]))
+            pure(Left((decided, options))))
+  private var pause: Option[Paused] = None
+  /** a line's question in the person's language */
+  private def lineQuestion(line: String, ru: Boolean): String = line.takeWhile(_ != ':') match
+    case "table" => if ru then "О какой таблице вопрос?" else "Which table is the question about?"
+    case "answer" => if ru then "Что посчитать?" else "What to compute?"
+    case "part" => if ru then "Какая часть?" else "Which part?"
+    case "from" | "to" => if ru then "Между чем сравнивать?" else "Compare between what?"
+    case "where" => if ru then "Какое условие?" else "Which condition?"
+    case "group" => if ru then "По чему группировать?" else "Grouped by what?"
+    case "keep" => if ru then "Какие ответы оставить?" else "Which answers to keep?"
+    case "order" => if ru then "В каком порядке?" else "In what order?"
+    case "limit" => if ru then "Сколько строк?" else "How many rows?"
+    case _ => if ru then "Что дальше?" else "What next?"
+  private def askFrames(tables: Map[String, Table], question: String, choice: Option[String]): Unit =
+    since = js.Date.now()
+    said = Vector("the frame reader builds the formal model of the question…")
+    stage("reading a question…")
+    val ru = question.exists(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я')
+    val lang = if ru then "ru" else "en"
+    val program: Either[(Vector[String], Vector[String]), FrameReading.Reading] ! AsyncRead =
+      (paused, choice) match
+        case (Some((q, resume)), Some(c)) if q == question => resume(Some(c))
+        case _ => handle(FrameReading.read[FrameRow](tables, question, Some(FrameReading.Doubt(frameBar))), pausing)
+    paused = None; pause = None
+    val f = Read.future(program, [X] => (op: Read[X]) => on.handler(op)).map {
+      case Left((_, options)) =>
+        pause.foreach(k => paused = Some((question, k)))
+        // the options as buttons: each line's canonical words (FrameSay), the choice carries the line itself
+        Left(s"ask: ${lineQuestion(options.head, ru)}\n" +
+          options.map(o => s"$o=>${FrameSay.say(Vector(o), lang)}").mkString(" | "))
+      case Right(r) if r.unresolved => Left(if ru then "Не понял вопрос — перефразируйте, пожалуйста."
+        else "I did not understand the question — please rephrase it.")
+      case Right(r) => Frame.query(r.lines, tables).map(Query.print)
+    }
+    shown = 0
+    thinking = Some(f.map { r => idle(); r }.recover { case t => idle(); Left(s"the frame reader failed: $t") })
+    thinking.foreach(_.onComplete(_ => js.timers.setTimeout(0)(wake())))
+
 object OnDisk:
   import okay.desk.ui.Disk
   private def caches: js.Dynamic = js.Dynamic.global.caches
