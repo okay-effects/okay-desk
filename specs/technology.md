@@ -262,14 +262,6 @@ or a new application, one states its formal language and its solver, and the too
 It grows from okay-inlay's okay-forge (`specs/core-joint.md` §7): one pipeline with exchangeable parts, okay-desk
 its first user.
 
-## 11. The theory (2026-11-15)
-
-One core for every component: reading is refining typed holes — a grammar of meanings indexed by the data (finite
-options from the tools), terms with holes, an exact denotation with monotone refutation, and a weigher, the only
-learned thing; one rule (refine a hole by an offered option). Routers, frames, statements, doubt, asking, saying,
-abilities and their composition are derived; six laws make an implementation right; the guarantee and the cost of
-a reading follow. `specs/theory.md`.
-
 ## 10. The phone first (the operator, 2026-11-15)
 
 The operator's priority: the result SEEN on his own iPhone — a small model doing what a large one does is the point;
@@ -279,3 +271,11 @@ two readers agreeing — en 25/6, ru 19/4 right/wrong on `Everyday` against the 
 parts, three guarantees). What changes is the order: the frame reader goes to the phone's browser now, measured
 there (seconds, memory, the operator's ten questions), and the model's size is decided by what the iPhone holds,
 not before. Steps P1–P5: `specs/phone.md`, `SPRINT.md` "P".
+
+## 11. The theory (2026-11-15)
+
+One core for every component: reading is refining typed holes — a grammar of meanings indexed by the data (finite
+options from the tools), terms with holes, an exact denotation with monotone refutation, and a weigher, the only
+learned thing; one rule (refine a hole by an offered option). Routers, frames, statements, doubt, asking, saying,
+abilities and their composition are derived; six laws make an implementation right; the guarantee and the cost of
+a reading follow. `specs/theory.md`.
