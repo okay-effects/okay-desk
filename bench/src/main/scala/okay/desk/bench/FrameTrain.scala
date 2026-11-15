@@ -46,6 +46,8 @@ object FrameTrain:
   def answer(lines: Vector[String]): String = lines.map("\n" + _).mkString
 
   def main(args: Array[String]): Unit =
+    // the seed of the adapter's first values too
+    sys.env.get("FRAME_SEED").foreach(s => mlx.Mlx.randomSeed(s.toLong))
     val repo = sys.env.getOrElse("FRAME_MODEL", "mlx-community/Qwen3-0.6B-4bit")
     val dir = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
     val chat = Chat.load(dir); val loaded = Model.load(dir, mapped = true); val tok = chat.tokenizer
@@ -61,7 +63,8 @@ object FrameTrain:
     val lora = Lora(loaded.asInstanceOf[Adaptable], rank = sys.env.get("FRAME_RANK").map(_.toInt).getOrElse(16),
       projs = Seq("q", "k", "v", "o", "gate", "up", "down"),
       lr = sys.env.get("FRAME_LR").map(_.toFloat).getOrElse(2e-4f))
-    val rnd = new scala.util.Random(5)
+    // FRAME_SEED: the order the texts are seen in — the protocol's seeds
+    val rnd = new scala.util.Random(sys.env.get("FRAME_SEED").map(_.toLong).getOrElse(5L))
     val t0 = System.nanoTime()
     for e <- 1 to epochs do
       var sum = 0f; var k = 0
