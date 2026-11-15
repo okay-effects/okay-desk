@@ -251,3 +251,14 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
 11. **E8 a memory of readings**: confirmed texts → terms per table and person; exact or near wording answered from it.
 12. **E9 soft labels**: the teacher's match distribution over all options as the target.
 13. **One code path**: heads and assembler off the page once frames over words match them on `Everyday` and logic.
+
+## M. What is missing in principle (technology.md §12, 2026-11-15)
+
+1. **People's questions**: the page keeps every question and correction on the device (by consent, exportable); the
+   operator and a few people on their own tables; one first use chosen with them.
+2. **A measure that can tell**: ≥ 300 a language, people's wording, sealed, gold by execution; intervals over seeds.
+3. **The size curve**: frames at 0.6B / 1.7B / 4B, the same recipe and data, right/wrong vs size on `Everyday`.
+4. **Extensibility shown**: `Calculate` through the `Ability` interface alone, no training of its own (E3).
+5. **The phone's runtime decided** by P2–P3's numbers: browser 0.6B or a native app.
+6. **An independent second opinion**: a matcher of another kind, or the person's check as the default in doubt.
+7. **One history**: `bench/history.tsv` for every run, a weekly target, SPRINT the only queue.

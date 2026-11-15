@@ -279,3 +279,34 @@ options from the tools), terms with holes, an exact denotation with monotone ref
 learned thing; one rule (refine a hole by an offered option). Routers, frames, statements, doubt, asking, saying,
 abilities and their composition are derived; six laws make an implementation right; the guarantee and the cost of
 a reading follow. `specs/theory.md`.
+
+## 12. What is still missing in principle (2026-11-15, the operator's question)
+
+Not features — the things without which the aim cannot be reached or cannot be shown reached:
+
+1. **People and their questions.** Everything is measured on texts we or the teacher wrote; `Everyday` is 54 a
+   language. The guarantee of guarantees.md §3.1 holds only for texts drawn as the calibration's — so without real
+   people's questions it bounds nothing about people. Needed: the operator and a few people using the page on real
+   tables of theirs, every question and correction kept (on the device, by consent) as the measure and the
+   calibration; one concrete use worth it to them (a bank statement, a shop's sales) chosen as the first product.
+2. **A measure that can tell.** 54 questions: one question is ~2 points, seeds move results by 5–10, so most
+   comparisons are inside the noise. Needed: ≥ 300 a language, people's wording, sealed, gold by execution; every
+   decision taken over seeds with an interval, not a point.
+3. **The size curve.** The teacher reads 43/54, the 0.6B 25 (two agreeing). Whether the gap is DATA or CAPACITY is
+   not known — and it decides the phone's path (browser 0.6B, or a native app with 1.7B–4B). Needed: the same recipe
+   (frames, the same data) at 0.6B / 1.7B / 4B, one curve right/wrong vs size, before more data work on the 0.6B.
+4. **Proof of extensibility.** The claim is "a new ability = a grammar, an engine, its words — no training of its
+   own" (theory.md §10). It has not happened once. Needed: a second ability (`Calculate`) built only through one
+   `Ability` interface, read by the shared matcher with no training of its own, with its numbers (E3).
+5. **A certain runtime on the phone.** The 28-layer model reading frames on an iPhone is not measured; WebGL2's
+   memory has already broken the page once. Needed: P2–P3 answered — and a decision, by measure, between the browser
+   and a native app.
+6. **An independent second opinion.** The two readers share a base and a corpus — their errors correlate; offline,
+   the only independent check is the person reading "understood as". Needed: either a second matcher of another kind
+   (a small cross-encoder, technology.md §8.1) or the person's check made the explicit default for answers in doubt.
+7. **One loop, one history.** Work runs in several sessions and repositories at once; decisions were taken on single
+   runs and repeated. Needed: one `history.tsv` of every measured run (date, commit, model, data, seed, set, right /
+   asked / wrong), one weekly target, and the board (SPRINT) the only source of what is next.
+
+Order: 5 and 3 first (they decide the platform and whether data or size is the lever), 2 with them (without it 3
+cannot be read), then 4 (the claim of the technology), with 1 started at once and growing all the time.
