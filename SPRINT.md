@@ -1,6 +1,7 @@
 # SPRINT — the phone model's line (from 2026-11-14)
 
 What is being done now, each item with its check; done items move to their spec's results and leave this file.
+**The theory the work follows: `specs/guarantees.md`** (2026-11-15) — three parts, three guarantees; the order there.
 The direction: `specs/direction.md` (the tools and the model's reading grow together, measured by the ceiling);
 the design before it: `specs/loop.md`, `specs/core-joint.md`, `specs/everyday.md`; the tools: `docs/toolkit.md`.
 
@@ -19,3 +20,7 @@ the design before it: `specs/loop.md`, `specs/core-joint.md`, `specs/everyday.md
    browser as on the JVM; the page asks where the two disagree.
 8. **The frames' data** — income and spending (`type`), sum against count, the row of the largest; the teacher
    labelling natural questions as frames. Check: the three seeds again.
+9. **Guarantees 1: the calibration** (`specs/guarantees.md` §6.1) — the teacher's natural pairs over new seeds as
+   frames (never trained); λ̂ for ε by conformal risk control; the risk measured on `Everyday` at λ̂.
+10. **Guarantees 2: the canonical fragment** (§6.2) — frames said (en, ru) and parsed back; laws over the option
+   space; the reader's frame checked by the round trip.
