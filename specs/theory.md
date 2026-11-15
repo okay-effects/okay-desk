@@ -91,7 +91,7 @@ the gold option) — a LISTWISE choice, cross-entropy over the offered options. 
 
 | component | in the theory | what the measures said |
 |---|---|---|
-| heads over frozen states | a weigher trained from nothing, beside the model's language head | other wording not learnt |
+| heads over frozen states | a weigher trained from nothing, apart from the language head | other wording not learnt |
 | writing the program | options = every token: values outside O made up | 27/20, 21/27 |
 | frames by `Read.Score` | the model's own probabilities over the tools' options | 25/6, 19/4, two agreeing |
 | the statement reader | spans tagged, assembled by code (L6); not refinements yet | sealed 40–63 / 6–27 |
