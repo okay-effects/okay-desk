@@ -74,3 +74,19 @@ night. Question by question: aggregates read better ("revenue by region", "hours
 refusal lost — the bound took away the "cannot" examples with the other synthetic forms, and the ten outside
 questions were answered. Round 3: every refusal kept, the other synthetic forms bounded to 1000, one epoch (only
 the mix changed from the first night); the student two epochs.
+
+### 5.4 Round 3: every refusal kept, the other synthetic forms bounded to 1000, one epoch (the released model)
+
+| the doubt's bar (the smallest margin) | en right / asked / wrong | ru right / asked / wrong |
+|---|---|---|
+| none | 33 / 1 / 20 | 24 / 2 / 28 |
+| 0.2 | 31 / 11 / 12 | 22 / 21 / 11 |
+| 0.3 | 30 / 15 / 9 | 19 / 25 / 10 |
+| 0.5 | 23 / 26 / 5 | 17 / 30 / 7 |
+
+At 0.2–0.3 it is above the heads (22 / 16 / 16, 9 / 29 / 16) in both languages on all three counts: more right,
+fewer wrong, asked about as often. English is the best of the three rounds, Russian below the first night's (30):
+one run each, and the spread between runs is as large as the differences — the protocol's seeds are owed.
+
+Two readers' agreement as the doubt (the same frame from rounds 1 and 3, else asked): en 27 / 17 / 10, ru
+21 / 22 / 11 — a doubt as good as the margin's at 0.3, not better.
