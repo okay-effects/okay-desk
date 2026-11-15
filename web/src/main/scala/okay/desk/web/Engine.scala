@@ -747,10 +747,16 @@ object Engine:
           options.map(o => s"$o=>${FrameSay.say(Vector(o), lang)}").mkString(" | "))
       case Right(r) if r.unresolved => Left(if ru then "Не понял вопрос — перефразируйте, пожалуйста."
         else "I did not understand the question — please rephrase it.")
+      // outside the language (a cause, a forecast): said plainly, no answer and no search
+      case Right(r) if r.lines.contains("answer: cannot") => Left("ask: " + (if ru then
+        "Это не вычисляется по данным таблицы (причина, прогноз). Спросите о самих числах — например, суммы по месяцам."
+        else "This is not computed from the table's data (a cause, a forecast). Ask about the figures themselves — " +
+          "for example, the sums by month."))
       case Right(r) => Frame.query(r.lines, tables).map(Query.print)
     }
     shown = 0
-    thinking = Some(f.map { r => idle(); r }.recover { case t => idle(); Left(s"the frame reader failed: $t") })
+    thinking = Some(f.map { r => idle(); println(s"frame reader: $r"); r }.recover { case t =>
+      idle(); t.printStackTrace(); println(s"frame reader failed: $t"); Left(s"the frame reader failed: $t") })
     thinking.foreach(_.onComplete(_ => js.timers.setTimeout(0)(wake())))
 
 object OnDisk:
