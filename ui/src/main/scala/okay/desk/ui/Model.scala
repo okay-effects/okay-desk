@@ -172,6 +172,9 @@ object Model:
     "readers-full" -> "Original Qwen3 0.6B: 28 layers, 320 MB",
     "readers-frames" -> "Frame reader (new): 28 layers, 335 MB")
 
+  /** the frame reader: data questions go to it (`App.forData`) */
+  val frames = "readers-frames"
+
   /** the model a page loads unless another is chosen */
   val default = "readers-small"
 

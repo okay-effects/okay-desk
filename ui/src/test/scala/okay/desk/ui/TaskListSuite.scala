@@ -195,24 +195,22 @@ class TaskListSuite extends munit.FunSuite:
       assert(text(all).contains("Example questions") && text(all).contains("Page 1 of 24"), text(all))
     finally reader = _ => None
 
-  test("the plain page: the model picked by a button, said with whether it is loaded; the pick remembered"):
+  test("the plain page: no model buttons; data questions to the frame reader, tasks to the student"):
     reader = golden(_ => None)
     try
       val opened = run(App.main[Row](Nil, phone = true, chooser = false), Map.empty)
-      val picks = Model.picks.map(_._2)
-      assertEquals(labels(opened), List("Data: open files", "Examples", s"✓ ${picks.head}") ++ picks.tail :+ "Ask")
+      assertEquals(labels(opened), List("Data: open files", "Examples", "Ask"))
       assert(text(opened).contains("Model: Qwen3 0.6B student") && text(opened).contains("not loaded yet"),
         text(opened))
       assert(!text(opened).contains("THE MODEL") && !text(opened).contains("online sources off"), text(opened))
-      // an earlier visit's pick, kept on the disk: the page opens on it
-      val again = runOn(Map(App.picked -> "readers-full"))(App.main[Row](Nil, phone = true, chooser = false), Map.empty)
-      assert(text(again).contains("Model: Qwen3 0.6B as released"), text(again))
-      assert(labels(again).contains(s"✓ ${picks(1)}"), labels(again))
-      // a press on the other model: it is marked and remembered, not loaded until a question needs it
-      val picked = run(App.main[Row](Nil, phone = true, chooser = false), Map.empty, Act.press(picks(1)))
-      assert(text(picked).contains("Model: Qwen3 0.6B as released") && text(picked).contains("not loaded yet"),
-        text(picked))
-      assert(labels(picked).contains(s"✓ ${picks(1)}") && labels(picked).contains(picks.head), labels(picked))
+      // a question about the open data: the frame reader loaded for it
+      val orders = (okay.desk.Sample.orders.columns +: okay.desk.Sample.orders.rows.map(_.map(_.text)))
+        .map(_.mkString(",")).mkString("\n")
+      val count = """{"from": "orders", "aggregate": [{"fn": "count", "column": "*", "as": "n"}]}"""
+      val asked = runOn(Map("orders.csv" -> orders))(App.main[Row](Nil, phone = true, chooser = false),
+        Map("How many orders?" -> count), Act.press("Ask", ask -> "How many orders?"))
+      assert(text(asked).contains("Model: Qwen3 0.6B frame reader") && text(asked).contains("test model"), text(asked))
+      assertEquals(labels(asked).filter(_.startsWith("✓")), Nil)
       val at = Tasks.entries.indexWhere(_.task == stated.head)
       val solved = run(App.loop[Row](App.State(chooser = false, place = "examples",
         tasks = TaskList.View(open = Some(at)))), Map.empty, Act.press("Solve"))

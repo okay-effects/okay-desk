@@ -84,12 +84,9 @@ object App:
       In[Ui, R], In[Model, R], In[Fetch, R], In[Disk, R], In[Clipboard, R]): Unit ! R =
     for
       names <- Disk.names[R]
-      // the model a person picked on an earlier visit (its button), else the browser's own
-      remembered <- Disk.get[R](picked)
       kept <- names.filterNot(_.startsWith(Clarified.prefix)).foldLeft(pure[State, R](
         State(phone = phone, chooser = chooser,
-          modelName = if understanding || recoveredQuestion.nonEmpty then Model.interpreter
-            else remembered.map(_.trim).filter(k => Model.picks.exists(_._1 == k)).getOrElse(Model.auto(phone)),
+          modelName = if understanding || recoveredQuestion.nonEmpty then Model.interpreter else Model.auto(phone),
           log = recoveredQuestion.toVector.map(q => Entry("user", q)),
           notice = recoveredQuestion.map(_ => "A question was recovered after a page restart. It has not been rerun."),
           // `logic` (in Russian or not): the page opened on the tasks the statement reader states
@@ -153,8 +150,9 @@ object App:
         // THE CHAT AT ONCE, the task in it; then each step where the answer will be: the model loading (when it is
         // not yet), the task read into its statement and solved; then the answer with its reading, and the check
         val from = s.log.size
-        val asked = cleared.copy(place = "chat", hole = None, log = s.log :+ Entry("user", text))
-        val ready = if asked.model.nonEmpty then pure[State, R](asked) else load[R](asked, asked.modelName)
+        val ready = wanting[R](cleared.copy(place = "chat", hole = None, log = s.log :+ Entry("user", text)),
+          Model.default).flatMap(asked =>
+            if asked.model.nonEmpty then pure[State, R](asked) else load[R](asked, asked.modelName))
         ready.flatMap { st =>
           if st.model.isEmpty then pure(st)
           else busy[R](st, "the model reads the task into a formal statement, the exact solver solves it…")
@@ -266,8 +264,9 @@ object App:
               // A QUESTION AFTER A TASK ("Who drinks milk?" after the zebra): the task's conditions with this
               // question read as one task — the same reader, the same exact solver; not sure, the chat's other ways
               val text = followUp(s, q).getOrElse(q)
-              val asked = cleared.copy(log = cleared.log :+ Entry("user", q))
-              val ready = if asked.model.nonEmpty then pure[State, R](asked) else load[R](asked, asked.modelName)
+              val ready = wanting[R](cleared.copy(log = cleared.log :+ Entry("user", q)), Model.default)
+                .flatMap(asked =>
+                if asked.model.nonEmpty then pure[State, R](asked) else load[R](asked, asked.modelName))
               ready.flatMap { st =>
                 if st.model.isEmpty then Reasoning.start[R](st, q)
                 else busy[R](st, "the model reads the task into a formal statement, the exact solver solves it…")
@@ -284,7 +283,18 @@ object App:
                       pure(st.copy(log = st.log :+ Entry("model", said, None, read),
                         told = if text == q && reading.shown then Some(q) else st.told))
                     case _ => Reasoning.start[R](st, q) } }
-            else Reasoning.start[R](cleared.copy(log = cleared.log :+ Entry("user", q)), q)
+            else wanting[R](cleared.copy(log = cleared.log :+ Entry("user", q)), forData(cleared))
+              .flatMap(st => Reasoning.start[R](st, q))
+
+  /** THE MODEL BY THE QUESTION (the operator, 2026-11-15: no button): a question about open data goes to the frame
+   * reader, a task to the student (its statement reader reads the logic); the other model let go first (two do not
+   * fit a phone's tab). The chooser's page (`?models`) keeps the person's choice */
+  def wanting[R[_]](s: State, name: String)(using In[Model, R]): State ! R =
+    if s.chooser || s.modelName == name then pure(s)
+    else if s.model.nonEmpty then Model.unload[R].map(_ => s.copy(model = None, modelName = name))
+    else pure(s.copy(modelName = name))
+  /** the model a question is for: the frame reader when data is open, else the student */
+  def forData(s: State): String = if s.tables.nonEmpty then Model.frames else Model.default
 
   /** a short question after a task the reader answered: the task's conditions (its own questions left out) and
    * this question, one text — or none: no task, or not a question, or a task of its own */
@@ -462,9 +472,9 @@ object App:
       Part.block("small")(loading.fold(Part.text(s.model.fold(
         "not loaded yet — it loads by itself when a question needs it")("loaded: " + _)): Part)(words =>
         Part.info(words))))
-    // THE MODEL PICKED BY ITS BUTTON (no chooser form): which one is picked and whether it is loaded, always at the
-    // top; a button a model, the picked one marked; the pick kept for the next visit
-    val pickLine = Part.block("model-pick")(modelLine, Part.slot("model-pick"))
+    // THE MODEL THE PAGE CHOSE (by the question: data → the frame reader, a task → the student), always at the top:
+    // which one and whether it is loaded
+    val pickLine = Part.block("model-pick")(modelLine)
     // the model is said in the chat once it is wanted — loading, then loaded and on what; before, nothing
     // while the model loads its line is the newest part of the conversation, under the question it loads for;
     // loaded, it stands at the top
@@ -520,12 +530,6 @@ object App:
         // (while loading, no other load; while thinking, no question form and no other question)
         (if !s.chooser || loading.isDefined || thinking.isDefined then Nil
          else List(Button.submit("Load the model", models, Style.Plain)(Msg.Load(_): Msg))) ++
-        (if s.chooser || loading.isDefined || thinking.isDefined then Nil
-         else Model.picks.map((key, label) =>
-           if key == s.modelName then
-             Button(s"✓ $label", Style.Primary)(Msg.Pick(key): Msg)
-               .at("model-pick")
-           else Button(label)(Msg.Pick(key): Msg).at("model-pick"))) ++
         (if s.chooser && s.model.isDefined && loading.isEmpty && thinking.isEmpty then
           List(Button("Unload model")(Msg.Unload: Msg).at("model-actions")) else Nil) ++
         choices ++ research ++ constraints ++ chatButtons ++ proofButtons ++
