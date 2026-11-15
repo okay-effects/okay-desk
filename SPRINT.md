@@ -13,5 +13,9 @@ the design before it: `specs/loop.md`, `specs/core-joint.md`, `specs/everyday.md
 4. **The teacher as labeller of natural questions** (direction §3) — the teacher writes the program, a second
    reading agrees; the readers trained. Check: the gap to the ceiling on `Everyday`.
 5. **The ceiling for logic** — the teacher writes the statement of the sealed logic set. Check: the gap.
-6. **The reader that writes** (direction §6) — LoRA on the released 0.6B over the teacher's pairs, `GenBench`.
-   Check: `Everyday` right / wrong beside the heads and the ceiling.
+6. ~~The reader that writes~~ — done: 27/20 en, 21/27 ru; the frame by choices is better (`specs/frames.md`).
+7. **The frame reader to the page** (`specs/frames.md` §5.6) — two adapters agreeing, on the released 0.6B in the
+   browser (WebGPU), then the phone's size: the student distilled toward the frame reader. Check: `Everyday` in the
+   browser as on the JVM; the page asks where the two disagree.
+8. **The frames' data** — income and spending (`type`), sum against count, the row of the largest; the teacher
+   labelling natural questions as frames. Check: the three seeds again.

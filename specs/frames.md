@@ -98,3 +98,24 @@ en 21 / 1 / 32, ru 20 / 2 / 32; at the doubt 0.3: 15 / 20 / 19 and 13 / 15 / 26 
 reads frames worse than the model it was distilled from: its states were made to be read by heads at layer 19, not
 by the language head. Next for the phone: the student distilled toward the frame reader itself (its choices), or
 the released model's first layers with the frame adapter.
+
+### 5.6 Round 3's recipe, three seeds (the released model) — the night's result
+
+| reader | en right / asked / wrong | ru right / asked / wrong |
+|---|---|---|
+| the heads (the page) | 22 / 16 / 16 | 9 / 29 / 16 |
+| frame, seeds 1 / 2 / 3, no doubt | 33·29·28 / 0 / 20·25·26 | 24·24·24 / 0 / 28·30·30 |
+| frame, the doubt 0.3, seeds 1 / 2 / 3 | 30·21·24 / — / 9·10·11 | 19·17·19 / — / 10·8·16 |
+| two readers agree (seeds 1, 2), else asked | 25 / 23 / 6 | 19 / 31 / 4 |
+| three readers unanimous, else asked | 22 / 27 / 5 | 16 / 34 / 4 |
+| the ceiling (35B) | 43 / 0 / 11 | 43 / 0 / 11 |
+
+- Beyond the spread: Russian right 17–24 against the heads' 9; wrong with any doubt 4–11 against 16 in both
+  languages. English right without a doubt 28–33 against 22; with the margin's doubt within the spread.
+- The best doubt is agreement: two readers trained with different seeds, the same frame or a question — en 25 right
+  and 6 wrong, ru 19 right and 4 wrong: more right than the heads in both languages and a quarter of their wrong
+  answers. Its price: two readings of a question.
+- The frame reader is the way the model goes from here (`specs/direction.md` §6 answered): choosing among the
+  tools' options beats writing the program (27/20, 21/27) and the heads (22/16, 9/16).
+- What is left: the student (12 layers) reads frames worse (§5.5) — the phone's size needs its own step; the misses
+  of kinds (§5.1) are data's: `type = in/out` for income and spending, sum against count, the row of the largest.
