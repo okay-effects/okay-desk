@@ -117,3 +117,57 @@ the gold option) — a LISTWISE choice, cross-entropy over the offered options. 
   calibrated.
 - Copy-options for long texts: a sentence's spans are many; a hierarchy (the sentence, then the span within it) keeps
   the options few.
+
+## 10. Simpler still: three things, one learned relation (2026-11-15, the operator: "can it be simpler and better?")
+
+Two observations collapse the core further.
+
+**(a) The weigher needs no knowledge of any ability.** By L5 every term has its canonical words σ(t), parsed back
+exactly. So "which option does the text mean" is always the same question: DOES THE TEXT MEAN THESE WORDS? At a hole,
+each option is said as the canonical words of the partial term with it (`σ(t[h := o])`, unfilled holes said as
+"something"), and one relation scores them:
+
+    match(x, w) — how well the canonical words w say what the text x says
+
+It is one skill — paraphrase across wordings and languages, the thing language models know best — the same for
+tables, puzzles, plans and sums. So:
+- a NEW ABILITY needs no training of its own: its grammar, its engine and its saying; the matcher is shared;
+- every ability's data trains the same matcher (more data for one skill, not little for each);
+- the matcher can be the 0.6B's own probabilities (as `Read.Score` now, over words instead of option tokens) or a
+  small multilingual cross-encoder (an NLI-style model, ~300M — technology.md §8.1) — a measured choice;
+- what the person is shown and asked about is the same canonical words the matcher saw (L5) — one representation
+  for the model, the person and the check.
+
+**(b) Decide only what changes the answer.** Two options whose completions give the SAME answer on the data need no
+decision (the engine is cheap on a person's table). So at a hole the options are grouped by the answers they lead to,
+and the reader decides between GROUPS; doubt is at the level of answers: the top candidates within the bar agree on
+the answer → shown; they differ → the person is asked, with each answer's canonical words beside it. Wrong choices
+that do not change the answer stop counting as errors, and the questions asked are only the ones that matter.
+(Where the space is too large to complete every option, the grouping applies to the closed subterms the engine can
+evaluate — L4's pruning extended from "refuted" to "equivalent".)
+
+**The core, rewritten:**
+1. **Tools**: a grammar indexed by the data — finite candidates — and an exact answer for each closed term
+   (with refutation).
+2. **Words**: the canonical saying σ and its exact inverse π.
+3. **Match**: one learned relation, text against canonical words.
+Reading: refine holes, at each the candidates said in words, matched to the text, grouped by answer; decide where
+the groups differ, ask where the decision is in doubt. Everything of §2–§9 holds; the weigher of §1 becomes
+`match ∘ σ`, and doubt becomes a property of answers.
+
+**Why it is also cheaper:** one matcher instead of an adapter per ability; fewer decisions (equivalent options
+merged); fewer questions to the person; the training data of every ability pooled; and the matcher's job is the
+smallest possible one — no ability's syntax, only meaning against meaning.
+
+**What could break it, to measure first:**
+- canonical words of a PARTIAL term may be awkward ("the sum of something of orders") — measured against the frame
+  reader's current option tokens on `Everyday`, same protocol (E1);
+- grouping by answer needs answers per option: cost on the phone measured; on large tables the grouping on a sample
+  of rows is a heuristic, not exact (E2);
+- a cross-encoder must see each option with the text — packed like `Qwen3Compute.score` or the options few (E3).
+
+Experiments (BACKLOG R.4–R.6):
+- **E1** the frame reader over canonical words instead of option tokens, released 0.6B, three seeds, `Everyday`.
+- **E2** grouping by answer: decisions per question and asked/wrong on `Everyday` with the same weigher.
+- **E3** one matcher trained on Query frames AND logic statements together; a held-out ability (`Calculate`) read
+  with no training of its own — the test of (a).

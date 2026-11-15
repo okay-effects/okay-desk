@@ -236,3 +236,9 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
    Training in order: kind, then frames given the gold kind, then given the predicted kind. Assembly stays exact (L6).
 3. **`Ability`, one interface** (options, den, check, say, parse) and one law suite L1–L6 every ability passes;
    `Calculate` the first built by it alone.
+4. **E1 canonical words as the options** (theory.md §10): at each frame line the options said as `FrameSay` words of
+   the partial frame, scored by `Read.Score`; against the current option tokens, three seeds, `Everyday`.
+5. **E2 decide only what changes the answer**: options grouped by the answers their completions give on the table;
+   decisions per question, asked and wrong on `Everyday`; the engine's cost per question on the phone profile.
+6. **E3 one matcher for all abilities**: trained on Query frames and logic statements together, read `Calculate`
+   with no training of its own; the 0.6B's probabilities against a ~300M multilingual cross-encoder.
