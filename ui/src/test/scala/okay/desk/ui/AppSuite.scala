@@ -223,7 +223,7 @@ class ClarifySuite extends munit.FunSuite:
     assert(labels.containsSlice(List("1 · количество", "2 · сумму", "Ничего из этого — перефразирую")), labels.toString)
     val chosen = play(Act.press("Ask", ask -> "сколько заказов"), Act.press("1 · количество"))
     assert(chosen.problems.isEmpty, chosen.problems.toString)
-    assert(chosen.at.toList.flatMap(_.parts).mkString(" ").contains("Я имею в виду count"), chosen.at.toString)
+    assert(chosen.at.toList.flatMap(_.parts).mkString(" ").contains("Я имею в виду количество"), chosen.at.toString)
     val dismissed = play(Act.press("Ask", ask -> "сколько заказов"), Act.press("Ничего из этого — перефразирую"))
     val shown = dismissed.at.toList.flatMap(_.parts).mkString(" ")
     assert(shown.contains("перефразируйте вопрос"), shown)

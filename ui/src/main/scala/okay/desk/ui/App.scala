@@ -229,7 +229,7 @@ object App:
         pure(cleared.copy(hole = None, labels = Map.empty, log = cleared.log :+ Entry("system",
           if ru then "Хорошо — перефразируйте вопрос." else "All right — rephrase the question.")))
       case Msg.Clarify(question, choice) =>
-        val asked = cleared.copy(log = cleared.log :+ Entry("user", Clarified.saying(question, choice)), hole = None)
+        val asked = cleared.copy(log = cleared.log :+ Entry("user", Clarified.saying(question, s.labels.getOrElse(choice, choice))), hole = None)
         // the dialogue's hole answered: the SAME question, the choice as a source; else the question rewritten
         val byHole = s.hole.isDefined
         val again = if byHole then question else Clarified.question(question, choice)
