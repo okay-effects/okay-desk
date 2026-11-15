@@ -91,10 +91,10 @@ the gold option) — a LISTWISE choice, cross-entropy over the offered options. 
 
 | component | in the theory | what the measures said |
 |---|---|---|
-| heads over frozen states (the page's readers) | a weigher trained from nothing beside the model's own language head | they do not learn other people's wording |
-| writing the program (generation) | refinement with options = every token: values outside O can be made up | 27/20, 21/27 — the made-up values |
-| frames by `Read.Score` | the weigher = the model's own probabilities over the tools' options | 25/6, 19/4 with two weighers agreeing |
-| the statement reader (logic) | spans tagged then ASSEMBLED by code — L6 holds; but its decisions are not refinements yet | in-corpus 97–100%, sealed 40–63 / 6–27 |
+| heads over frozen states | a weigher trained from nothing, beside the model's language head | other wording not learnt |
+| writing the program | options = every token: values outside O made up | 27/20, 21/27 |
+| frames by `Read.Score` | the model's own probabilities over the tools' options | 25/6, 19/4, two agreeing |
+| the statement reader | spans tagged, assembled by code (L6); not refinements yet | sealed 40–63 / 6–27 |
 | the page's "≥ 3 sentences" | a router outside the grammar | to be replaced by the Root (§2) |
 | two readers agreeing | two weighers; their errors correlated (one base, one corpus) | independence to be bought |
 | the teacher's ceiling | the large weigher on the same grammar | 43/54: what the grammar lacks |
