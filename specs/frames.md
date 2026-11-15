@@ -38,4 +38,19 @@ reader (27/20 en, 21/27 ru wrong) and the ceiling (43/54).
 
 ## 5. Results
 
-(the first night's: below)
+### 5.1 The first night (2026-11-15): the released 0.6B, 6855 frames, one epoch
+
+| reader | en right / asked / wrong | ru right / asked / wrong |
+|---|---|---|
+| the heads (the page) | 22 / 16 / 16 | 9 / 29 / 16 |
+| the writing reader (LoRA, the program written) | 27 / 7 / 20 | 21 / 6 / 27 |
+| the frame by choices | 30 / 0 / 24 | 30 / 0 / 24 |
+| the frame, a doubt below a margin of 0.5 asked | 26 / 21 / 7 | 18 / 28 / 8 |
+| the ceiling (35B) | 43 / 0 / 11 | 43 / 0 / 11 |
+
+- Russian as English: the choice reads values the language does not change (no "products" for `groceries`).
+- The margin is a doubt that works: at 0.5 the wrong answers halve below the heads' while the right stay above.
+- The misses are of kinds: a plain sum taken for a share (the synthetic forms were 40% of the texts), an
+  aggregate missed ("revenue by region" read as rows ordered by region), sum and count confused, `type = in` /
+  `out` not read for income and spending, the row of the largest read as the largest value.
+- Next: the synthetic forms bounded (700), two epochs; the same on the student (12 layers).
