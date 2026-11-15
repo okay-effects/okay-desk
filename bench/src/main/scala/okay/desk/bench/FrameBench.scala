@@ -3,6 +3,8 @@ package okay.desk.bench
 import java.nio.file.{Files, Path}
 import mlx.llm.{Adaptable, Chat, Lora, Model, Models}
 import okay.desk.*
+import okay.desk.skill.Read
+import okay.scala3.*
 import okay.desk.tasks.Everyday
 import okay.effects.json.Json
 import scala.jdk.CollectionConverters.*
@@ -14,6 +16,7 @@ import scala.jdk.CollectionConverters.*
  * record written (its key, language, outcome, smallest margin, frame) for `FrameCalibrate`.
  */
 object FrameBench:
+  type RP[X] = (Read + Person)[X]
   /** a question, its tables, the gold answer, the gold frame (for the person a dialogue plays) */
   final case class Asked(key: String, lang: String, text: String, tables: Map[String, Table], gold: Option[Table],
       frame: Option[Vector[String]] = None)
@@ -43,28 +46,28 @@ object FrameBench:
   def main(args: Array[String]): Unit =
     val repo = sys.env.getOrElse("FRAME_MODEL", "mlx-community/Qwen3-0.6B-4bit")
     val dir = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
-    val chat = Chat.load(dir); val model = Model.load(dir, mapped = true); val tok = chat.tokenizer
+    val chat = Chat.load(dir); val model = Model.load(dir, mapped = true)
     sys.env.get("FRAME_ADAPTER").foreach(f => Lora.attach(model.asInstanceOf[Adaptable], f))
     val set = sys.env.get("FRAME_SET").fold(everyday)(f => taught(Path.of(f)))
     val asked = sys.env.get("FRAME_ONLY").fold(set)(n => set.take(n.toInt))
     println(s"$repo${sys.env.get("FRAME_ADAPTER").fold("")(" with " + _)}: ${asked.size} questions")
-    val stop = tok.id("<|im_end|>"); val newline = tok.encode("\n").head
+    val reading = MlxReading(chat, model, 1)
     val t0 = System.nanoTime()
     var asks = 0
     val records = asked.map { a =>
-      val (system, user) = Frame.prompt(a.tables, a.text)
-      val prompt = chat.prompt(Vector(FrameTrain.msg("system", system), FrameTrain.msg("user", user)), Nil,
-        Map("enable_thinking" -> false))
       // FRAME_DIALOGUE=<bar>: where in doubt the person is asked; here the person is played by the gold frame — the
       // option offered that is one of its lines, else none of them
-      val dialogue = sys.env.get("FRAME_DIALOGUE").map(b => FrameRead.Dialogue(b.toDouble, (prefix, offered) =>
-        a.frame.flatMap(g => offered.find(o => g.contains(o) && !prefix.contains(o)))))
-      val read = FrameRead(model, prompt, tok, a.tables, a.text, newline, stop, dialogue = dialogue)
+      // the frame reader is a program over `Read` (here mlx-scala) and `Person` (here the gold frame, or none asked)
+      val doubt = sys.env.get("FRAME_DIALOGUE").map(b => FrameReading.Doubt(b.toDouble))
+      val program = FrameReading.read[RP](a.tables, a.text, doubt)
+      val person = if doubt.isEmpty then Person.silent[Read, FrameReading.Reading]
+        else Person.byFrame[Read, FrameReading.Reading](a.frame)
+      val read = Read.run(handle(program, person), reading)
       asks += read.asked
       val got = if read.unresolved then None
         else Frame.query(read.lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption
       val o = outcome(a.gold, got)
-      val margin = read.margins.minOption.getOrElse(0.0)
+      val margin = read.margin
       val said = read.lines.dropRight(1).drop(1).mkString(" | ")
       println(f"  [${a.key}%-12s ${a.lang}] $o%-6s $margin%6.2f ${a.text} → $said")
       (a, o, margin, read.lines)

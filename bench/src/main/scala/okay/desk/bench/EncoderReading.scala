@@ -119,6 +119,7 @@ final class EncoderReading(dir: Path, layer: Int) extends Reading:
     case Read.States(ids, at) => states(ids, at)
     case Read.Encode(text) => pieces(text).map(_._1).toArray
     case Read.Logits(_) => sys.error("an encoder has no next token")
+    case Read.Score(_, _) => sys.error("an encoder has no next token")
     case Read.Note(_) => ()
 
 /** A CHECK BY THE MODEL'S OWN PURPOSE: the pieces of a sentence, and the mean states of sentences that say the same

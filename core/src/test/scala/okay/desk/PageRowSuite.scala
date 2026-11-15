@@ -17,6 +17,7 @@ class PageRowSuite extends munit.FunSuite:
     type R[X] = (Async + Read)[X]
     val fake: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => Future.successful((op match
       case Read.Note(_) => ()
+      case Read.Score(_, _) => sys.error("no weighing here")
       case Read.States(ids, at) => at.map(_ => Array.fill(1024)(0.1f))
       case Read.Logits(_) => Array.fill(200000)(0f)
       case Read.Encode(text) => text.getBytes("UTF-8").map(_.toInt & 0xff)

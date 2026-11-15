@@ -115,7 +115,8 @@ object Frame:
         val later = sections.drop(from).filter(_ != "table").filter(_ != "answer")
         val open = if !owed then later
           else if taken.exists(_.startsWith("from: ")) then Vector("to") else Vector("from")
-        open.flatMap(lines) ++ (if owed then Vector.empty else Vector(end))
+        // (a line taken is not offered again: a condition said twice says nothing more)
+        open.flatMap(lines).filterNot(taken.contains) ++ (if owed then Vector.empty else Vector(end))
 
   // ---- the frame as a program
 

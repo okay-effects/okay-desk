@@ -20,6 +20,10 @@ enum Read[X]:
   case Prompt(system: String, user: String) extends Read[Array[Int]]
   /** a step said: what the skill decided, or is deciding now — the page shows it while the question is read */
   case Note(words: String) extends Read[Unit]
+  /** THE OPTIONS WEIGHED, ALL AT ONCE (specs/frames.md §2): the mean log-probability of each option's tokens after
+   * `context` — one operation for a choice's every option, so a handler may weigh them together (the weights read
+   * once for all: decoding is bound by memory, not by arithmetic) */
+  case Score(context: Array[Int], options: Vector[Array[Int]]) extends Read[Vector[Double]]
 
 object Read:
   /** the residual after the skill's layer at positions `at` of `ids`: one vector each */
@@ -34,6 +38,21 @@ object Read:
     perform[Read](Prompt(system, user))
   /** a step said (shown on the page; nothing on the JVM) */
   def note[R[_]](words: String)(using In[Read, R]): Unit ! R = perform[Read](Note(words))
+  /** the options weighed after the context: each the mean log-probability of its tokens */
+  def score[R[_]](context: Array[Int], options: Vector[Array[Int]])(using In[Read, R]): Vector[Double] ! R =
+    perform[Read](Score(context, options))
+
+  /** the options weighed by next-token logits alone, one forward a token: for a backend with no checkpoint of its
+   * state (correct, slow) */
+  def scoreByLogits(context: Array[Int], options: Vector[Array[Int]], logits: Array[Int] => Array[Float])
+      : Vector[Double] =
+    options.map { o =>
+      o.indices.map { j =>
+        val l = logits(context ++ o.take(j)); val m = l.max
+        val z = l.iterator.map(x => math.exp((x - m).toDouble)).sum
+        (l(o(j)) - m).toDouble - math.log(z)
+      }.sum / math.max(1, o.length)
+    }
 
   /** the programs of `f` over `xs`, one after another, their values */
   def each[A, B, R[_]](xs: Vector[A])(f: A => B ! R): Vector[B] ! R =

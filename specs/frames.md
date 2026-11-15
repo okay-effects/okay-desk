@@ -119,3 +119,14 @@ the released model's first layers with the frame adapter.
   tools' options beats writing the program (27/20, 21/27) and the heads (22/16, 9/16).
 - What is left: the student (12 layers) reads frames worse (§5.5) — the phone's size needs its own step; the misses
   of kinds (§5.1) are data's: `type = in/out` for income and spending, sum against count, the row of the largest.
+
+## 6. The frame reader as a program over effects (2026-11-15)
+
+`FrameReading.read` (core) is a program over `Read` (the model) and `Person` (the one asked): one program for the
+JVM's handler (mlx-scala, `MlxReading`) and the page's (WebGPU/WebGL2, `OnQwen`), the person a handler too — the
+page's buttons, the measure's gold frame (`Person.byFrame`), a test's list. A line's options are weighed by ONE
+operation, `Read.Score(context, options)`: the handler weighs them as it can — mlx-scala from a checkpoint of the
+context's state (kept between the lines), the page by next-token logits for now; a batched weighing (the weights
+read once for all the options: decoding is bound by memory) is the handler's to add, the program does not change.
+Laws: `FrameReadingSuite` (a model by numbers: the choices, the doubt, the questions, none of them). Checked: the
+same frames as the bench's former reader on `Everyday`. `Frame.next` no longer offers a line already taken.

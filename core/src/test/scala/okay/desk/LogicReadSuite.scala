@@ -38,6 +38,7 @@ class LogicReadSuite extends munit.FunSuite:
       case Read.Decode(_) => ""
       case Read.Logits(_) => Array.empty[Float]
       case Read.Note(_) => ()
+      case Read.Score(_, _) => sys.error("no weighing here")
 
   /** one-hot states at the steps, and weights that put 2 on the gold letter (or the wrong one) at its step */
   def synthetic(g: LogicGrammar, want: Extract.Reading, wrong: Map[Int, String] = Map.empty)

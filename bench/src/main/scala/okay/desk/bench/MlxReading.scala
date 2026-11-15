@@ -36,6 +36,35 @@ final class MlxReading(chat: Chat, model: Model, layer: Int) extends Reading:
     def msg(role: String, content: String) = okay.effects.json.Json.obj("role" -> okay.effects.json.Json.Str(role),
       "content" -> okay.effects.json.Json.Str(content))
     chat.prompt(Vector(msg("system", system), msg("user", user)), Nil, Map("enable_thinking" -> false))
+  // the state fed with a context but its last token, kept: the next weighing of a longer context feeds the rest only
+  private var kept: Option[(Array[Int], Model.State)] = None
+  /** the options weighed after the context: from a checkpoint of the context's state, each option fed after the
+   * context's last token, the probabilities of its tokens read, the state put back */
+  def score(context: Array[Int], options: Vector[Array[Int]]): Vector[Double] =
+    val (head, last) = (context.init, context.last)
+    val s = new Scope
+    try
+      def feed(st: Model.State, ids: Array[Int]): Unit =
+        if ids.nonEmpty then model.logits(ints(ids, 1, ids.length)(using s), st)(using s).eval()
+      val st = kept match
+        case Some((ids, st)) if head.startsWith(ids) => feed(st, head.drop(ids.length)); st
+        case other =>
+          other.foreach(_._2.close())
+          val st = model.newState(); feed(st, head); st
+      kept = Some(head -> st)
+      options.map { o =>
+        val at = st.checkpoint()
+        val input = last +: o.init
+        val lp = Scope(s) {
+          val logits = astype(model.logitsAll(ints(input, 1, input.length), st), Dtype.Float32)
+          val v = logits.dim(-1)
+          takeAlong(softmax(reshape(logits, input.length, v), 1), ints(o, input.length, 1), 1).toFloats.take(o.length)
+        }
+        st.rewind(at, 0): Unit
+        at.close()
+        lp.map(p => math.log(math.max(p, 1e-30f).toDouble)).sum / o.length
+      }
+    finally s.close()
   /** the operation answered: `Read`'s one list of what a skill needs, this backend's way */
   def answer[X](op: Read[X]): X = op match
     case Read.States(ids, at) => states(ids, at)
@@ -44,6 +73,7 @@ final class MlxReading(chat: Chat, model: Model, layer: Int) extends Reading:
     case Read.Decode(ids) => decode(ids)
     case Read.Prompt(system, user) => prompt(system, user)
     case Read.Note(_) => ()
+    case Read.Score(context, options) => score(context, options)
 
 object MlxReading:
   /** the readers for a model and a layer: loaded from the cache when there (DESK_RETRAIN=1 trains again) */
