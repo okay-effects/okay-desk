@@ -200,3 +200,13 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
 5. **Open textbooks' exercises** with their answer keys as the judge.
 6. **Variety by rule**: typos, colloquial forms, follow-ups, numbers in words; "ask" for what the language cannot say.
 7. **Ukrainian and Polish natively.**
+
+## P. After the frame reader is on the phone (specs/phone.md, 2026-11-15)
+
+1. **A native iPhone app on MLX** (Swift, mlx-swift; okay-remote's SideStore build as the way to the phone) — the
+   path for a larger reader (1.7B and up) if the browser's WebGL2 cannot hold it; the browser keeps the 0.6B.
+2. **A larger measure beside `Everyday`** (54 a language: one question is two points) — ~150 a language over 8
+   realistic tables, written separately in en and ru, 30 outside the language, gold = the result table; dev/sealed
+   (a draft plan: `~/work/my/okay-desk-private/plan-20261115/phone-ability.md` §3, "Desk-Real-v1").
+3. **The router between abilities** (Query / Calculate / Assign) by `Qwen3Compute.score` over the abilities' names.
+4. **The second ability by the same method** — `Calculate` (calc/), then logic as frames (guarantees.md §6.5).

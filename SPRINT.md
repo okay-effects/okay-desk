@@ -5,6 +5,21 @@ What is being done now, each item with its check; done items move to their spec'
 The direction: `specs/direction.md` (the tools and the model's reading grow together, measured by the ceiling);
 the design before it: `specs/loop.md`, `specs/core-joint.md`, `specs/everyday.md`; the tools: `docs/toolkit.md`.
 
+**P. The phone first** (the operator, 2026-11-15: the result SEEN on his iPhone; a small model doing what a large one
+does is the point) — `specs/phone.md`; these go before item 7's later parts and land the page the others use:
+
+- P1 **the log-probability on the device** — `Qwen3Compute.score` returns one number per option, computed by a
+  shader (log-softmax + gather), not the vocabulary's logits read back. Check: equal to the CPU within 1e-4; seconds
+  a question in Chromium against 8.6 s (frames.md §6.1).
+- P2 **the frame reader on the page, one adapter beside the 4-bit base** (`Adapted`, not merged), the frame's words
+  shown, the cards in doubt; memory over 10 questions in a row on the phone profile (`scripts/phone-seq.scala`).
+  Published. Check: `Everyday` in the browser as on the JVM.
+- P3 **the operator's iPhone** — the 10 questions of phone.md §3.1 over the page's sample tables; he reports
+  answers, seconds, reloads.
+- P4 **two readers agreeing on the phone** — the second adapter, agreement as the doubt; phone profile, then iPhone.
+- P5 **the size**, only if P3/P4 say 28 layers do not fit (a reload or > ~15 s a question): distilled on the choices
+  or looped shared layers (guarantees.md §6.4).
+
 1. **The schema with values; `month` in `Query`** (direction §4.1) — built; check: `CeilingBench` again (first run
    en 41/7, ru 40/8).
 2. **The first night's pairs measured** — the teacher's rewrites over `Domains` (1200 points, judged by

@@ -229,3 +229,13 @@ or a new application, one states its formal language and its solver, and the too
 - the PHONE'S FORMAT: an adapter and heads beside an unchanged 4-bit base, loaded in a browser on WebGL2.
 It grows from okay-inlay's okay-forge (`specs/core-joint.md` §7): one pipeline with exchangeable parts, okay-desk
 its first user.
+
+## 10. The phone first (the operator, 2026-11-15)
+
+The operator's priority: the result SEEN on his own iPhone — a small model doing what a large one does is the point;
+a large model solving it is not news. The line's method stands (direction.md: tools and reading grow together,
+measured by the 35B's ceiling; frames.md: the released 0.6B CHOOSES each line of a frame among the tools' options,
+two readers agreeing — en 25/6, ru 19/4 right/wrong on `Everyday` against the heads' 22/16, 9/16; guarantees.md: three
+parts, three guarantees). What changes is the order: the frame reader goes to the phone's browser now, measured
+there (seconds, memory, the operator's ten questions), and the model's size is decided by what the iPhone holds,
+not before. Steps P1–P5: `specs/phone.md`, `SPRINT.md` "P".
