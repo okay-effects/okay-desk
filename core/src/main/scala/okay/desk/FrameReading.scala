@@ -40,14 +40,18 @@ object FrameReading:
   /** where the person is asked: a line's margin below `bar`; the best `offer` options; at most `maxAsks` questions */
   final case class Doubt(bar: Double, offer: Int = 4, maxAsks: Int = 2)
 
-  def read[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt] = None, maxLines: Int = 16)(
-      using In[Read, R], In[Person, R]): Reading ! R =
+  /** `start`: lines decided already (a person's choice where two readers parted) — read on from them */
+  def read[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt] = None, maxLines: Int = 16,
+      start: Vector[String] = Vector.empty)(using In[Read, R], In[Person, R]): Reading ! R =
     val (system, user) = Frame.prompt(tables, question)
     for
       prompt <- Read.prompt[R](system, user)
       newline <- Read.encode[R]("\n").map(_.head)
       end <- Read.encode[R]("<|im_end|>").map(_.last)
-      read <- step(tables, question, doubt, maxLines, prompt, newline, end, Reading(Vector.empty, Vector.empty))
+      decided <- Read.each[String, Array[Int], R](start)(l => Read.encode[R](l))
+      context = decided.foldLeft(prompt)((c, t) => (c :+ newline) ++ t)
+      read <- step(tables, question, doubt, maxLines, context, newline, end,
+        Reading(start, Vector.fill(start.size)(Double.PositiveInfinity)))
     yield read
 
   private def step[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt], maxLines: Int,

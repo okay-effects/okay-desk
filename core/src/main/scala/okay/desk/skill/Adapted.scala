@@ -7,12 +7,17 @@ import scala.concurrent.Future
 /** Low-rank adapters stay separate from the 4-bit backbone. Both factors use two 4-bit residual planes.
   * All projections execute on the selected device, including WebGL2; there is no CPU readback per projection.
   */
-final class Adapted(val base: Compute, weights: Tensors, adapter: Tensors) extends Compute:
+/** SEVERAL ADAPTERS over the one base (`others`): one set of base weights on the device, the adapter in use chosen by
+  * `current` — two frame readers agreeing cost a second small file, not a second model (specs/frames.md, P4) */
+final class Adapted(val base: Compute, weights: Tensors, adapter: Tensors, others: Vector[Tensors] = Vector.empty)
+    extends Compute:
   type T = base.T
   final case class Delta(a: base.W, ar: base.W, b: base.W, br: base.W)
-  type W = (base.W, Option[Delta])
-  private var sources: Option[(Tensors, Tensors)] = Some(weights -> adapter)
-  private val pending = scala.collection.mutable.Map.empty[Array[Int], Delta]
+  type W = (base.W, Vector[Option[Delta]])
+  private var sources: Option[(Tensors, Vector[Tensors])] = Some(weights -> (adapter +: others))
+  private val pending = scala.collection.mutable.Map.empty[Array[Int], Vector[Option[Delta]]]
+  /** the adapter in use: an index of `adapter +: others` */
+  var current: Int = 0
   val tensors: Tensors = new Tensors:
     private def original = sources.getOrElse(throw IllegalStateException("model sources released"))._1
     def has(name: String): Boolean = original.has(name)
@@ -21,11 +26,10 @@ final class Adapted(val base: Compute, weights: Tensors, adapter: Tensors) exten
     def shape(name: String): Vector[Int] = original.shape(name)
     override def linear(prefix: String): QLinear =
       val q = original.linear(prefix)
-      val extra = sources.get._2
-      if extra.has(prefix + ".a.weight") then
-        pending(q.words) = Delta(base.quantized(extra.linear(prefix + ".a")),
-          base.quantized(extra.linear(prefix + ".ar")), base.quantized(extra.linear(prefix + ".b")),
-          base.quantized(extra.linear(prefix + ".br")))
+      val deltas = sources.get._2.map(extra => Option.when(extra.has(prefix + ".a.weight"))(
+        Delta(base.quantized(extra.linear(prefix + ".a")), base.quantized(extra.linear(prefix + ".ar")),
+          base.quantized(extra.linear(prefix + ".b")), base.quantized(extra.linear(prefix + ".br")))))
+      if deltas.exists(_.nonEmpty) then pending(q.words) = deltas
       q
   /** Called immediately after Qwen3Compute consumes the tensors: the large file buffers are not retained. */
   /** ON OR OFF: an ability's adapter (specs/core-joint.md §6) is on while its texts are read and off for the
@@ -46,13 +50,13 @@ final class Adapted(val base: Compute, weights: Tensors, adapter: Tensors) exten
       pos0: Int, starts: Array[Int], rows: Int): T =
     base.attentionSegments(q, kPre, vPre, k, v, heads, kvHeads, headDim, pos0, starts, rows)
   override def logProbs(x: T, w: W, n: Int, columns: Array[Int])(using scala.concurrent.ExecutionContext)
-      : Future[Array[Float]] = if w._2.isEmpty || !active then base.logProbs(x, w._1, n, columns)
+      : Future[Array[Float]] = if inUse(w).isEmpty then base.logProbs(x, w._1, n, columns)
       else super.logProbs(x, w, n, columns)
-  def quantized(q: QLinear): W = base.quantized(q) -> pending.remove(q.words)
+  def quantized(q: QLinear): W = base.quantized(q) -> pending.remove(q.words).getOrElse(Vector.empty)
+  private def inUse(w: W): Option[Delta] = if !active then None else w._2.lift(current).flatten
   def linear(x: T, w: W): T =
     val y = base.linear(x, w._1)
-    w._2 match
-      case _ if !active => y
+    inUse(w) match
       case None => y
       case Some(d) =>
         def both(input: T, a: base.W, b: base.W): T =

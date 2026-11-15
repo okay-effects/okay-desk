@@ -48,3 +48,10 @@ class FrameReadingSuite extends munit.FunSuite:
     val notAsked = readWith(unsure, Person.byFrame(Some(target)), None)
     assertEquals((notAsked.lines, notAsked.asked), (target, 0))
   }
+
+  test("read on from lines decided already: the reading goes on after them") {
+    val got = Read.run(handle(FrameReading.read[RP](tables, "q", None, start = target.take(2)),
+      Person.silent[Read, FrameReading.Reading]), model(5.0))
+    assertEquals(got.lines, target)
+    assertEquals(got.margins.take(2), Vector(Double.PositiveInfinity, Double.PositiveInfinity))
+  }

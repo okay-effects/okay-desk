@@ -141,3 +141,13 @@ the weights by `FrameMerge`, 6 readings, the GPU shared with the calibration): 2
 forward, the same frames 6 of 6. The engine's absolute speed is far below mlx-scala's (8.6 s a question against
 1.5 s): every option's row reads the whole vocabulary's logits back to the CPU — the next step is the
 log-probability on the device (one number a row).
+
+### 6.2 Two readers on the page (P4, 2026-11-15)
+
+The frame reader's adapters (rounds 3, seeds 1 and 2) beside the one base on the device (`Adapted` with several
+adapters, `current` the one in use; the prefix cache let go at a switch). A question read by each alone: the same
+frame is the answer; where the frames part, the person is asked at that line with both readers' lines, and the
+first reads on from the chosen one (`FrameReading.read(start = …)`, its own doubt then asking as one reader does).
+In Chromium: "the sum of orders by city" and "the three largest orders" answered at once, both right; "how many
+unpaid" and "how many orders from Lviv" asked — the latter was a silent wrong answer with one reader. Two readings a
+question: 6–8 s on a desktop's WebGPU.

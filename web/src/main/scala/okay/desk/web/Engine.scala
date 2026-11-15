@@ -184,6 +184,9 @@ object Engine:
         fetch(Execution.versioned(s"$dir/semantic-adapter.safetensors")).map(Some(_))
         else if dir == framesDir then fetch(Execution.versioned(s"$dir/frame.adapter.safetensors")).map(Some(_))
         else Future.successful(None)
+      // the second frame reader's adapter (agreement as the doubt, P4), if the page has it
+      second <- if dir == framesDir then fetch(Execution.versioned(s"$dir/frame2.adapter.safetensors")).map(Some(_))
+          .recover { case _ => None } else Future.successful(None)
       facts <- if understanding then Future.successful(None) else
         fetch(Execution.versioned(s"$dir/facts.skill")).map(b => FactReader.parse(text(b)).toOption)
           .recover { case _ => None }
@@ -225,10 +228,12 @@ object Engine:
                 logicAdapter = Some(adapted)
                 loaded
             case Some(bytes) =>
-              val adapted = Adapted(c, st, new Safetensors(TypedArrayBuffer.wrap(bytes)))
+              val adapted = Adapted(c, st, new Safetensors(TypedArrayBuffer.wrap(bytes)),
+                second.toVector.map(b => new Safetensors(TypedArrayBuffer.wrap(b))))
               val loaded = Qwen3Compute(adapted, adapted.tensors, config,
                 headOnCpu = phone && c.api != "WebGPU", embedGiven = embed)
               adapted.releaseSources()
+              framesAdapted = Option.when(second.nonEmpty)(adapted)
               loaded
         catch case error: Exception =>
           c.close()
@@ -701,6 +706,8 @@ object Engine:
   // ---- THE FRAME READER (specs/frames.md §6): the frame built by choices, a program over `Read` and `Person`
   val framesDir = "model-frames"
   private var frames = false
+  /** the frame readers' adapters over the one base, when the page has two (agreement as the doubt) */
+  private var framesAdapted: Option[Adapted] = None
   type FrameRow[X] = (Async + Read + Person)[X]
   type AsyncRead[X] = (Async + Read)[X]
   private type Paused = Option[String] => Either[(Vector[String], Vector[String]), FrameReading.Reading] ! AsyncRead
@@ -739,12 +746,37 @@ object Engine:
     stage("reading a question…")
     val ru = question.exists(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я')
     val lang = if ru then "ru" else "en"
-    val program: Either[(Vector[String], Vector[String]), FrameReading.Reading] ! AsyncRead =
-      (paused, choice) match
-        case (Some((q, resume)), Some(c)) if q == question => resume(Some(c))
-        case _ => handle(FrameReading.read[FrameRow](tables, question, Some(FrameReading.Doubt(frameBar))), pausing)
+    type Out = Either[(Vector[String], Vector[String]), FrameReading.Reading]
+    def run(p: Out ! AsyncRead): Future[Out] = Read.future(p, [X] => (op: Read[X]) => on.handler(op))
+    // a reader of the two: its adapter in use, the prefix cache of the other let go (its states are another's)
+    def by(reader: Int)(p: => Out ! AsyncRead): Future[Out] =
+      framesAdapted.foreach { a => if a.current != reader then { a.current = reader; on.clearCache() } }
+      run(p)
+    def reading(start: Vector[String], doubt: Option[FrameReading.Doubt]): Out ! AsyncRead =
+      handle(FrameReading.read[FrameRow](tables, question, doubt, start = start), pausing)
+    val resumed = (paused, choice) match
+      case (Some((q, resume)), Some(_)) if q == question => Some(resume)
+      case _ => None
     paused = None; pause = None
-    val f = Read.future(program, [X] => (op: Read[X]) => on.handler(op)).map {
+    val outcome: Future[Out] = resumed match
+      case Some(resume) => by(0)(resume(choice))
+      // TWO READERS (P4): each reads alone; the same frame is the answer; where they part, the person chooses the line
+      // and the first reads on from it (its own doubt then asks as one reader does)
+      case None if framesAdapted.nonEmpty =>
+        for
+          a <- by(0)(reading(Vector.empty, None))
+          b <- by(1)(reading(Vector.empty, None))
+          out <- (a, b) match
+            case (Right(x), Right(y)) if x.lines != y.lines =>
+              val i = x.lines.indices.find(k => y.lines.lift(k) != Some(x.lines(k))).getOrElse(0)
+              val prefix = x.lines.take(i)
+              pause = Some((c: Option[String]) => c.fold(pure[Out, AsyncRead](Right(x.copy(unresolved = true))))(line =>
+                reading(prefix :+ line, Some(FrameReading.Doubt(frameBar)))))
+              Future.successful(Left((prefix, Vector(x.lines(i)) ++ y.lines.lift(i).filter(_ != x.lines(i)))))
+            case _ => Future.successful(a)
+        yield out
+      case None => by(0)(reading(Vector.empty, Some(FrameReading.Doubt(frameBar))))
+    val f = outcome.map {
       case Left((_, options)) =>
         pause.foreach(k => paused = Some((question, k)))
         // the options as buttons: each line's canonical words (FrameSay), the choice carries the line itself

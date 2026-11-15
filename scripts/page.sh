@@ -37,6 +37,9 @@ FRAMES_ADAPTER=${FRAMES_ADAPTER:-$HOME/.cache/okay-desk/frame-lora3.adapter.safe
 if [ -f "$FRAMES_ADAPTER" ]; then
   mkdir -p "$web/model-frames"
   cp "$FRAMES_ADAPTER" "$web/model-frames/frame.adapter.safetensors"
+  # the second reader (agreement as the doubt, P4): another seed's adapter
+  FRAMES_ADAPTER2=${FRAMES_ADAPTER2:-$HOME/.cache/okay-desk/frame-lora3-s2.adapter.safetensors}
+  if [ -f "$FRAMES_ADAPTER2" ]; then cp "$FRAMES_ADAPTER2" "$web/model-frames/frame2.adapter.safetensors"; fi
 fi
 # The model the student was distilled from, all 28 layers as released, to compare with it (?models): the same
 # readers, read at its layer 19 (where they were trained); the logic and fact readers are the student's, not here
