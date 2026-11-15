@@ -112,3 +112,21 @@ en 243/263 (92%), ru 214/256 (84%), pl 176/245 (72%), uk 176/240 (73%) — 81% o
 - On `Everyday` — other tables, other people's wording — the 2% bound held (0.019), the looser ones did not
   (0.083 for 5%, 0.185 for 10%): the shift costs a factor near two. A bound for people's questions needs a
   calibration of people's questions (their choices on the page: §3).
+
+## 9. The dialogue and two readers, measured (2026-11-15)
+
+The dialogue (`FRAME_DIALOGUE`, the person played by the gold frame; the round-3 reader; `Everyday`):
+
+| asked below the margin | en right / unresolved / wrong | ru right / unresolved / wrong | questions to the person a question |
+|---|---|---|---|
+| none | 33 / 1 / 20 | 24 / 2 / 28 | 0 |
+| 0.3 | 35 / 3 / 16 | 31 / 8 / 15 | 0.39 |
+| 0.5 | 36 / 6 / 12 | 32 / 8 / 14 | 0.57 |
+| 1.0 | 39 / 6 / 9 | 33 / 9 / 12 | 1.04 |
+
+At about one press a question the phone's reader comes near the 35B's ceiling in English (39 against 43) and is wrong
+less often than it (9 against 11). The page's bar: 1.0.
+
+Two readers (rounds 3, seeds 1 and 2) agreeing, their smallest margin the score, calibrated at ε = 2%: λ̂ 0.104 —
+calibration 653 right / 332 asked / 19 wrong (one reader: 461 / 523 / 19); `Everyday` 40 / 63 / 5, risk 0.046 — the
+bound did not carry to the other tables this time. A bound for people's questions needs their own calibration.

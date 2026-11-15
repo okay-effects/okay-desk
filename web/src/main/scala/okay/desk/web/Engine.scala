@@ -702,9 +702,10 @@ object Engine:
   private type Paused = Option[String] => Either[(Vector[String], Vector[String]), FrameReading.Reading] ! AsyncRead
   /** the reading paused at a question, its continuation a value: the person's choice resumes it (never a replay) */
   private var paused: Option[(String, Paused)] = None
-  /** the doubt's bar: a line's margin below it asks the person (the calibration's λ̂ replaces it) */
+  /** the doubt's bar: a line's margin below it asks the person — 1.0: about one press a question, the wrong answers
+   * halved (guarantees.md §9) */
   private val frameBar = "frameBar=([0-9.]+)".r.findFirstMatchIn(dom.window.location.search).map(_.group(1).toDouble)
-    .getOrElse(0.3)
+    .getOrElse(1.0)
   /** THE PERSON ON THE PAGE: asked, the reading stops with the question and keeps `k`; the buttons resume it */
   private def pausing: Handler[Person, AsyncRead, FrameReading.Reading,
       Either[(Vector[String], Vector[String]), FrameReading.Reading]] =
