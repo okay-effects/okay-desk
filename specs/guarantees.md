@@ -78,3 +78,13 @@ model chooses one line, the tools narrow the next line's options, the checks loo
    at the same ε; the phone's point chosen.
 5. **The same method for logic.** A task → its formal model by choices (variables, constraints), the solver, the
    round trip.
+
+## 7. Built
+
+- §6.2, the canonical fragment: `FrameSay` — a frame said clause by clause in English or Russian (every name and
+  value in «»), and parsed back. Law (`FrameSaySuite`): 11 400 frames drawn at random over the option space of the
+  measure's and 40 domains' tables, said and read back to themselves in both languages — the words determine the
+  frame. ("table «expenses»; share of the sum of «amount»; the part where «category» = «transport»".)
+- §6.1, the calibration: `FrameBench` over any set, its records; `FrameCalibrate` — λ̂ for ε by conformal risk
+  control, one reader's margin or two readers' agreement; the calibration set: the teacher's natural pairs over the
+  domains, seeds 2001–2400 (never trained). Results below when measured.
