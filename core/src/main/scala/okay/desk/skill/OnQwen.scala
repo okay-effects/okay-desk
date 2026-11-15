@@ -50,13 +50,19 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     case Read.Decode(ids) => Future.successful(tok.decode(ids))
     case Read.Prompt(system, user) => Future.successful(tok.encode(OnQwen.template(system, user)))
     case Read.Note(_) => Future.unit
-    // (by next-token logits, one forward a token after the cached prefix: correct; a batched weighing is owed)
+    // a line's options weighed in one packed forward after the context's cache (okay-llm's `Qwen3Compute.score`)
     case Read.Score(context, options) =>
-      options.foldLeft(Future.successful(Vector.empty[Double])) { (acc, o) => acc.flatMap { got =>
-        o.indices.foldLeft(Future.successful(0.0)) { (sum, j) => sum.flatMap { s =>
-          run(context ++ o.take(j), Nil, withLogits = true).map { (_, l) =>
-            val m = l.max; val z = l.iterator.map(x => math.exp((x - m).toDouble)).sum
-            s + (l(o(j)) - m).toDouble - math.log(z) } } }.map(total => got :+ total / math.max(1, o.length)) } }
+      val head = context.init
+      val ready = cached match
+        case Some((prefix, cache)) if prefix.sameElements(head) => Future.successful(cache)
+        case Some((prefix, cache)) if head.startsWith(prefix) =>
+          model.run(head, layer, Nil, withLogits = false, Some(cache), keep = true).map { (_, _, next) =>
+            cache.free(); cached = next.map(head -> _); next.get }
+        case _ =>
+          clearCache()
+          model.run(head, layer, Nil, withLogits = false, None, keep = true).map { (_, _, next) =>
+            cached = next.map(head -> _); next.get }
+      ready.flatMap(cache => model.score(cache, context.last, options))
   def handler: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => answer[X](op)
 
   /**

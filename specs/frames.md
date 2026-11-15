@@ -130,3 +130,14 @@ context's state (kept between the lines), the page by next-token logits for now;
 read once for all the options: decoding is bound by memory) is the handler's to add, the program does not change.
 Laws: `FrameReadingSuite` (a model by numbers: the choices, the doubt, the questions, none of them). Checked: the
 same frames as the bench's former reader on `Everyday`. `Frame.next` no longer offers a line already taken.
+
+### 6.1 The packed weighing (2026-11-15)
+
+okay-llm's `Qwen3Compute.score` (republished in 0.1.0): a line's options as segments after the context's cache,
+one forward — the linears once for all, the rotation and the attention by segment. Law (okay-llm `CacheSuite`):
+equal to each option scored token by token (to the last digit). The page's handler (`OnQwen`) and the JVM's
+(`QwenReading` on `OnMlx`) answer `Read.Score` with it. First measure (`FrameSpeed`, the frame adapter merged into
+the weights by `FrameMerge`, 6 readings, the GPU shared with the calibration): 2.1× faster than one option a
+forward, the same frames 6 of 6. The engine's absolute speed is far below mlx-scala's (8.6 s a question against
+1.5 s): every option's row reads the whole vocabulary's logits back to the CPU — the next step is the
+log-probability on the device (one number a row).
