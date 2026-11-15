@@ -88,3 +88,10 @@ model chooses one line, the tools narrow the next line's options, the checks loo
 - §6.1, the calibration: `FrameBench` over any set, its records; `FrameCalibrate` — λ̂ for ε by conformal risk
   control, one reader's margin or two readers' agreement; the calibration set: the teacher's natural pairs over the
   domains, seeds 2001–2400 (never trained). Results below when measured.
+- The question in doubt (the operator, 2026-11-15): where a line's margin is below the bar, the reader stops and
+  asks the person — that line's best options, said in canonical words (and, on the page, each with its answer
+  computed) — their choice is the line and the reading goes on; none of them: unanswered; at most two questions. A
+  disagreement of two readers asks at the first line where their frames part. Every choice is a pair checked by a
+  person: training data, and the calibration of people's own questions (§3.1). `FrameRead.Dialogue`; measured by
+  `FrameBench` with `FRAME_DIALOGUE`, the person played by the gold frame: the right after the dialogue, the
+  questions it cost.
