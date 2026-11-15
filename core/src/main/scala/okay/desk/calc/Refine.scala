@@ -49,7 +49,7 @@ object Fill:
 
   /** a pure source in any row */
   def lift[R[_]](f: Fill[Pure]): Fill[R] = new Fill[R]:
-    def apply(ty: Ty, cs: Vector[String], ctx: Context): Dist ! R = pure(run(f(ty, cs, ctx)))
+    def apply(ty: Ty, cs: Vector[String], ctx: Context): Dist ! R = f(ty, cs, ctx).into[R]
 
   /** the first source with an opinion */
   def first[R[_]](fills: Fill[R]*): Fill[R] = new Fill[R]:
