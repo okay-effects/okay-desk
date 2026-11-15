@@ -210,3 +210,14 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
    (a draft plan: `~/work/my/okay-desk-private/plan-20261115/phone-ability.md` §3, "Desk-Real-v1").
 3. **The router between abilities** (Query / Calculate / Assign) by `Qwen3Compute.score` over the abilities' names.
 4. **The second ability by the same method** — `Calculate` (calc/), then logic as frames (guarantees.md §6.5).
+
+## S. From the System 1 literature (specs/technology.md §8.1, 2026-11-15)
+
+1. **IIA on frames**: a law/measure that adding options the question does not need (another column, another table)
+   does not change the chosen line; the flip rate on `Everyday` reported.
+2. **The readers' errors decorrelated**: the second reader on another data mix (or the canonical round trip as the
+   second voice); the wrong answers of "two agree" measured against the same-mix pair.
+3. **Laya-multilingual (322M) on the fixed-option lines** (answer kind, period, router) beside the 0.6B — `Everyday`,
+   same protocol; size and speed on the phone if it wins.
+4. **Reinforcement with the executed result** on the frame reader (FINER-SQL's dense reward: each line right).
+5. **Temperature scaling** of the margins before conformal calibration; the bar's stability across seeds.

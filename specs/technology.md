@@ -187,6 +187,38 @@ Each component has prior art; the question is whether we use it as well as it is
   probabilities — the reader's form, named. GLiNER2 / GLiNER2.5-multi (mDeBERTa 287M): schema-driven spans and
   relations in many languages — the closest ready model to a statement reader; a candidate base (question 3).
 
+### 8.1 System 1 decision models, read 2026-11-15
+
+- **The survey** (Roitman, arXiv 2610.33775, "The Hitchhiker's Guide to System 1 Models"): input → a typed decision
+  in one or few forward passes; five families (encoder classifiers, reward models, non-autoregressive decision
+  engines, contrastive, extraction); calibration by proper scoring rules (RLCD); System 1 + System 2 cascades routed
+  by calibrated confidence. Its pitfalls name ours: System 1 used where reasoning is needed; uncalibrated confidence;
+  distribution shift; CASCADES WITH CORRELATED ERRORS; assuming IIA (a choice's probability changing with the OTHER
+  options offered). Recalibration: temperature scaling with few labels, isotonic only above ~1000.
+- **The audit** (Delaunay, arXiv 2611.12521, Jev-style models 0.8B–27B): the confidence these models report is a
+  function of the distribution's dispersion (1 − H(p)/ln K), not of accuracy; BUNDLING several questions in one
+  request flips 11.7–22.4% of binary answers at 0.8B against 0.1–0.2% at 4B; under syntactic shift only ≥ 4B models
+  stay calibrated (ECE 0.03–0.09). CHANGES: (1) a frame's lines are NOT bundled into one pass on the 0.6B to save
+  time — or only after a measure shows no flips; (2) margins and entropy are scores to calibrate, never
+  probabilities to show (guarantees §3.1 stands); (3) the two readers agreeing share a base and a corpus — their
+  errors are correlated; independence is to be bought (another data mix, the canonical round trip, the teacher on
+  the Mac when online).
+- **Laya** (github NandhaKishorM/laya, Apache-2.0): ModernBERT / mmBERT encoders 150–421M, the multilingual 322M in
+  100+ languages; choice / score / yes-no questions over a text, all answered in ONE pass, calibrated by RL on proper
+  scoring rules, heads fitted on one's own rows in seconds. A candidate System 1 for the lines whose options are a
+  fixed small set (the answer's kind, a period, the ability's router) — not for the table-specific values. CHANGES:
+  a trial on `Everyday`'s fixed-option lines beside the 0.6B, same protocol.
+- **TeCoD** (arXiv 2604.28028): templates from past question → SQL pairs, an NLI model picks one (or rejects), the
+  template enforced by grammar-constrained decoding: up to +36% execution accuracy over in-context learning, 2.2× lower
+  latency on matched questions. CHANGES: a person's own past questions as templates (BACKLOG A.1's lessons).
+- **FINER-SQL** (arXiv 2605.03465): Qwen2.5-Coder 0.5B / 1.5B / 3B distilled from four teachers, then GRPO with
+  execution rewards (format, runs, exact; a partial reward for the right operations when the query is wrong) and 30
+  candidates voted: BIRD dev 50.9 / 63.2 / 67.7, Spider 70.2 / 80.0 / 85.0. CHANGES: after the phone, reinforcement
+  with the EXECUTED RESULT as the reward on the frame reader's choices (a dense reward: each line right); voting is
+  too slow for the phone (2.6 s a sample on a GPU), two readers stay.
+- **PSC** (arXiv 2608.03065): grammar masks from one classifier over the parser's stack, the per-step cost free of
+  the vocabulary's size (up to 30× for JSON schemas) — for a generating ability, if one is ever needed again.
+
 ## 9. The direction and the tool (the operator, 2026-11-13)
 
 **What the model is for.** A phone's small model does not chat and does not know the world — a large model in the
