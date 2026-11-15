@@ -260,6 +260,15 @@ object App:
             if q.isEmpty then pure(cleared)
             // A TASK TYPED IN THE CHAT (several sentences): the statement reader first — the model writes it down,
             // the exact solver answers; when the reader does not answer it, the chat's other ways, as before
+            // SOMEONE OF THE SOLVED TASK AS A WHOLE ("What does the Japanese do?"): their line of the solved grid
+            else if !s.chooser && followUp(s, q).nonEmpty && aboutSomeone(q) then
+              val asked = cleared.copy(log = cleared.log :+ Entry("user", q))
+              conditions(s).fold(Reasoning.start[R](asked, q))(kept => Model.state[R](kept).flatMap {
+                case Some(grid) if grid.shown && about(grid.result.getOrElse(Vector.empty), q).nonEmpty =>
+                  pure(asked.copy(log = asked.log :+ Entry("model", about(grid.result.get, q).mkString("\n"), None,
+                    Some(if okay.desk.statement.Reader.russian(q) then "из решённой сетки задачи: точный решатель"
+                      else "from the task's solved grid: the exact solver"))))
+                case _ => Reasoning.start[R](asked, q) })
             else if !s.chooser && (okay.desk.statement.Sentences.of(q).size >= 3 || followUp(s, q).nonEmpty) then
               // A QUESTION AFTER A TASK ("Who drinks milk?" after the zebra): the task's conditions with this
               // question read as one task — the same reader, the same exact solver; not sure, the chat's other ways
@@ -319,6 +328,14 @@ object App:
   /** A QUESTION ABOUT SOMEONE OF THE SOLVED TASK ("What does the Japanese do?", «Что делает японец?»), which the
    * statement language has no goal for: the task's conditions alone read — the whole solved grid, a line a
    * position — and the lines naming them; none: no answer from here */
+  /** a question about someone as a whole (what they do, all about them), no attribute named: their whole line */
+  def aboutSomeone(q: String): Boolean =
+    val t = q.trim.toLowerCase
+    "^(what (does|did|do) .+ do|what .+ (does|did)|tell me (all )?about .+|what about .+|who is .+|what do we know about .+)\\??$".r
+      .matches(t) ||
+    "^(а )?(что (делает|известно (о|об|про)|про) .+|расскажи (всё |все )?(о|об|про) .+|кто так(ой|ая) .+)\\??$".r
+      .matches(t)
+
   def about(lines: Vector[String], q: String): Vector[String] =
     val stop = Set("what", "who", "does", "do", "did", "the", "a", "an", "is", "of", "about", "tell", "me", "and",
       "что", "кто", "делает", "про", "о", "об", "расскажи", "чем", "занимается")
