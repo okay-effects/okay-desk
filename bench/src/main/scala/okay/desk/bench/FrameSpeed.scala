@@ -23,10 +23,16 @@ object FrameMerge:
  * the browser, the tokenizer mlx-scala's. `packed`: a line's options weighed in one forward (`Qwen3Compute.score`),
  * else one option a forward (the same engine and weights: the packing's gain alone).
  */
-final class QwenReading(dir: Path, packed: Boolean, within: Boolean = false)(using ExecutionContext) extends Reading:
+final class QwenReading(dir: Path, packed: Boolean, within: Boolean = false, planes: Option[Path] = None)(
+    using ExecutionContext) extends Reading:
   private val chat = Chat.load(dir); private val tok = chat.tokenizer
   private val config = Qwen3Config.parse(Files.readString(dir.resolve("config.json")))
-  val model = Qwen3Compute(OnMlx(), Safetensors(Files.readAllBytes(dir.resolve("model.safetensors"))), config)
+  // the base's weights, and — `planes` — an adapter beside them (okay-desk's `Adapted`: the page's way), else merged
+  val model =
+    val st = Safetensors(Files.readAllBytes(dir.resolve("model.safetensors")))
+    planes.fold(Qwen3Compute(OnMlx(), st, config)) { p =>
+      val a = okay.desk.skill.Adapted(OnMlx(), st, Safetensors(Files.readAllBytes(p)))
+      val m = Qwen3Compute(a, a.tensors, config); a.releaseSources(); m }
   private var kept: Option[(Array[Int], model.Cache)] = None
   private def await[A](f: scala.concurrent.Future[A]): A = Await.result(f, 10.minutes)
   /** the cache of `head`: from the kept one where it begins `head`, else from nothing */
@@ -70,14 +76,25 @@ object FrameSpeed:
       (frames, (System.nanoTime() - t0) / 1e9 / asked.size)
     // FRAME_WITHIN=1: the packed weighing over the whole vocabulary against the one within the options' tokens
     val within = sys.env.get("FRAME_WITHIN").contains("1")
-    val (one, tOne) = readAll(QwenReading(dir, packed = !within))
-    val (pack, tPack) = readAll(QwenReading(dir, packed = true, within = within))
-    if within then
-      val rightFull = asked.zip(one).count((a, lines) => FrameBench.outcome(a.gold,
+    // FRAME_PLANES: the adapter beside the base (FRAME_BASE) against the merged model, the same weighing
+    sys.env.get("FRAME_PLANES") match
+    case Some(planes) =>
+      val (merged, tm) = readAll(QwenReading(dir, packed = true, within = true))
+      val (beside, tb) = readAll(QwenReading(Path.of(sys.env("FRAME_BASE")), packed = true, within = true,
+        Some(Path.of(planes))))
+      def right(fs: Vector[Vector[String]]) = asked.zip(fs).count((a, lines) => FrameBench.outcome(a.gold,
         Frame.query(lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption) == "right")
-      println(s"the whole vocabulary: right $rightFull of ${asked.size}")
-    val same = one.zip(pack).count(_ == _)
-    val right = asked.zip(pack).count((a, lines) =>
-      FrameBench.outcome(a.gold, Frame.query(lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption) == "right")
-    println(f"one option a forward: $tOne%.2f s a question; packed: $tPack%.2f s — ${tOne / tPack}%.1f× faster; " +
-      s"the same frames: $same of ${asked.size}; right (packed): $right")
+      println(f"merged: right ${right(merged)} ($tm%.2f s); beside the base: right ${right(beside)} ($tb%.2f s); " +
+        s"the same frames ${merged.zip(beside).count(_ == _)} of ${asked.size}")
+    case None =>
+      val (one, tOne) = readAll(QwenReading(dir, packed = !within))
+      val (pack, tPack) = readAll(QwenReading(dir, packed = true, within = within))
+      if within then
+        val rightFull = asked.zip(one).count((a, lines) => FrameBench.outcome(a.gold,
+          Frame.query(lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption) == "right")
+        println(s"the whole vocabulary: right $rightFull of ${asked.size}")
+      val same = one.zip(pack).count(_ == _)
+      val right = asked.zip(pack).count((a, lines) =>
+        FrameBench.outcome(a.gold, Frame.query(lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption) == "right")
+      println(f"one option a forward: $tOne%.2f s a question; packed: $tPack%.2f s — ${tOne / tPack}%.1f× faster; " +
+        s"the same frames: $same of ${asked.size}; right (packed): $right")

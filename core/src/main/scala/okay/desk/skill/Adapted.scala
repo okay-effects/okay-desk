@@ -38,6 +38,16 @@ final class Adapted(val base: Compute, weights: Tensors, adapter: Tensors) exten
   override def close(): Unit = base.close()
   override def cache(x: T): T = base.cache(x)
   def tensor(rows: Int, cols: Int, data: Array[Float]): T = base.tensor(rows, cols, data)
+  // the packed segments' ops and the log-probability, the base's own (a default here is a copy a segment: the device
+  // lost on the page)
+  override def headNormRopeSegments(x: T, w: T, heads: Int, headDim: Int, eps: Float, theta: Float, pos0: Int,
+      starts: Array[Int], rows: Int): T = base.headNormRopeSegments(x, w, heads, headDim, eps, theta, pos0, starts, rows)
+  override def attentionSegments(q: T, kPre: T, vPre: T, k: T, v: T, heads: Int, kvHeads: Int, headDim: Int,
+      pos0: Int, starts: Array[Int], rows: Int): T =
+    base.attentionSegments(q, kPre, vPre, k, v, heads, kvHeads, headDim, pos0, starts, rows)
+  override def logProbs(x: T, w: W, n: Int, columns: Array[Int])(using scala.concurrent.ExecutionContext)
+      : Future[Array[Float]] = if w._2.isEmpty || !active then base.logProbs(x, w._1, n, columns)
+      else super.logProbs(x, w, n, columns)
   def quantized(q: QLinear): W = base.quantized(q) -> pending.remove(q.words)
   def linear(x: T, w: W): T =
     val y = base.linear(x, w._1)

@@ -172,13 +172,17 @@ object Engine:
   def loadReaders(requestedDir: String, layer: Int, generate: Boolean = false): Future[Either[String, String]] =
     val dir = requestedDir
     val understanding = dir == "model-understanding"
+    // THE FRAME READER: the released model's weights (model-full) and its adapter beside them (model-frames, a small
+    // file — a second reader is a second small file, not a second model)
+    val source = if dir == framesDir then "model-full" else dir
     (for
-      config <- fetch(s"$dir/config.json").map(text).map(Qwen3Config.parse)
-      tok <- fetch(s"$dir/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
+      config <- fetch(s"$source/config.json").map(text).map(Qwen3Config.parse)
+      tok <- fetch(s"$source/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
       skillBytes <- if understanding || dir == framesDir then Future.successful(new ArrayBuffer(0))
         else fetch(s"$dir/readers.skill")
       adapter <- if understanding && !generate then
         fetch(Execution.versioned(s"$dir/semantic-adapter.safetensors")).map(Some(_))
+        else if dir == framesDir then fetch(Execution.versioned(s"$dir/frame.adapter.safetensors")).map(Some(_))
         else Future.successful(None)
       facts <- if understanding then Future.successful(None) else
         fetch(Execution.versioned(s"$dir/facts.skill")).map(b => FactReader.parse(text(b)).toOption)
@@ -206,7 +210,7 @@ object Engine:
       c = device.fold(_ => OnCpu(), identity)
       // the weights last, read straight from the fetched buffer (no copy) onto the device, and not kept: a phone's
       // tab has no room for a second copy of 244 MB
-      model <- weights(dir, config.vocab).map { (st, embed) =>
+      model <- weights(source, config.vocab).map { (st, embed) =>
         stage(s"the weights to ${c.api}…")
         try
           adapter match
