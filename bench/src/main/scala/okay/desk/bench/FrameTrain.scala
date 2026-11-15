@@ -9,8 +9,15 @@ import scala.jdk.CollectionConverters.*
 
 /** the frames' texts read back: each a table (the domains' by seed, or written out), a question, the lines */
 object FrameTexts:
+  /** the texts of a file; `FRAME_SYNTH_MAX`: at most so many of the synthetic forms' (template, taught), drawn at
+   * random — the first night's had 40% of them and the reader took a plain sum for a share */
   def load(path: Path): Vector[FrameData.Item] =
-    Files.readAllLines(path).asScala.toVector.filter(_.trim.nonEmpty).flatMap { l =>
+    val all = Files.readAllLines(path).asScala.toVector.filter(_.trim.nonEmpty)
+    val synth = all.filter(l => l.contains("\"source\":\"template\"") || l.contains("\"source\":\"taught\""))
+    val keep = sys.env.get("FRAME_SYNTH_MAX").map(_.toInt).fold(synth.toSet)(n =>
+      scala.util.Random(11).shuffle(synth).take(n).toSet)
+    val synthetic = synth.toSet
+    all.filter(l => !synthetic(l) || keep(l)).flatMap { l =>
       val j = Json.fromText(l)
       val lines = j.field("lines").collect { case Json.Arr(xs) => xs.collect { case Json.Str(s) => s } }
         .getOrElse(Vector.empty)
