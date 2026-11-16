@@ -151,3 +151,23 @@ first reads on from the chosen one (`FrameReading.read(start = …)`, its own do
 In Chromium: "the sum of orders by city" and "the three largest orders" answered at once, both right; "how many
 unpaid" and "how many orders from Lviv" asked — the latter was a silent wrong answer with one reader. Two readings a
 question: 6–8 s on a desktop's WebGPU.
+
+### 6.3 Values linked across languages, as facts (2026-11-16)
+
+A question names a table's value in its own language: «Сколько заказов из Львова?» of a table with `city = Lviv`.
+The reader weighed «where: customer = dee» (-0.05) far above «where: city = Lviv» (-3.24): a 0.6B does not know that
+«Львов» is Lviv, and it guesses a value. The lesson of okay-inlay's units (specs/domains.md §5) applies: what the
+text names exactly is a FACT, not a reading; the model decides only its role.
+
+- `Links.of(table, question)`: the text values a question names — said as they are ("Biedronka", "Olga's"), by their
+  letters in Latin («Анны» "anny" for "Anna", «Ольги» for "Olga"), or by a common word of everyday data in Russian,
+  Ukrainian or Polish («продукты» groceries, «Львов» Lviv, «наличными» cash, «доход» the type `in`). Three values
+  of a column or more are a list the question describes, not values it means.
+- `FrameReading.read(link, guess)`: a line naming a linked value not yet said weighs `link` more; a line naming a
+  text value no word of the question names — a guess — weighs `guess` less. The page: 2 and 2.
+
+Measured on `Everyday` (round 3, one reader, 54 questions each language): links over the gold frames 34 of 36 right,
+34 of the gold's 38 text values found. Right: en 33 → 36, ru 24 → 26 at link 2; the same at 4 and 8; guess 2 changes
+no outcome there and removes the guessed values from the wrong frames. The lexicon was written seeing `Everyday`, so
+the check that counts is the teacher's 1004 natural questions (never trained, other tables): link 2 en 243 → 246,
+ru 214 → 216, uk 176 → 177, pl 176 → 176, nothing lost. On the page «из Львова» now offers `city = Lviv` first.
