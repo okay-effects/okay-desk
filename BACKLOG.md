@@ -265,6 +265,6 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
 
 ## Moved to okay-llm (2026-11-16)
 
-- `Read`, `Reading` and `OnQwen` are now in okay-llm's module `read` (artifact okay-llm-read, package
+- `Read`, `Reading`, `OnQwen` and `Adapted` are now in okay-llm's module `read` (`SemanticExport` as `AdapterExport` in its `mlx`) (artifact okay-llm-read, package
   `okay.llm.read`), the same code, for every app (okay-invest's goal reader uses it). To do: okay-desk imports them
   from there and drops its copies in `okay.desk.skill`.
