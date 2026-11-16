@@ -262,3 +262,9 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
 5. **The phone's runtime decided** by P2–P3's numbers: browser 0.6B or a native app.
 6. **An independent second opinion**: a matcher of another kind, or the person's check as the default in doubt.
 7. **One history**: `bench/history.tsv` for every run, a weekly target, SPRINT the only queue.
+
+## Moved to okay-llm (2026-11-16)
+
+- `Read`, `Reading` and `OnQwen` are now in okay-llm's module `read` (artifact okay-llm-read, package
+  `okay.llm.read`), the same code, for every app (okay-invest's goal reader uses it). To do: okay-desk imports them
+  from there and drops its copies in `okay.desk.skill`.
