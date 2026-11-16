@@ -241,6 +241,11 @@ class TaskListSuite extends munit.FunSuite:
     try
       val p = run(App.main[Row](Nil, chooser = false), Map.empty, Act.press("Ask", ask -> task),
         Act.press("Ask", ask -> "What does the Japanese do?"))
-      assert(text(p).contains("3: Japanese, green, coffee, zebra") && text(p).contains("the task's solved grid"), text(p))
-      assert(!text(p).contains("2: Spaniard"), text(p))
+      assert(text(p).contains("The Japanese lives in the green house, drinks coffee, keeps a zebra") &&
+        text(p).contains("the task's solved grid"), text(p))
+      assert(!text(p).contains("The Spaniard lives"), text(p))
+      // asked in Russian about a task written in English: «японец» names "Japanese"
+      val r = run(App.main[Row](Nil, chooser = false), Map.empty, Act.press("Ask", ask -> task),
+        Act.press("Ask", ask -> "Что делает японец?"))
+      assert(text(r).contains("Японец живёт в зелёном доме, пьёт кофе, держит зебру"), text(r))
     finally reader = _ => None

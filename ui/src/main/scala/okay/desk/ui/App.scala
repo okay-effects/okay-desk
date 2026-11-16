@@ -337,11 +337,7 @@ object App:
       .matches(t)
 
   def about(lines: Vector[String], q: String): Vector[String] =
-    val stop = Set("what", "who", "does", "do", "did", "the", "a", "an", "is", "of", "about", "tell", "me", "and",
-      "что", "кто", "делает", "про", "о", "об", "расскажи", "чем", "занимается")
-    val words = "(?U)\\w+".r.findAllIn(q.toLowerCase).filter(w => w.length > 2 && !stop(w)).toVector
-    // a name matched by its stem (the Japanese, японец / японца: the first five letters)
-    lines.filter(l => words.exists(w => l.toLowerCase.contains(w.take(math.max(4, math.min(w.length, 5))))))
+    okay.desk.tasks.Someone.about(lines, q, okay.desk.statement.Reader.russian(q))
 
   /**
    * A STEP GOING ON, shown where the person is: on the chat, the conversation with the question and what was said
