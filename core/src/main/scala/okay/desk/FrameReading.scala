@@ -40,9 +40,18 @@ object FrameReading:
   /** where the person is asked: a line's margin below `bar`; the best `offer` options; at most `maxAsks` questions */
   final case class Doubt(bar: Double, offer: Int = 4, maxAsks: Int = 2)
 
+  /** LINKS AS FACTS (§6.3): a line naming a value the question names (`Links`), not yet said, weighs `link` more */
+  private def weighed(scores: Vector[Double], options: Vector[String], so: Reading, tables: Map[String, Table],
+      question: String, link: Double): Vector[Double] =
+    val linked = if link == 0.0 then Set.empty[(String, String)]
+      else so.lines.headOption.map(_.stripPrefix("table: ").trim).flatMap(tables.get)
+        .fold(Set.empty)(t => Links.of(t, question).toSet)
+    val said = so.lines.flatMap(Links.named).toSet
+    options.zip(scores).map((o, s) => if Links.named(o).exists(n => linked(n) && !said(n)) then s + link else s)
+
   /** `start`: lines decided already (a person's choice where two readers parted) — read on from them */
   def read[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt] = None, maxLines: Int = 16,
-      start: Vector[String] = Vector.empty)(using In[Read, R], In[Person, R]): Reading ! R =
+      start: Vector[String] = Vector.empty, link: Double = 0.0)(using In[Read, R], In[Person, R]): Reading ! R =
     val (system, user) = Frame.prompt(tables, question)
     for
       prompt <- Read.prompt[R](system, user)
@@ -50,12 +59,12 @@ object FrameReading:
       end <- Read.encode[R]("<|im_end|>").map(_.last)
       decided <- Read.each[String, Array[Int], R](start)(l => Read.encode[R](l))
       context = decided.foldLeft(prompt)((c, t) => (c :+ newline) ++ t)
-      read <- step(tables, question, doubt, maxLines, context, newline, end,
+      read <- step(tables, question, doubt, maxLines, link, context, newline, end,
         Reading(start, Vector.fill(start.size)(Double.PositiveInfinity)))
     yield read
 
   private def step[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt], maxLines: Int,
-      context: Array[Int], newline: Int, end: Int, so: Reading)(using In[Read, R], In[Person, R]): Reading ! R =
+      link: Double, context: Array[Int], newline: Int, end: Int, so: Reading)(using In[Read, R], In[Person, R]): Reading ! R =
     if so.lines.lastOption.contains(Frame.end) || so.unresolved || so.lines.size >= maxLines then pure(so)
     else
       val options = Frame.next(so.lines, tables, question)
@@ -64,8 +73,9 @@ object FrameReading:
         for
           tokens <- Read.each[String, Array[Int], R](options)(o => Read.encode[R](o))
           // each option's tokens and the line's end after them (a newline; the turn's end after `end`)
-          scores <- Read.score[R](context :+ newline,
+          raw <- Read.score[R](context :+ newline,
             options.zip(tokens).map((o, t) => t :+ (if o == Frame.end then end else newline)))
+          scores = weighed(raw, options, so, tables, question, link)
           ranked = options.zip(scores).sortBy(-_._2)
           margin = ranked.lift(1).fold(Double.PositiveInfinity)(second => ranked.head._2 - second._2)
           chosen <- doubt match
@@ -76,7 +86,7 @@ object FrameReading:
             case (None, asked) => pure[Reading, R](so.copy(margins = so.margins :+ margin, asked = asked,
               unresolved = true))
             case (Some(line), asked) =>
-              Read.encode[R](line).flatMap(t => step(tables, question, doubt, maxLines,
+              Read.encode[R](line).flatMap(t => step(tables, question, doubt, maxLines, link,
                 (context :+ newline) ++ t, newline, end,
                 Reading(so.lines :+ line, so.margins :+ margin, asked)))
         yield next

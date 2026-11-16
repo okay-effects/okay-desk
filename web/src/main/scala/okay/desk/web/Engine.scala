@@ -753,7 +753,7 @@ object Engine:
       framesAdapted.foreach { a => if a.current != reader then { a.current = reader; on.clearCache() } }
       run(p)
     def reading(start: Vector[String], doubt: Option[FrameReading.Doubt]): Out ! AsyncRead =
-      handle(FrameReading.read[FrameRow](tables, question, doubt, start = start), pausing)
+      handle(FrameReading.read[FrameRow](tables, question, doubt, start = start, link = 2.0), pausing)
     val resumed = (paused, choice) match
       case (Some((q, resume)), Some(_)) if q == question => Some(resume)
       case _ => None
