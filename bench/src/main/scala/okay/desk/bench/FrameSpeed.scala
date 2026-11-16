@@ -98,3 +98,27 @@ object FrameSpeed:
         FrameBench.outcome(a.gold, Frame.query(lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption) == "right")
       println(f"one option a forward: $tOne%.2f s a question; packed: $tPack%.2f s — ${tOne / tPack}%.1f× faster; " +
         s"the same frames: $same of ${asked.size}; right (packed): $right")
+
+/** ONE QUESTION READ, ITS LINES AND EACH LINE'S OPTIONS WEIGHED (a check of a page's case on the JVM): the sample
+ * tables of the page (`web/page/sample`), the merged frame model (`FRAME_MERGED`), the page's weighing (within the
+ * options), the links at `FRAME_LINK` — `FrameAsk <question>` */
+object FrameAsk:
+  type RP[X] = (Read + Person)[X]
+  def main(args: Array[String]): Unit =
+    given ExecutionContext = ExecutionContext.global
+    val tables = Vector("orders", "customers").map(n => s"$n.csv" -> Table.parse(s"$n.csv",
+      Files.readString(Path.of(sys.env("FRAME_SAMPLE"), s"$n.csv"))).fold(sys.error, identity)).toMap
+    val r = QwenReading(Path.of(sys.env("FRAME_MERGED")), packed = true, within = true)
+    val shown = new Reading:
+      def answer[X](op: Read[X]): X =
+        val out = r.answer(op)
+        (op, out) match
+          case (Read.Score(_, options), scores: Vector[?]) if options.size > 2 =>
+            println(s"  ${options.size} options, the best: " + scores.asInstanceOf[Vector[Double]].zipWithIndex
+              .sortBy(-_._1).take(6).map((s, i) => f"$i:$s%.2f").mkString(" "))
+          case _ => ()
+        out
+    for link <- Vector(0.0, 2.0, 8.0) do
+      val read = Read.run(handle(FrameReading.read[RP](tables, args.mkString(" "), link = link),
+        Person.silent[Read, FrameReading.Reading]), shown)
+      println(s"link $link: ${read.lines.mkString(" | ")}  margins ${read.margins.map(m => f"$m%.2f").mkString(" ")}")

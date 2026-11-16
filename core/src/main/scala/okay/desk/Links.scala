@@ -80,7 +80,8 @@ object Links:
     val ws = wordsOf(question)
     val vs = wordsOf(value)
     val own = vs.nonEmpty && vs.forall(v => v.length >= 3 && ws.exists(w => w == v || same(w, v, 4)))
-    val lat = vs.nonEmpty && vs.forall(v => v.length >= 3 && ws.exists(w => w.exists(_ > 'z') && same(inLatin(w), v, 3)))
+    val lat = vs.nonEmpty && vs.forall(v =>
+      v.length >= 3 && ws.exists(w => w.exists(_ > 'z') && same(inLatin(w), v, 3)))
     val common = vs.headOption.flatMap(v => words.find(_._1 == v)).exists((_, stems) =>
       ws.exists(w => stems.exists(s => w == s || s.length >= 3 && w.startsWith(s))))
     own || lat || common

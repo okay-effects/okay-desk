@@ -746,6 +746,7 @@ object Engine:
     stage("reading a question…")
     val ru = question.exists(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я')
     val lang = if ru then "ru" else "en"
+    println(s"frame links: ${tables.toVector.map((n, t) => s"$n -> ${Links.of(t, question).mkString(", ")}").mkString("; ")}")
     type Out = Either[(Vector[String], Vector[String]), FrameReading.Reading]
     def run(p: Out ! AsyncRead): Future[Out] = Read.future(p, [X] => (op: Read[X]) => on.handler(op))
     // a reader of the two: its adapter in use, the prefix cache of the other let go (its states are another's)
@@ -753,7 +754,8 @@ object Engine:
       framesAdapted.foreach { a => if a.current != reader then { a.current = reader; on.clearCache() } }
       run(p)
     def reading(start: Vector[String], doubt: Option[FrameReading.Doubt]): Out ! AsyncRead =
-      handle(FrameReading.read[FrameRow](tables, question, doubt, start = start, link = 2.0), pausing)
+      handle(FrameReading.read[FrameRow](tables, question, doubt, start = start, link = 2.0, guess = 2.0),
+        pausing)
     val resumed = (paused, choice) match
       case (Some((q, resume)), Some(_)) if q == question => Some(resume)
       case _ => None

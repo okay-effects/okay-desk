@@ -60,7 +60,8 @@ object FrameBench:
       // the frame reader is a program over `Read` (here mlx-scala) and `Person` (here the gold frame, or none asked)
       val doubt = sys.env.get("FRAME_DIALOGUE").map(b => FrameReading.Doubt(b.toDouble))
       val program = FrameReading.read[RP](a.tables, a.text, doubt,
-        link = sys.env.get("FRAME_LINK").fold(0.0)(_.toDouble))
+        link = sys.env.get("FRAME_LINK").fold(0.0)(_.toDouble),
+        guess = sys.env.get("FRAME_GUESS").fold(0.0)(_.toDouble))
       val person = if doubt.isEmpty then Person.silent[Read, FrameReading.Reading]
         else Person.byFrame[Read, FrameReading.Reading](a.frame)
       val read = Read.run(handle(program, person), reading)
