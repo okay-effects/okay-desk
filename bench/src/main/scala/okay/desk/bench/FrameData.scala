@@ -169,6 +169,32 @@ object FrameData:
             s"Who has ${c.name} $en $n?")
           Vector(Item(tables, q, lines), Item(tables, s"У каких $tg «$cn» $ru $n?", lines))
 
+  /** ROUND 6's FORMS (2026-11-17, round 4's errors on Everyday): «Сколько я потратил на …» is a sum of money, not a
+   * count; a group with a condition on another column («Revenue by product in the South») */
+  def spent(seed: Long): Vector[Item] =
+    val rnd = scala.util.Random(seed)
+    val t = Domains.any(rnd)
+    val d = Domains.all.find(_.table == t.name).get
+    val tables = Map(t.name -> t)
+    def pick[A](xs: Seq[A]): A = xs(rnd.nextInt(xs.size))
+    val money = d.columns.filter(_.role == Domains.Role.Money)
+    val nums = d.columns.filter(c => Set(Domains.Role.Money, Domains.Role.Count, Domains.Role.Measure)(c.role))
+    val cats = d.columns.filter(c => c.role == Domains.Role.Category || c.role == Domains.Role.Name)
+    val head = Vector(s"table: ${t.name}")
+    val spend = Option.when(money.nonEmpty && cats.nonEmpty) {
+      val c = money.head; val g1 = pick(cats); val v = pick(g1.values)
+      val lines = head ++ Vector(s"answer: sum ${c.name}", s"where: ${g1.name} = $v", Frame.end)
+      Vector(Item(tables, pick(Vector(s"Сколько я потратил на $v?", s"Сколько ушло на $v?", s"Сколько денег на $v?")),
+        lines), Item(tables, s"How much did I spend on $v?", lines)) }
+    val filtered = Option.when(cats.size > 1 && nums.nonEmpty) {
+      val c = pick(nums); val g = pick(cats); val o = pick(cats.filter(_ != g)); val v = pick(o.values)
+      val (cn, _, _) = c.ru; val (_, _, gd) = g.ru
+      val lines = head ++ Vector(s"answer: sum ${c.name}", s"where: ${o.name} = $v", s"group: ${g.name}", Frame.end)
+      Vector(Item(tables, pick(Vector(s"${c.name.capitalize} by ${g.name} for $v.", s"${c.name} per ${g.name} in $v")),
+        lines), Item(tables, s"${cn.capitalize} по $gd для $v.", lines)) }
+    val forms = Vector(spend, filtered).flatten
+    if forms.isEmpty then Vector.empty else pick(forms)
+
   def json(i: Item, seed: Long, source: String): String =
     Json.Obj(Vector("seed" -> Json.num(seed), "source" -> Json.Str(source), "question" -> Json.Str(i.question),
       "lines" -> Json.Arr(i.lines.map(Json.Str.apply)))).render
@@ -178,6 +204,11 @@ object FrameData:
     if args.headOption.contains("--groups") then
       val out = Path.of(args(1))
       val items = (1L to args(2).toLong).flatMap(s => groups(s * 7919).map(i => json(i, s * 7919, "group")))
+      Files.write(out, items.asJava)
+      println(s"written $out: ${items.size}")
+    else if args.headOption.contains("--spent") then
+      val out = Path.of(args(1))
+      val items = (1L to args(2).toLong).flatMap(s => spent(s * 3571).map(i => json(i, s * 3571, "spent")))
       Files.write(out, items.asJava)
       println(s"written $out: ${items.size}")
     else if args.headOption.contains("--counter") then
