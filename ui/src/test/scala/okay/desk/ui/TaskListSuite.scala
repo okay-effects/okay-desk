@@ -160,7 +160,8 @@ class TaskListSuite extends munit.FunSuite:
       for t <- stated; ru <- List(false, true) do
         val at = Tasks.entries.indexWhere(_.task == t)
         val state = App.State(place = "examples", tasks = TaskList.View(russian = ru, open = Some(at)))
-        val q = run(App.loop[Row](state), Map.empty, Act.press(if ru then "Решить" else "Solve"))
+        val q = run(App.loop[Row](state), Map.empty, Act.press(if ru then "Решить" else "Solve"),
+          Act.press(if ru then "Показать объяснение" else "Show the explanation"))
         assert(text(q).contains(if ru then "Прочитано так:" else "Read as:"), text(q))
         if Faults.undecided(t.expect) then undecided += 1
         assert(text(q).contains(if ru then "Проверка: верно ✓" else "Check: right ✓"), t.title.en + "\n" + text(q))
@@ -186,7 +187,8 @@ class TaskListSuite extends munit.FunSuite:
         text(opened))
       assert(text(opened).contains(s"задачи 1–10 из ${stated.size}"), text(opened))
       assert(labels(opened).contains(s"Читает модель (${stated.size})"), labels(opened).toString)
-      val solved = run(App.main[Row](Nil, phone = true, logic = Some(true)), Map.empty, Act.press("Решить"))
+      val solved = run(App.main[Row](Nil, phone = true, logic = Some(true)), Map.empty, Act.press("Решить"),
+        Act.press("Показать объяснение"))
       assert(text(solved).contains("Прочитано так:") && text(solved).contains("Проверка: верно ✓"), text(solved))
       val english = run(App.main[Row](Nil, logic = Some(false)), Map.empty, Act.press("Next →"))
       assert(text(english).contains(s"tasks 11–20 of ${stated.size}") && !text(english).contains("Example questions"),
@@ -223,7 +225,8 @@ class TaskListSuite extends munit.FunSuite:
     reader = golden(_ => None)
     try
       val t = stated.find(t => !Faults.undecided(t.expect)).get
-      val p = run(App.main[Row](Nil, chooser = false), Map.empty, Act.press("Ask", ask -> t.text.en))
+      val p = run(App.main[Row](Nil, chooser = false), Map.empty, Act.press("Ask", ask -> t.text.en),
+        Act.press("Show the explanation"))
       assert(text(p).contains("Read as:") && text(p).contains(t.answer.en.stripPrefix("the ")), text(p))
     finally reader = _ => None
 
@@ -240,7 +243,7 @@ class TaskListSuite extends munit.FunSuite:
       else reading(Vector.empty, Some(Reader.Doubt.NoStatement("no goal for it")))
     try
       val p = run(App.main[Row](Nil, chooser = false), Map.empty, Act.press("Ask", ask -> task),
-        Act.press("Ask", ask -> "What does the Japanese do?"))
+        Act.press("Ask", ask -> "What does the Japanese do?"), Act.press("Show the explanation"))
       assert(text(p).contains("The Japanese lives in the green house, drinks coffee, keeps a zebra") &&
         text(p).contains("the task's solved grid"), text(p))
       assert(!text(p).contains("The Spaniard lives"), text(p))

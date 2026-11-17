@@ -64,7 +64,7 @@ class AppSuite extends munit.FunSuite:
       Act.press("Open the files", "Files, or a whole folder (CSV, TSV, JSON)" -> bundle),
       Act.press("Examples"), Act.press("Open"), // opens the sample in the chat
       Act.press("Data: 3 open"), Act.press("Close edges"), Act.press("← Back to the chat"), Act.press("Load the model"),
-      Act.press("Ask", ask -> "How many orders are unpaid?"))
+      Act.press("Ask", ask -> "How many orders are unpaid?"), Act.press("Show the explanation"))
     assert(p.problems.isEmpty, p.problems.toString)
     val t = text(p)
     assert(t.contains("the data: customers, orders"), t)
@@ -240,7 +240,7 @@ class ClarifySuite extends munit.FunSuite:
     // the classic with one clue in words the reader does not know: "The Spaniard keeps company with the dog."
     val odd = okay.desk.puzzle.PuzzleText.classicEn.replace("The Spaniard owns the dog.", "The Spaniard keeps company with the dog, so to speak.")
     val played = Play(steps(copiedTo[NoFetch, Ui, Unit](copied)(fetchless)), Act.press("Ask", ask -> okay.desk.puzzle.PuzzleText.classicEn),
-      Act.press("Ask", ask -> odd), Act.press("Spaniard is in the same house as dog."))
+      Act.press("Ask", ask -> odd), Act.press("Spaniard is in the same house as dog."), Act.press("Show the explanation"))
     assert(played.problems.isEmpty, played.problems.toString)
     val shown = played.at.toList.flatMap(_.parts).mkString(" ")
     assert(shown.contains("Japanese — zebra."), shown.take(3000))

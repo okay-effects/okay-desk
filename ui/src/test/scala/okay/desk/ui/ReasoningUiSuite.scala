@@ -168,7 +168,8 @@ class ReasoningUiSuite extends munit.FunSuite:
   test("the phone researches premises and rules and renders only the compiled conclusion with its proof"):
     phone = true
     synthesis = "deduce"
-    val p = play(Act.press("Ask", ask -> "Is Moby an animal?"), Act.press("Use online sources"))
+    val p = play(Act.press("Ask", ask -> "Is Moby an animal?"), Act.press("Use online sources"),
+      Act.press("Show the explanation"))
     val text = shown(p)
     assert(text.contains("Proved: moby is an animal.") && text.contains("Exact inlay Horn inference"), text)
     assert(text.contains("Every whale is a mammal.") && text.contains("Every mammal is an animal."), text)
@@ -192,7 +193,8 @@ class ReasoningUiSuite extends munit.FunSuite:
     assertEquals(requests.count(_.contains("wikipedia.org")), 1)
     disk.clear()
     readFacts = _ => Right(Vector.empty)
-    val unknown = play(Act.press("Ask", ask -> "Is Moby a fish?"), Act.press("Use online sources"))
+    val unknown = play(Act.press("Ask", ask -> "Is Moby a fish?"), Act.press("Use online sources"),
+      Act.press("Show the explanation"))
     assert(shown(unknown).contains("Unknown: the premises do not establish"), shown(unknown))
     assert(shown(unknown).contains("Read premise/rule") && shown(unknown).contains("curid=50&oldid=9"), shown(unknown))
 
@@ -231,7 +233,7 @@ class ReasoningUiSuite extends munit.FunSuite:
       Right(quotes.filter(_.text == sentence).map(q =>
         FactReader.Reading(q.source, q.text, "fact", FactReader.Span(0, 4), FactReader.Span(26, 31))))
     val p = play(Act.press("Ask", ask ->
-      (sentence + " Every whale is an animal. Is Zeno an animal?")))
+      (sentence + " Every whale is an animal. Is Zeno an animal?")), Act.press("Show the explanation"))
     assert(asked.exists(q => q.source == "input:question" && q.text == sentence))
     assertEquals(loaded, Vector(Model.default))
     assert(shown(p).contains("Proved: zeno is an animal."), shown(p))

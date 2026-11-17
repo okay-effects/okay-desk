@@ -33,6 +33,8 @@ object App:
     /** The finite-constraint tool's reading and lessons, used inside the same conversation. */
     puzzle: Puzzles.State = Puzzles.State(), reasoning: Reasoning.State = Reasoning.State(),
     visibleProofs: Set[Int] = Set.empty,
+    /** the questions (their entries' indices) whose explanation is shown: the answer alone otherwise */
+    explained: Set[Int] = Set.empty,
     /** the collection of logic tasks on the examples screen: the page, the class, the language, the task answered */
     tasks: TaskList.View = TaskList.View(),
     /** a task of the collection the desk is solving in the chat: checked once the desk has said its answer */
@@ -54,6 +56,8 @@ object App:
     case CopyChat
     case ClearChat
     case ToggleProof(index: Int)
+    /** a question's explanation shown or folded (its entry's index) */
+    case ToggleExplanation(index: Int)
     /** files chosen: each its path and its text */
     case Opened(files: List[(String, String)])
     case OpenUrl(url: String)
@@ -173,12 +177,14 @@ object App:
         perform[Clipboard](Clipboard.Copy(transcript(s))).map(ok => s.copy(problem = None,
           notice = Some(if ok then "Chat copied." else "Could not copy the chat. Clipboard access is unavailable.")))
       case Msg.ClearChat => pure(cleared.copy(place = "chat", log = Vector.empty, asking = None, hole = None, told = None,
-        chatVersion = s.chatVersion + 1, visibleProofs = Set.empty,
+        chatVersion = s.chatVersion + 1, visibleProofs = Set.empty, explained = Set.empty,
         puzzle = Puzzles.State(), reasoning = Reasoning.State(online = s.reasoning.online)))
       case Msg.ToggleProof(index) =>
         if !s.log.lift(index).exists(_.role == "proof") then pure(cleared)
         else pure(cleared.copy(visibleProofs = if s.visibleProofs(index) then s.visibleProofs - index
           else s.visibleProofs + index))
+      case Msg.ToggleExplanation(index) =>
+        pure(cleared.copy(explained = if s.explained(index) then s.explained - index else s.explained + index))
       case Msg.AllowSources => Reasoning.allow[R](cleared)
       case Msg.Offline => pure(Reasoning.offline(cleared))
       case Msg.ConstraintForm(clue, form) => Puzzles.chosen[R](cleared, clue, form).flatMap(Reasoning.constraints[R])
@@ -310,6 +316,14 @@ object App:
     if s.chooser || s.modelName == name then pure(s)
     else if s.model.nonEmpty then Model.unload[R].map(_ => s.copy(model = None, modelName = name))
     else pure(s.copy(modelName = name))
+  /** the reading said back ("Understood as: …", «Понял так: …») — part of an answer's explanation */
+  def understood(e: Entry): Boolean =
+    e.role == "model" && (e.text.startsWith("Understood as") || e.text.startsWith("Понял так"))
+  /** the questions (their entries' indices) whose answer has an explanation to fold: a note, a program, a reading */
+  def explanations(s: State): Set[Int] =
+    val question = s.log.indices.map(i => s.log.lastIndexWhere(_.role == "user", i))
+    s.log.indices.collect { case i if question(i) >= 0 && i != question(i) && s.log(i).role != "proof" &&
+      (s.log(i).note.nonEmpty || s.log(i).program.nonEmpty || understood(s.log(i))) => question(i) }.toSet
   /** the model a question is for: the frame reader when data is open, else the student */
   def forData(s: State): String = if s.tables.nonEmpty then Model.frames else Model.default
 
@@ -516,18 +530,38 @@ object App:
       else List(pickLine, dataNote)
     // while it loads for a question, its progress under that question too
     val loadingLine: List[Part] = if !s.chooser && loading.nonEmpty && s.log.nonEmpty then List(modelLine) else Nil
-    val log = s.log.zipWithIndex.map { (e, i) =>
+    // THE ANSWER FIRST, ITS EXPLANATION FOLDED (the operator, 2026-11-17): a question's entries show its answer — the
+    // result and the sentence about it — and fold how it was got (the reading said back, the notes, the program)
+    // under one press; each entry belongs to the question before it
+    val question = s.log.indices.map(i => s.log.lastIndexWhere(_.role == "user", i)).toVector
+    val explaining = explanations(s)
+    val lastOf = s.log.indices.groupBy(question).map((q, is) => q -> is.max)
+    val log = s.log.zipWithIndex.flatMap { (e, i) =>
       // a question typed as constraints is code; a task in sentences is read as text
       val code = e.role == "result" || e.role == "user" && okay.desk.know.Knowledge.isConstraints(e.text) &&
         !e.text.contains(". ")
-      Part.block(e.role)((List(if code then Part.code(e.text) else if e.role == "user" || e.role == "model" && e.text.contains("\n") then Part.block("lines")(e.text.split("\n").toList.map(Part.text)*) else Part.text(e.text)) ++
-        e.note.toList.map(n => if e.role == "result" && n.contains("\n") then Part.code(n)
-          else Part.block("small")(n.split("\n").toList.map(Part.text)*)) ++
+      val folded = explaining(question(i)) && !s.explained(question(i)) && e.role != "proof"
+      val toggle = if explaining(question(i)) && lastOf(question(i)) == i then
+        List(Part.block("explain")(Part.slot(s"explain-${question(i)}"))) else Nil
+      if folded && understood(e) then toggle
+      else Part.block(e.role)((List(if code then Part.code(e.text) else if e.role == "user" || e.role == "model" && e.text.contains("\n") then Part.block("lines")(e.text.split("\n").toList.map(Part.text)*) else Part.text(e.text)) ++
+        (if folded then Nil else e.note.toList.map(n => if e.role == "result" && n.contains("\n") then Part.code(n)
+          else Part.block("small")(n.split("\n").toList.map(Part.text)*))) ++
         e.url.toList.map(url => Part.Link("Source", url)) ++
         (if e.role == "proof" && !s.visibleProofs(i) then List(Part.slot(s"proof-$i"))
+         else if folded then Nil
          else e.program.toList.map(p => Part.code("the program", p.split("\n").toList, Set.empty)) ++
-           (if e.role == "proof" then List(Part.slot(s"proof-$i")) else Nil)))*)
+           (if e.role == "proof" then List(Part.slot(s"proof-$i")) else Nil)))*) :: toggle
     }
+    // a question's explanation shown or folded: the button in its question's language
+    val explainButtons = if loading.isDefined then Nil else explanations(s).toList.sorted.map { q =>
+      val ru = okay.desk.statement.Reader.russian(s.log(q).text)
+      val label = (s.explained(q), ru) match
+        case (true, true) => "Скрыть объяснение"
+        case (true, false) => "Hide the explanation"
+        case (false, true) => "Показать объяснение"
+        case (false, false) => "Show the explanation"
+      Button(label, Style.Plain)(Msg.ToggleExplanation(q): Msg).at(s"explain-$q") }
     val proofButtons = if thinking.isDefined || loading.isDefined then Nil else s.log.zipWithIndex.collect {
       case (e, i) if e.role == "proof" =>
         Button(if s.visibleProofs(i) then "Hide proof" else "Show proof")(Msg.ToggleProof(i): Msg).at(s"proof-$i")
@@ -566,7 +600,7 @@ object App:
          else List(Button.submit("Load the model", models, Style.Plain)(Msg.Load(_): Msg))) ++
         (if s.chooser && s.model.isDefined && loading.isEmpty && thinking.isEmpty then
           List(Button("Unload model")(Msg.Unload: Msg).at("model-actions")) else Nil) ++
-        choices ++ research ++ constraints ++ chatButtons ++ proofButtons ++
+        choices ++ research ++ constraints ++ chatButtons ++ proofButtons ++ explainButtons ++
         (if s.reasoning.online then List(Button("Turn off online sources")(Msg.Offline: Msg).at("data")) else Nil) ++
         (if thinking.isDefined then Nil else List(Button.submit("Ask", questionInput)(Msg.Ask(_): Msg))))*)
 

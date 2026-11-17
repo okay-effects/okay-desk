@@ -192,7 +192,10 @@ object Look:
        |body .okay-face > div > nav.okay-actions > form { order: 1; }
        |body .okay-face .okay-mark-user, body .okay-face .okay-mark-model, body .okay-face .okay-mark-system,
        |body .okay-face .okay-mark-result, body .okay-face .okay-mark-source, body .okay-face .okay-mark-proof,
-       |body .okay-face .okay-mark-clarify, body .okay-face .okay-mark-check { order: 2; }
+       |body .okay-face .okay-mark-clarify, body .okay-face .okay-mark-check, body .okay-face .okay-mark-explain { order: 2; }
+       |/* an answer's explanation folded: its button small, under the answer */
+       |body .okay-face .okay-mark-explain { margin: 0 0 6px; }
+       |body .okay-face .okay-mark-explain .okay-ref { font-size: 13px; padding: 4px 10px; min-height: 0; }
        |/* the check of an answer to a task of the collection: a person's under the form, the desk's in the chat */
        |body .okay-face .okay-mark-check { padding: 8px 12px; border-radius: 12px; margin: 4px 0; font-weight: 600;
        |  border: 1px solid var(--okay-accent); }

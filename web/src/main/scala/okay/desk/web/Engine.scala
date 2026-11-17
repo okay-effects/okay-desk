@@ -922,8 +922,21 @@ object Engine:
     val lang = if ru then "ru" else "en"
     println(s"frame links: ${tables.toVector.map((n, t) => s"$n -> ${Links.of(t, question).mkString(", ")}").mkString("; ")}")
     type Out = Either[(Vector[String], Vector[String]), FrameReading.Reading]
-    def run(p: Out ! AsyncRead): Future[Out] = Read.future(p, [X] => (op: Read[X]) => {
-      val done = traced(op); chunked(op).map { x => done(x); x } })
+    // THE READING SEEN AS IT GOES (the operator: "nothing happens until the answer"): each line chosen said in
+    // words among the steps at once; before each weighing the page is drawn (two frames), so a phone shows the
+    // question and the steps while its GPU works, not a frozen screen
+    val next = if ru then "читаю дальше…" else "reading on…"
+    def drawn(): Future[Unit] =
+      val p = scala.concurrent.Promise[Unit]()
+      dom.window.requestAnimationFrame(_ => dom.window.requestAnimationFrame(_ => p.success(())))
+      p.future
+    said = said :+ next
+    def run(p: Out ! AsyncRead): Future[Out] = Read.future(p, [X] => (op: Read[X]) => op match
+      case Read.Note(line) =>
+        said = said.init :+ FrameSay.say(Vector(line), lang) :+ next; wake()
+        Future.successful(().asInstanceOf[X])
+      case _: Read.Score => drawn().flatMap { _ => val done = traced(op); chunked(op).map { x => done(x); x } }
+      case _ => val done = traced(op); chunked(op).map { x => done(x); x })
     // a reader of the two: its adapter in use, the prefix cache of the other let go (its states are another's)
     def by(reader: Int)(p: => Out ! AsyncRead): Future[Out] =
       framesAdapted.foreach { a => if a.current != reader then { a.current = reader; on.clearCache() } }

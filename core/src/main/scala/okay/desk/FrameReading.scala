@@ -148,7 +148,9 @@ object FrameReading:
             case (None, asked) => pure[Reading, R](so.copy(margins = so.margins :+ margin, asked = asked,
               unresolved = true))
             case (Some(line), asked) =>
-              Read.encode[R](line).flatMap(t => step(tables, question, doubt, maxLines, link, guess, prune,
+              // the line said as soon as it is chosen (a page shows the reading going on)
+              Read.note[R](line).flatMap(_ => Read.encode[R](line)).flatMap(t => step(tables, question, doubt,
+                maxLines, link, guess, prune,
                 (context :+ newline) ++ t, newline, end,
                 Reading(so.lines :+ line, so.margins :+ margin, asked)))
         yield next
