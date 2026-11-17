@@ -47,9 +47,32 @@ object Engine:
   var status: String => Unit = _ => ()
 
   /** The native prefix cache is one mutable resource; independent CPU tools do not acquire this lane. */
-  private def reading[X](op: Read[X]): Future[X] = op match
-    case _: Read.States | _: Read.Logits => Execution.model.submit(on.handler(op))
-    case _ => on.handler(op)
+  private def reading[X](op: Read[X]): Future[X] =
+    val done = traced(op)
+    (op match
+      case _: Read.States | _: Read.Logits => Execution.model.submit(on.handler(op))
+      case _ => chunked(op)).map { x => done(); x }
+  private def chunked[X](op: Read[X]): Future[X] = on.handler(op)
+  /** THE LAST READ, KEPT (local storage, written before and after each): a phone that kills the tab mid-forward leaves
+   * what it was doing — the op, its sizes, the GPU bytes — for the next visit to say (scripts/phonebench) */
+  private var reads = 0
+  private def traced(op: Read[?]): () => Unit =
+    reads += 1
+    val what = op match
+      case Read.Score(context, options) => s"score context ${context.length} options ${options.size} " +
+        s"(${options.map(_.length).sum} tokens)"
+      case Read.States(ids, at) => s"states ${ids.length} at ${at.size}"
+      case Read.Logits(ids) => s"logits ${ids.length}"
+      case other => other.productPrefix
+    val (gpu, _) = memoryInfo()
+    val t0 = js.Date.now()
+    def put(s: String): Unit = try dom.window.localStorage.setItem("okay-desk.read", s) catch case _: Exception => ()
+    put(s"read $reads: $what, GPU ${gpu / 1048576} MB — begun")
+    () =>
+      val s = s"read $reads: $what, GPU ${memoryInfo()._1 / 1048576} MB — done in ${(js.Date.now() - t0).toInt} ms"
+      put(s)
+      if js.Dynamic.global.window.okayTraceReads.asInstanceOf[js.UndefOr[Boolean]].contains(true) then
+        println("model " + s)
 
   /** THE DISK'S CACHE (the browser's Cache API: its storage on disk): a file of the model fetched once and kept, so the
    * next visit reads it from the device; a quota refused is no failure — the file is fetched again next time */
@@ -350,6 +373,7 @@ object Engine:
         case gl: OnWebGl2 => () => (gl.bytes, gl.peakBytes)
         case _ => () => (0L, 0L)
       on = OnQwen(model, tok, if understanding then config.layers else layer, ensure)
+      if phone then on.parts = 16   // a weighing in parts of 16 options a forward (OnQwen.parts; the iPhone)
       statementReader = stated.filter(_.heads.d == config.hidden)
       plainReader = plain.filter(_.heads.d == config.hidden)
       statementGate = gated
@@ -856,7 +880,8 @@ object Engine:
     val lang = if ru then "ru" else "en"
     println(s"frame links: ${tables.toVector.map((n, t) => s"$n -> ${Links.of(t, question).mkString(", ")}").mkString("; ")}")
     type Out = Either[(Vector[String], Vector[String]), FrameReading.Reading]
-    def run(p: Out ! AsyncRead): Future[Out] = Read.future(p, [X] => (op: Read[X]) => on.handler(op))
+    def run(p: Out ! AsyncRead): Future[Out] = Read.future(p, [X] => (op: Read[X]) => {
+      val done = traced(op); chunked(op).map { x => done(); x } })
     // a reader of the two: its adapter in use, the prefix cache of the other let go (its states are another's)
     def by(reader: Int)(p: => Out ! AsyncRead): Future[Out] =
       framesAdapted.foreach { a => if a.current != reader then { a.current = reader; on.clearCache() } }

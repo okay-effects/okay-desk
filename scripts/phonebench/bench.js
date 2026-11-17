@@ -198,13 +198,13 @@
     document.body.appendChild(panel);
     // the device dropped the page: where the bench was, the page's last stage and GPU bytes (the beat below)
     if (saved) log("reloaded", { after: saved.step, lastBeat: sessionStorage.getItem("phonebench-beat"),
-      pageStage: localStorage.getItem("okay-desk.stage") });
+      pageStage: localStorage.getItem("okay-desk.stage"), lastRead: localStorage.getItem("okay-desk.read") });
     // THE BEAT: the page's stage and GPU bytes kept every second — a killed tab tells them on its reload
     let beat = "";
     setInterval(() => {
       const g = window.okayGpu ? window.okayGpu() : [0, 0];
       const now = (localStorage.getItem("okay-desk.stage") || "-") + " | GPU " + Math.round(g[0] / 1048576) +
-        " MB, peak " + Math.round(g[1] / 1048576) + " MB";
+        " MB, peak " + Math.round(g[1] / 1048576) + " MB | " + (localStorage.getItem("okay-desk.read") || "");
       if (now !== beat) { beat = now; sessionStorage.setItem("phonebench-beat", ms() + " ms: " + now); log("beat", { now }); }
     }, 1000);
     if (state.step === "start") {

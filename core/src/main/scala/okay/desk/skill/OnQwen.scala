@@ -23,6 +23,8 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
   def close(): Unit =
     clearCache()
     model.c.close()
+  /** the options of one weighing at most, a forward (0: all at once) — a phone sets it (Engine) */
+  var parts: Int = 0
   private var cached: Option[(Array[Int], model.Cache)] = None
   /** the forward: after the cached prefix when `ids` begins with it, else whole and kept */
   private def run(ids: Array[Int], at: Seq[Int], withLogits: Boolean): Future[(Vector[Array[Float]], Array[Float])] =
@@ -66,8 +68,14 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
           model.run(head, layer, Nil, withLogits = false, None, keep = true).map { (_, _, next) =>
             cached = next.map(head -> _); next.get }
       // (the options' tokens' embedding blocks loaded first: the head knows only the loaded rows)
-      ensure(context ++ options.flatten).flatMap(_ => ready)
-        .flatMap(cache => model.score(cache, context.last, options, within = true))
+      // IN PARTS (`parts` > 0, a phone): a line of many options (171 for a `where`) packed into one forward was one GPU
+      // task of minutes on an iPhone, the tab died in it; each part is normed over the tokens of all the options
+      // (`over`), so the numbers are the one forward's
+      val all = options.flatten.toArray
+      ensure(context ++ options.flatten).flatMap(_ => ready).flatMap { cache =>
+        if parts <= 0 || options.size <= parts then model.score(cache, context.last, options, within = true)
+        else options.grouped(parts).foldLeft(Future.successful(Vector.empty[Double])) { (acc, part) =>
+          acc.flatMap(got => model.score(cache, context.last, part, within = true, over = Some(all)).map(got ++ _)) } }
   def handler: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => answer[X](op)
 
   /**
