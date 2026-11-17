@@ -190,6 +190,15 @@ is a condition on rows). Three seeds, as §5.8:
 Better on the mean and on its targets, but the seeds spread wider (76–92): one seed gave the group class back. A
 counterweight pulls against the form it weighs; the seeds say how hard. Seed 2 is the best reader measured so far.
 
+### 5.10 Round 6: two more forms — NEGATIVE (2026-11-17)
+
+Round 5's mix + `FrameData --spent` (454: «Сколько я потратил на …» as a sum of money; a group under another
+column's condition, «Revenue by product in the South»). Seeds: 77 / 4 / 27, 80 / 5 / 23, 78 / 6 / 24 — mean right
+78.3 against round 5's 83.3. Its own targets were met (5, 5, 6 of 6), the group class lost again (8, 8, 13 of 14).
+Each form added by templates takes from the forms beside it: a 0.6B reader trained one epoch on a mix whose share of
+each form we set by hand. The next step is not another form but the mix itself — the forms weighed by the errors
+they fix on questions never trained on, or a second epoch — and the operator's marked questions as the measure.
+
 ## 6. The frame reader as a program over effects (2026-11-15)
 
 `FrameReading.read` (core) is a program over `Read` (the model) and `Person` (the one asked): one program for the
