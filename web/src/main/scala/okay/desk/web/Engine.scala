@@ -372,8 +372,9 @@ object Engine:
           .recover { case _ => None }
       gpu <- OnWebGpu.create()
       device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 64L * 1048576 else 96L * 1048576,
-        headsAtOnce = "heads=([0-9]+)".r.findFirstMatchIn(dom.window.location.search).map(_.group(1).toInt)
-          .getOrElse(if phone then 2 else 16), maximum = if phone then 768L * 1048576 else 1536L * 1048576,
+        // a phone: 2 heads a draw — 16 broke the iPhone's numbers and lost its context; ?heads=N elsewhere
+        headsAtOnce = if phone then 2 else "heads=([0-9]+)".r.findFirstMatchIn(dom.window.location.search)
+          .map(_.group(1).toInt).getOrElse(16), maximum = if phone then 768L * 1048576 else 1536L * 1048576,
         compactCache = phone)   // the prefix cache in halves on a phone, every model: half its memory (the iPhone)
         .left.map(more => s"$why; $more"))
       c = device.fold(_ => OnCpu(), identity)
