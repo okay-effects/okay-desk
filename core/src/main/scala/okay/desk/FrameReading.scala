@@ -80,6 +80,23 @@ object FrameReading:
         case None => true }
     if kept.isEmpty then options else kept
 
+  /** THE SECTION FIRST (`sections` > 0, theory.md E6): a line of many options over several sections (where, group,
+   * order, limit, keep, end) weighs the sections' heads first ("where:", "end"…); where the best head leads the
+   * second by `sections` or more, only its section's options are weighed — `end` chosen costs a weighing of the heads,
+   * not of 63 options (a phone: ~5 s a line). Less sure, every option as before */
+  var sections: Double = 0.0
+  private def section(o: String): String = if o == Frame.end then o else o.takeWhile(_ != ':') + ":"
+  private def narrowed[R[_]](options: Vector[String], context: Array[Int], newline: Int, end: Int)(
+      using In[Read, R]): Vector[String] ! R =
+    val heads = options.map(section).distinct
+    if sections <= 0 || heads.size < 2 || options.size <= 12 then pure(options)
+    else
+      for
+        tokens <- Read.each[String, Array[Int], R](heads)(h => Read.encode[R](h))
+        raw <- Read.score[R](context :+ newline, heads.zip(tokens).map((h, t) => if h == Frame.end then t :+ end else t))
+        ranked = heads.zip(raw).sortBy(-_._2)
+      yield if ranked.head._2 - ranked(1)._2 >= sections then options.filter(section(_) == ranked.head._1) else options
+
   /** `start`: lines decided already (a person's choice where two readers parted) — read on from them */
   def read[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt] = None, maxLines: Int = 16,
       start: Vector[String] = Vector.empty, link: Double = 0.0,
@@ -102,11 +119,12 @@ object FrameReading:
     else
       // PRUNED (`prune`, theory.md E5): a condition on a text value the question does not name is not weighed at all —
       // `guess` took it down by nats anyway; the where lines of 171 options were most of a question's time on a phone
-      val options = if prune then pruned(Frame.next(so.lines, tables, question), so, tables, question)
+      val all = if prune then pruned(Frame.next(so.lines, tables, question), so, tables, question)
         else Frame.next(so.lines, tables, question)
-      if options.isEmpty then pure(so.copy(lines = so.lines :+ Frame.end))
+      if all.isEmpty then pure(so.copy(lines = so.lines :+ Frame.end))
       else
         for
+          options <- narrowed(all, context, newline, end)
           tokens <- Read.each[String, Array[Int], R](options)(o => Read.encode[R](o))
           // each option's tokens and the line's end after them (a newline; the turn's end after `end`)
           raw <- Read.score[R](context :+ newline,

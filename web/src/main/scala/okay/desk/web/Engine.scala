@@ -412,9 +412,9 @@ object Engine:
         case gl: OnWebGl2 => () => (gl.bytes, gl.peakBytes)
         case _ => () => (0L, 0L)
       on = OnQwen(model, tok, if understanding then config.layers else layer, ensure)
-      // a weighing in parts a forward (OnQwen.parts; the iPhone): 48 options of a trie are about the rows of 16 packed
-      // whole (~110), the size the iPhone finished; fewer parts, fewer passes over the weights
-      if phone then on.parts = 48
+      // a weighing in parts a forward (OnQwen.parts; the iPhone): a pruned line's 64 options in one pass (~140 trie rows;
+      // 1037 rows in one died), fewer passes over the weights
+      if phone then on.parts = 64
       on.checkTrie = dom.window.location.search.contains("checktree")
       statementReader = stated.filter(_.heads.d == config.hidden)
       plainReader = plain.filter(_.heads.d == config.hidden)

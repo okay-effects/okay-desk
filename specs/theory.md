@@ -207,3 +207,17 @@ it is about speed, by seconds a question on the phone profile.
 
 The order, by cost and expected gain: E4 (no training, one line of scoring) → E5 (no training) → E2 / E6 (the
 strategy) → E1 (the words as options) → E7 (speed) → E8 (the person) → E3 / E9 (training) → 8 (the code).
+
+### 11.x Measured 2026-11-17 (the phone's speed, specs/phone.md §4.3–4.4)
+
+- **E7 the trie — done, exact.** Options weighed as a trie of their beginnings (`Qwen3Compute.scoreTree`): a `where`
+  line's rows 1037 → 317, the numbers the segments' (law on MLX 2e-6; on the iPhone 0). Its rows also grow the cache by
+  the chosen line with no forward (`extend`, law 7e-6) — ~5% on the iPhone (it is bound by arithmetic, not passes).
+- **E5 exact first (pruning) — done, nearly exact.** A condition on a value the question does not name is not weighed
+  (a text value not linked, a number it does not write; a column of ≤ 4 values keeps its own): a line 172 → 64
+  options; Everyday 107 of 108 as before (one asked → wrong: its runner-up had been pruned).
+- **The section first (an E6 try) — NEGATIVE.** Weighing the sections' heads ("where:", "end") first and only the
+  surest section's options: Everyday −2 right / +2 wrong in each language even at a bar of 2 nats. The bank questions
+  ("my total income" = where type = in) lost their condition: the head "where:" says nothing; the evidence is in the
+  condition's last tokens. A line is decided by its whole options, not by a prefix of them (`FrameReading.sections`,
+  off).
