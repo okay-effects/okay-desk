@@ -166,10 +166,18 @@ object Engine:
    * blocks, the embedding is in the weights' files as before */
   private var blocksOf: Option[(String, Map[String, String], Array[Byte], okay.llm.qwen.Rows.Blocks)] = None
   private val wanted = Vector("common", "latin-en", "cyrillic")
+  /** a model directory's revision (`?r=…`, its manifest's) and a file's address with it */
+  private var revisions = Map.empty[String, String]
+  private def at(dir: String, file: String): String = s"$dir/$file" + revisions.getOrElse(dir, "")
+  /** the directory's files of another revision let go from the disk (all but its manifests: small, by the page) */
+  private def forget(dir: String, rev: String): Unit = cache("okay-desk-model").foreach(_.foreach { c =>
+    c.keys().asInstanceOf[js.Promise[js.Array[js.Dynamic]]].toFuture.foreach(_.foreach { req =>
+      val url = req.url.asInstanceOf[String]
+      if url.contains(s"/$dir/") && !url.endsWith(rev) && !url.contains("manifest.json") then c.delete(req) }) })
   private def loadBlock(dir: String, name: String): Future[Unit] = blocksOf match
     case Some((_, files, _, rows)) if files.contains(name) =>
       stage(s"the embedding: the $name block…")
-      fetch(s"$dir/${files(name)}").map { b =>
+      fetch(at(dir, files(name))).map { b =>
         val (ids, q) = okay.llm.qwen.Vocab.readBlock(new Safetensors(TypedArrayBuffer.wrap(b))); rows.add(ids, q) }
     case _ => Future.unit
   /** the blocks of every token of `ids` loaded (fetched if not yet), the head made again when any was */
@@ -239,7 +247,7 @@ object Engine:
    * so a phone's tab never holds the files together (the operator's iPhone, specs/phone.md §4.1) */
   private def weights(dir: String, vocab: Int, onto: Option[okay.llm.compute.Preloaded])
       : Future[(Tensors, Option[okay.llm.qwen.Rows])] =
-    fetch(s"$dir/manifest.json").map(b => Option(text(b))).recover { case _ => None }.flatMap {
+    fetch(Execution.versioned(s"$dir/manifest.json")).map(b => Option(text(b))).recover { case _ => None }.flatMap {
       case None => fetch(s"$dir/model.safetensors").map(b => (new Safetensors(TypedArrayBuffer.wrap(b)), None))
       case Some(t) =>
         val m = okay.effects.json.Json.fromText(t) match
@@ -249,6 +257,13 @@ object Engine:
           case Some(okay.effects.json.Json.Arr(xs)) => xs.collect { case okay.effects.json.Json.Str(s) => s }
           case _ => Vector.empty
         val files = strings("files")
+        // THE WEIGHTS' REVISION (the manifest's, publish.sh): in each file's address, so a device that kept an older
+        // model's files fetches the new ones — and lets the older go
+        val rev = m.get("revision") match
+          case Some(okay.effects.json.Json.Str(r)) => s"?r=$r"
+          case _ => ""
+        revisions += dir -> rev
+        if rev.nonEmpty then forget(dir, rev)
         val blocks = m.get("embedding") match
           case Some(okay.effects.json.Json.Obj(fs)) => fs.collect { case (k, okay.effects.json.Json.Str(v)) => k -> v }.toMap
           case _ => Map.empty[String, String]
@@ -259,11 +274,11 @@ object Engine:
             // ON WEBGL2: the file read into the one buffer of the load and each weight sent from its bytes
             case (Some(device), Some(k)) if device.base.isInstanceOf[OnWebGl2] =>
               val into = shared.getOrElse { val u = new Uint8Array(64 * 1048576); shared = Some(u); u }
-              fetchInto(s"$dir/${f._1}", into).map { n =>
+              fetchInto(at(dir, f._1), into).map { n =>
                 putFile(k, device, device.base.asInstanceOf[OnWebGl2],
                   new Safetensors(TypedArrayBuffer.wrap(into.buffer, 0, n)), into.buffer)
                 got }
-            case _ => fetch(s"$dir/${f._1}").map { b =>
+            case _ => fetch(at(dir, f._1)).map { b =>
               val st = new Safetensors(TypedArrayBuffer.wrap(b))
               (onto, kept) match
                 case (Some(device), Some(k)) => k.add(device, st); got   // on the device now; the file let go
@@ -275,7 +290,7 @@ object Engine:
           if blocks.isEmpty then Future.successful(None)
           else
             val indexFile = m.get("index") match { case Some(okay.effects.json.Json.Str(s)) => s; case _ => "embed-index.bin" }
-            fetch(s"$dir/$indexFile").flatMap { ib =>
+            fetch(at(dir, indexFile)).flatMap { ib =>
               val rows = okay.llm.qwen.Rows.Blocks(vocab, 1024)
               blocksOf = Some((dir, blocks, new Int8Array(ib).toArray, rows))
               wanted.filter(blocks.contains).foldLeft(Future.unit)((acc, b) => acc.flatMap(_ => loadBlock(dir, b))).map(_ => Some(rows))

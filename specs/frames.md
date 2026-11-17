@@ -153,6 +153,30 @@ Two readers (seeds 1, 2) agreeing, the conformal bar for ε = 2% set on the cali
   language's, not the size's.
 - For the phone: the 1.7B at 4 bits is ≈ 1 GB — whether WebGL2 on an iPhone carries it is P2/P3's question.
 
+### 5.8 Round 4: the group said without its sum (2026-11-17)
+
+Everyday's largest class of errors under round 3 (9 of 25 wrong): «Hours by role», «Spending by category, largest
+first», «Who worked the most hours?» read as `answer: rows`. Not greedy reading — one line ahead changed none of them
+(theory.md, negative) — but the data: the teacher's pairs had such groups only with "total"/"sum" said, and "which
+X has the most" only over single rows. `FrameData.groups` (`FrameData --groups`, 800 texts, en + ru templates over
+the domains' tables, never Everyday's): a measure by a category, by it ordered, the most / the least of a category.
+Round 3's mix + these, one epoch, three seeds; Everyday as the page reads (link 2, guess 2, the dialogue at 0.3,
+pruned), right / asked / wrong, en + ru (108):
+
+| | seed 1 | seed 2 | seed 3 | mean right | the group class (7 questions × 2) |
+|---|---|---|---|---|---|
+| round 3 | 72 / 11 / 25 | 79 / 12 / 17 | 64 / 6 / 38 | 71.7 | 2, 9, 5 of 14 |
+| round 4 | 83 / 5 / 20 | 74 / 7 / 27 | 82 / 4 / 22 | 79.7 | 13, 14, 13 of 14 |
+
+The class is closed on every seed; the mean +8 right, −3.7 wrong, fewer asked. New errors where the forms reached
+too far: «Average units per sale» (per a row, not a group) read as a group; «Who got less than 3 in math?» as the
+least sum. The next data: "per <the table's row>" and "less than N" against them.
+
+The phone's reader (round 4 seed 1 merged, `~/.cache/okay-desk/frame-0.6b-r4`): 85 / 6 / 17 against round 3
+merged 76 / 10 / 22. (A first measure of the two merged models gave the same numbers to the last digit: mlx-scala's
+aligned copy of an unaligned file was named by its name and size — two merged models' `model.safetensors`, one size,
+shared one copy. Fixed in mlx-scala 0.1.0, republished: the copy named by the file's path and time too.)
+
 ## 6. The frame reader as a program over effects (2026-11-15)
 
 `FrameReading.read` (core) is a program over `Read` (the model) and `Person` (the one asked): one program for the

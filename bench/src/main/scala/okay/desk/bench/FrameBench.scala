@@ -45,7 +45,9 @@ object FrameBench:
 
   def main(args: Array[String]): Unit =
     val repo = sys.env.getOrElse("FRAME_MODEL", "mlx-community/Qwen3-0.6B-4bit")
-    val dir = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
+    // a repository in the cache, or a model directory (a merged reader: FrameMerge's)
+    val dir = Models.snapshot(repo).orElse(Some(Path.of(repo)).filter(Files.isDirectory(_)))
+      .getOrElse(sys.error(s"$repo not in the cache"))
     val chat = Chat.load(dir); val model = Model.load(dir, mapped = true)
     sys.env.get("FRAME_ADAPTER").foreach(f => Lora.attach(model.asInstanceOf[Adaptable], f))
     val set = sys.env.get("FRAME_SET").fold(everyday)(f => taught(Path.of(f)))
