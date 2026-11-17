@@ -54,9 +54,7 @@ val here = Path.of(sys.props.getOrElse("bench.dir", "scripts/phonebench"))
     if body.nonEmpty then x.getResponseBody.write(body)
     x.close()
 
-  val server = HttpServer.create(InetSocketAddress(port), 64)
-  server.setExecutor(Executors.newFixedThreadPool(16))
-  server.createContext("/", x =>
+  val handler: com.sun.net.httpserver.HttpHandler = x =>
     try
       val path = x.getRequestURI.getPath
       if path != "/log" then println(s"${LocalTime.now.withNano(0)} ${x.getRemoteAddress.getAddress.getHostAddress} ${x.getRequestMethod} ${x.getRequestURI}")
@@ -87,6 +85,18 @@ val here = Path.of(sys.props.getOrElse("bench.dir", "scripts/phonebench"))
     catch case e: Throwable =>
       println(s"error ${x.getRequestURI}: $e")
       try x.close() catch case _: Throwable => ()
-  )
-  server.start()
+  val server = HttpServer.create(InetSocketAddress(port), 64)
+  server.setExecutor(Executors.newFixedThreadPool(16)); server.createContext("/", handler); server.start()
   println(s"phone bench on port $port; log $log")
+  // HTTPS on the next port (-Dbench.keystore=<PKCS12>, password "phonebench"): a secure context — the page's Cache
+  // API (the model not fetched again next time) and the Wake Lock (the screen kept on); the phone accepts the
+  // self-signed certificate once
+  for ks <- sys.props.get("bench.keystore") do
+    val store = java.security.KeyStore.getInstance("PKCS12")
+    store.load(Files.newInputStream(Path.of(ks)), "phonebench".toCharArray)
+    val keys = javax.net.ssl.KeyManagerFactory.getInstance("SunX509"); keys.init(store, "phonebench".toCharArray)
+    val tls = javax.net.ssl.SSLContext.getInstance("TLS"); tls.init(keys.getKeyManagers, null, null)
+    val secure = com.sun.net.httpserver.HttpsServer.create(InetSocketAddress(port + 1), 64)
+    secure.setHttpsConfigurator(com.sun.net.httpserver.HttpsConfigurator(tls))
+    secure.setExecutor(Executors.newFixedThreadPool(16)); secure.createContext("/", handler); secure.start()
+    println(s"phone bench on https port ${port + 1}")
