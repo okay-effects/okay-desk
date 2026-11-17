@@ -152,7 +152,7 @@ object Model:
     // the model the student was distilled from, to compare them: the same readers on its own layer-19 states
     "readers-full" -> "Qwen3 0.6B as released, 28 layers + the same readers at its layer 19 (320 MB, no generation)",
     // the frame reader (specs/frames.md): the formal model of a question built by choices, a doubt asked with buttons
-    "readers-frames" -> "Qwen3 0.6B frame reader: the question's formal model built by choices (335 MB)",
+    "readers-frames" -> "Qwen3 0.6B frame reader: the question's formal model built by choices (~330 MB)",
     interpreter -> "Qwen3 0.6B, 28 layers + program adapter (~305 MiB, experimental)",
     "Qwen3-1.7B-q4f16_1-MLC" -> "Qwen3 1.7B (~1 GB, generates)",
     "Qwen3-0.6B-q4f16_1-MLC" -> "Qwen3 0.6B (~0.4 GB, generates)",

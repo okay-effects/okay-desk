@@ -500,7 +500,9 @@ object App:
       Part.slot("data"))
     // THE MODEL IN THE CHAT, where no person chooses it: which one this browser got and how it is — not loaded
     // yet, loading (its progress), loaded (on which device) — the first line of the conversation
-    val modelLine = Part.block("system")(Part.text(s"Model: ${Model.choices.toMap.getOrElse(s.modelName, s.modelName)}"),
+    // not loaded yet: the model the open data will want (a data question loads the frame reader), not the last one
+    val shown = if !s.chooser && s.model.isEmpty && loading.isEmpty then forData(s) else s.modelName
+    val modelLine = Part.block("system")(Part.text(s"Model: ${Model.choices.toMap.getOrElse(shown, shown)}"),
       Part.block("small")(loading.fold(Part.text(s.model.fold(
         "not loaded yet — it loads by itself when a question needs it")("loaded: " + _)): Part)(words =>
         Part.info(words))))
