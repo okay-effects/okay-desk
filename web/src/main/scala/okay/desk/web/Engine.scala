@@ -373,7 +373,9 @@ object Engine:
         case gl: OnWebGl2 => () => (gl.bytes, gl.peakBytes)
         case _ => () => (0L, 0L)
       on = OnQwen(model, tok, if understanding then config.layers else layer, ensure)
-      if phone then on.parts = 16   // a weighing in parts of 16 options a forward (OnQwen.parts; the iPhone)
+      // a weighing in parts a forward (OnQwen.parts; the iPhone): 48 options of a trie are about the rows of 16 packed
+      // whole (~110), the size the iPhone finished; fewer parts, fewer passes over the weights
+      if phone then on.parts = 48
       statementReader = stated.filter(_.heads.d == config.hidden)
       plainReader = plain.filter(_.heads.d == config.hidden)
       statementGate = gated
