@@ -212,7 +212,14 @@ class TaskListSuite extends munit.FunSuite:
       val asked = runOn(Map("orders.csv" -> orders))(App.main[Row](Nil, phone = true, chooser = false),
         Map("How many orders?" -> count), Act.press("Ask", ask -> "How many orders?"))
       assert(text(asked).contains("Model: Qwen3 0.6B frame reader") && text(asked).contains("test model"), text(asked))
-      assertEquals(labels(asked).filter(_.startsWith("✓")), Nil)
+      // no step buttons; the answer's mark only
+      assertEquals(labels(asked).filter(_.startsWith("✓")), List("✓ Right"))
+      // marked right: kept on the disk, said under the answer, copied to be sent
+      val marked = runOn(Map("orders.csv" -> orders))(App.main[Row](Nil, phone = true, chooser = false),
+        Map("How many orders?" -> count), Act.press("Ask", ask -> "How many orders?"), Act.press("✓ Right"),
+        Act.press("Copy my marks"))
+      assert(text(marked).contains("Marked: right") && text(marked).contains("Marks copied: 1."), text(marked))
+      assert(!labels(marked).contains("✓ Right") && !labels(marked).contains("✗ Wrong"), labels(marked))
       val at = Tasks.entries.indexWhere(_.task == stated.head)
       val solved = run(App.loop[Row](App.State(chooser = false, place = "examples",
         tasks = TaskList.View(open = Some(at)))), Map.empty, Act.press("Solve"))

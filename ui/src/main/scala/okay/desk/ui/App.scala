@@ -35,6 +35,8 @@ object App:
     visibleProofs: Set[Int] = Set.empty,
     /** the questions (their entries' indices) whose explanation is shown: the answer alone otherwise */
     explained: Set[Int] = Set.empty,
+    /** the questions (their entries' indices) the person marked: right or wrong */
+    marked: Map[Int, Boolean] = Map.empty,
     /** the collection of logic tasks on the examples screen: the page, the class, the language, the task answered */
     tasks: TaskList.View = TaskList.View(),
     /** a task of the collection the desk is solving in the chat: checked once the desk has said its answer */
@@ -58,6 +60,10 @@ object App:
     case ToggleProof(index: Int)
     /** a question's explanation shown or folded (its entry's index) */
     case ToggleExplanation(index: Int)
+    /** an answer marked by the person: right or wrong (kept on the device, `Marks`) */
+    case Mark(index: Int, right: Boolean)
+    /** the marks kept, copied to share them */
+    case CopyMarks
     /** files chosen: each its path and its text */
     case Opened(files: List[(String, String)])
     case OpenUrl(url: String)
@@ -88,7 +94,7 @@ object App:
       In[Ui, R], In[Model, R], In[Fetch, R], In[Disk, R], In[Clipboard, R]): Unit ! R =
     for
       names <- Disk.names[R]
-      kept <- names.filterNot(_.startsWith(Clarified.prefix)).foldLeft(pure[State, R](
+      kept <- names.filterNot(n => n.startsWith(Clarified.prefix) || n == Marks.file).foldLeft(pure[State, R](
         State(phone = phone, chooser = chooser,
           modelName = if understanding || recoveredQuestion.nonEmpty then Model.interpreter else Model.auto(phone),
           log = recoveredQuestion.toVector.map(q => Entry("user", q)),
@@ -177,12 +183,35 @@ object App:
         perform[Clipboard](Clipboard.Copy(transcript(s))).map(ok => s.copy(problem = None,
           notice = Some(if ok then "Chat copied." else "Could not copy the chat. Clipboard access is unavailable.")))
       case Msg.ClearChat => pure(cleared.copy(place = "chat", log = Vector.empty, asking = None, hole = None, told = None,
-        chatVersion = s.chatVersion + 1, visibleProofs = Set.empty, explained = Set.empty,
+        chatVersion = s.chatVersion + 1, visibleProofs = Set.empty, explained = Set.empty, marked = Map.empty,
         puzzle = Puzzles.State(), reasoning = Reasoning.State(online = s.reasoning.online)))
       case Msg.ToggleProof(index) =>
         if !s.log.lift(index).exists(_.role == "proof") then pure(cleared)
         else pure(cleared.copy(visibleProofs = if s.visibleProofs(index) then s.visibleProofs - index
           else s.visibleProofs + index))
+      case Msg.Mark(index, right) =>
+        // the question's entries: it and those after it up to the next question
+        val entries = if !s.log.lift(index).exists(_.role == "user") then Vector.empty[Entry]
+          else s.log(index) +: s.log.drop(index + 1).takeWhile(_.role != "user")
+        if entries.isEmpty then pure(cleared)
+        else
+          val line = Marks.line(entries, right, s.modelName, s.tables.keys.toVector.sorted)
+          val ru = okay.desk.statement.Reader.russian(entries.head.text)
+          for
+            kept <- Disk.get[R](Marks.file)
+            all = kept.filter(_.trim.nonEmpty).fold(line)(k => k.stripSuffix("\n") + "\n" + line)
+            _ <- Disk.put[R](Marks.file, all)
+          yield cleared.copy(marked = s.marked + (index -> right), notice = Some(
+            if ru then s"Оценка сохранена (всего ${Marks.count(all)}). «Скопировать оценки» — чтобы прислать их."
+            else s"Mark kept (${Marks.count(all)} in all). \"Copy my marks\" to send them."))
+      case Msg.CopyMarks =>
+        Disk.get[R](Marks.file).flatMap {
+          case Some(text) if text.trim.nonEmpty =>
+            perform[Clipboard](Clipboard.Copy(text)).map(ok => cleared.copy(notice = Some(
+              if ok then s"Marks copied: ${Marks.count(text)}."
+              else "Could not copy the marks. Clipboard access is unavailable.")))
+          case _ => pure(cleared.copy(notice = Some("No marks yet: mark an answer right or wrong first.")))
+        }
       case Msg.ToggleExplanation(index) =>
         pure(cleared.copy(explained = if s.explained(index) then s.explained - index else s.explained + index))
       case Msg.AllowSources => Reasoning.allow[R](cleared)
@@ -541,8 +570,17 @@ object App:
       val code = e.role == "result" || e.role == "user" && okay.desk.know.Knowledge.isConstraints(e.text) &&
         !e.text.contains(". ")
       val folded = explaining(question(i)) && !s.explained(question(i)) && e.role != "proof"
+      // under an answer: its explanation's toggle and the person's mark (right or wrong, kept to be sent)
       val toggle = if explaining(question(i)) && lastOf(question(i)) == i then
-        List(Part.block("explain")(Part.slot(s"explain-${question(i)}"))) else Nil
+        val q = question(i)
+        val ru = okay.desk.statement.Reader.russian(s.log(q).text)
+        val mark = s.marked.get(q).fold(Part.slot(s"mark-$q"))(right => Part.block("small")(Part.text(
+          (right, ru) match
+            case (true, true) => "Отмечено: верно"
+            case (false, true) => "Отмечено: неверно"
+            case (true, false) => "Marked: right"
+            case (false, false) => "Marked: wrong")))
+        List(Part.block("explain")(Part.slot(s"explain-$q"), mark)) else Nil
       if folded && understood(e) then toggle
       else Part.block(e.role)((List(if code then Part.code(e.text) else if e.role == "user" || e.role == "model" && e.text.contains("\n") then Part.block("lines")(e.text.split("\n").toList.map(Part.text)*) else Part.text(e.text)) ++
         (if folded then Nil else e.note.toList.map(n => if e.role == "result" && n.contains("\n") then Part.code(n)
@@ -562,6 +600,12 @@ object App:
         case (false, true) => "Показать объяснение"
         case (false, false) => "Show the explanation"
       Button(label, Style.Plain)(Msg.ToggleExplanation(q): Msg).at(s"explain-$q") }
+    // an answer marked right or wrong, once (technology.md §12.1: people's questions are the measure)
+    val markButtons = if loading.isDefined || thinking.isDefined then Nil
+      else explanations(s).toList.sorted.filterNot(s.marked.contains).flatMap { q =>
+        val ru = okay.desk.statement.Reader.russian(s.log(q).text)
+        List(Button(if ru then "✓ Верно" else "✓ Right", Style.Plain)(Msg.Mark(q, true): Msg).at(s"mark-$q"),
+          Button(if ru then "✗ Неверно" else "✗ Wrong", Style.Plain)(Msg.Mark(q, false): Msg).at(s"mark-$q")) }
     val proofButtons = if thinking.isDefined || loading.isDefined then Nil else s.log.zipWithIndex.collect {
       case (e, i) if e.role == "proof" =>
         Button(if s.visibleProofs(i) then "Hide proof" else "Show proof")(Msg.ToggleProof(i): Msg).at(s"proof-$i")
@@ -591,6 +635,7 @@ object App:
       Part.slot("chat-actions"), Part.block("small")(Part.text(s.notice.getOrElse("")))))
     val chatButtons = if !active then Nil else List(
       Button("Copy chat")(Msg.CopyChat: Msg).at("chat-actions"),
+      Button("Copy my marks")(Msg.CopyMarks: Msg).at("chat-actions"),
       Button("Clear chat")(Msg.ClearChat: Msg).at("chat-actions"))
     Screen[Msg]("okay-desk")((top(s) ++ head ++ log ++ loadingLine ++ actions ++ end)*)(
       (List(Button(if s.tables.isEmpty then "Data: open files" else s"Data: ${s.tables.size} open")(
@@ -600,7 +645,7 @@ object App:
          else List(Button.submit("Load the model", models, Style.Plain)(Msg.Load(_): Msg))) ++
         (if s.chooser && s.model.isDefined && loading.isEmpty && thinking.isEmpty then
           List(Button("Unload model")(Msg.Unload: Msg).at("model-actions")) else Nil) ++
-        choices ++ research ++ constraints ++ chatButtons ++ proofButtons ++ explainButtons ++
+        choices ++ research ++ constraints ++ chatButtons ++ proofButtons ++ explainButtons ++ markButtons ++
         (if s.reasoning.online then List(Button("Turn off online sources")(Msg.Offline: Msg).at("data")) else Nil) ++
         (if thinking.isDefined then Nil else List(Button.submit("Ask", questionInput)(Msg.Ask(_): Msg))))*)
 
