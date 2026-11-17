@@ -72,7 +72,7 @@ object Claims:
             val sorted = r.rows.sortBy(row => -row(mi).num.getOrElse(0.0))
             val top = sorted.head; val bottom = sorted.last
             val gap = Derived("gap", fmt(top(mi).num.getOrElse(0.0) - bottom(mi).num.getOrElse(0.0)))
-            Claim.Spread(g, a.as, (top(gi).text, shown(top(mi).text)), (bottom(gi).text, shown(bottom(mi).text)), gap, r.size)
+            Claim.Spread(g, s"${a.fn} ${a.column}", (top(gi).text, shown(top(mi).text)), (bottom(gi).text, shown(bottom(mi).text)), gap, r.size)
           case _ if order.nonEmpty =>
             val by = order.head.column.stripPrefix("-"); val desc = order.head.desc
             val first = r.rows.head
@@ -110,10 +110,21 @@ object Claims:
       val rows = if ru then s"по $over строкам" else s"over $over rows"
       val who = extreme.map((k, _) => if ru then s" (у $k)" else s" ($k)").getOrElse("")
       s"$what $rows: $value$who."
-    case Claim.Spread(key, measure, (tk, tv), (bk, bv), gap, groups) =>
-      if tv == bv then (if ru then s"$measure одинаков во всех $groups группах по $key: $tv." else s"$measure is the same across all $groups $key groups: $tv.")
-      else if ru then s"По $measure впереди $tk ($tv), позади $bk ($bv): разрыв ${gap.text} при $groups группах по $key."
-      else s"By $measure, $tk leads ($tv) and $bk trails ($bv): a gap of ${gap.text} across $groups $key groups."
+    case Claim.Spread(key, aggregate, (tk, tv), (bk, bv), gap, groups) =>
+      // the measure said as what was computed («по сумме amount»), not by the program's name for it ("answer")
+      val (fn, column) = aggregate.span(_ != ' ') match { case (f, c) => (f, c.trim) }
+      val (nominative, dative, english) = fn match
+        case "count" => ("количество", "количеству", "the count")
+        case "sum" => (s"сумма $column", s"сумме $column", s"the total $column")
+        case "avg" => (s"среднее $column", s"среднему $column", s"the average $column")
+        case "min" => (s"наименьшее $column", s"наименьшему $column", s"the smallest $column")
+        case "max" => (s"наибольшее $column", s"наибольшему $column", s"the largest $column")
+        case _ => (aggregate, aggregate, aggregate)
+      if tv == bv then
+        if ru then s"${nominative.capitalize} одинаково во всех $groups группах по $key: $tv."
+        else s"${english.capitalize} is the same across all $groups $key groups: $tv."
+      else if ru then s"По $dative впереди $tk ($tv), позади $bk ($bv): разрыв ${gap.text} при $groups группах по $key."
+      else s"By $english, $tk leads ($tv) and $bk trails ($bv): a gap of ${gap.text} across $groups $key groups."
     case Claim.Missing(target, other, names, of) =>
       if names.size == 1 then (if ru then s"Только ${names.head} из $of $target без $other." else s"Only ${names.head} of $of $target has no $other.")
       else if ru then s"${names.size} из $of $target без $other: ${names.mkString(", ")}." else s"${names.size} of $of $target have no $other: ${names.mkString(", ")}."
