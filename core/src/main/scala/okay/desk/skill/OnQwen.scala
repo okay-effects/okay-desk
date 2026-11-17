@@ -27,6 +27,12 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
   var parts: Int = 0
   /** the trie's numbers checked against the packed segments', each weighing of a part (a device's law, a driver's flag) */
   var checkTrie: Boolean = false
+  /** the tokens two prompts begin with alike; at least `shared` of them and the last cache's rows are reused */
+  private def common(a: Array[Int], b: Array[Int]): Int =
+    var i = 0
+    while i < a.length && i < b.length && a(i) == b(i) do i += 1
+    i
+  private val shared = 32
   private var cached: Option[(Array[Int], model.Cache)] = None
   /** the forward: after the cached prefix when `ids` begins with it, else whole and kept */
   private def run(ids: Array[Int], at: Seq[Int], withLogits: Boolean): Future[(Vector[Array[Float]], Array[Float])] =
@@ -65,6 +71,13 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
         case Some((prefix, cache)) if head.startsWith(prefix) =>
           model.run(head, layer, Nil, withLogits = false, Some(cache), keep = true).map { (_, _, next) =>
             cache.free(); cached = next.map(head -> _); next.get }
+        // A NEXT QUESTION OVER THE SAME TABLES: the prompt's beginning (the rule, the tables) is the last one's — its
+        // rows kept (`take`), only the rest run; a phone ran the whole prompt again each question (37 s on the iPhone)
+        case Some((prefix, cache)) if common(prefix, head) >= shared =>
+          val shorter = cache.take(common(prefix, head))
+          cache.free()
+          model.run(head, layer, Nil, withLogits = false, Some(shorter), keep = true).map { (_, _, next) =>
+            shorter.free(); cached = next.map(head -> _); next.get }
         case _ =>
           clearCache()
           model.run(head, layer, Nil, withLogits = false, None, keep = true).map { (_, _, next) =>

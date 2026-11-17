@@ -61,7 +61,21 @@
   const panel = document.createElement("div");
   panel.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99999;background:#14213d;color:#fff;" +
     "font:14px/1.4 system-ui;padding:8px 12px;white-space:pre-wrap";
-  const show = s => { panel.textContent = "Phone bench — " + s; };
+  const show = s => { panel.textContent = "Тест телефона — " + s; };
+  // THE PANEL, A SECOND AT A TIME (the operator could not tell what the phone was doing): the question, its seconds,
+  // the model's step, the answers so far — ✅ understood, ❓ asked back, ⛔ refused (as the page should)
+  const now = { i: -1, q: "", t: 0 };
+  const tally = () => (state.results || []).map(r => `${r.i}${r.mark}`).join(" ");
+  const mark = said => /^(Understood as|Понял так)/.test(said) ? "✅" : /не вычисляется|not computed|cannot/i.test(said)
+    ? "⛔" : "❓";
+  setInterval(() => {
+    if (now.i < 0) return;
+    const read = (localStorage.getItem("okay-desk.read") || "").replace(/^read \d+: /, "").replace(/, GPU.*$/, "");
+    const stage = localStorage.getItem("okay-desk.stage") || "";
+    panel.textContent = `Тест телефона · вопрос ${now.i + 1} из ${QUESTIONS.length} · ${Math.round((performance.now() -
+      now.t) / 1000)} с\n«${now.q}»\nмодель: ${stage || read || "…"}\nответы: ${tally() || "пока нет"}` +
+      "\n(экран не гасить; цифры обновляются, когда телефон между шагами)";
+  }, 1000);
   // the page's own words about the model (the frame reader's program, a budget refused): kept with the run
   for (const level of ["log", "error", "warn"]) {
     const orig = console[level].bind(console);
@@ -240,9 +254,11 @@
       if (saved && saved.step.startsWith("q ")) { log("skipped", { i: from + 1, why: "the page reloaded on it" }); from++; }
       for (let i = from; i < (location.search.includes("one") ? from + 1 : QUESTIONS.length); i++) {
         state.step = `q ${i}`; keep();
-        show(`question ${i + 1} of ${QUESTIONS.length}${i === 0 ? " (loads the model first)" : ""}…`);
+        show(`вопрос ${i + 1} из ${QUESTIONS.length}${i === 0 ? " (сначала загрузка модели, ~3.5 мин)" : ""}…`);
+        now.i = i; now.q = QUESTIONS[i]; now.t = performance.now();
         const r = await ask(i, QUESTIONS[i]);
         log("answer", r);
+        state.results = (state.results || []).concat([{ i: i + 1, mark: mark(r.said) }]); keep();
         if (!r.done) { log("stuck", { i: i + 1 }); break; }
       }
       state.step = "room"; keep();
@@ -256,7 +272,8 @@
     }
     state.step = "done"; keep();
     log("done", memory());
-    show("done — thank you, the results are on the Mac. (Open with ?again to run once more.)");
+    now.i = -1;
+    show(`готово, спасибо — результаты на Mac.\nответы: ${tally()}\n(ещё раз: открыть с ?again)`);
   }
   if (location.search.includes("nobench")) return;
   if (location.search.includes("again")) { sessionStorage.removeItem("phonebench"); location.search = location.search.replace(/[?&]?again/, "").replace(/^&/, "?"); }
