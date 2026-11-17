@@ -170,3 +170,28 @@ model from the Cache API of the earlier visit:
 | 10 ⛔ | 25 | 5 | **6** |
 
 The ten questions with the model's loading: ~3 minutes, was ~25 this morning. The same answers as the Mac's.
+
+### 4.5 The 4-bit product's reads shared (2026-11-17, okay-llm 40a7446)
+
+The iPhone is bound by the arithmetic of a weighing, not by its passes: the cache grown from the trie's rows with no
+forward (okay-llm d0a4fd3) gave ~5%, a line weighed in one part instead of two nothing, 16 heads a draw broke its
+numbers (a draw too long — the phone keeps 2). The product itself was the lever: `OnWebGl2.linearShared` reads a
+fragment's X once for its four outputs and a group's words two texels at a time — 32 texture reads a group of 64
+weights where there were 96; each sum in the old order, the numbers identical (the traced weighings to the digit).
+
+| question | §4.4 | **now** |
+|---|---|---|
+| 1 (with loading the model from the cache) | 32 | **21** |
+| 2 | 17 | **9** |
+| 3 ❓ | 4 | **3** |
+| 4 | 11 | **6** |
+| 5 | 30 | **18** |
+| 6 | 23 | **16** |
+| 7 | 26 | **16** |
+| 8 ❓ | 12 | **8** |
+| 9 ❓ | 11 | **7** |
+| 10 ⛔ | 6 | **4** |
+
+The ten questions with loading: ~1.8 min (was ~25 this morning). A big weighing 5.0 → 3.1 s on a cool phone; it
+heats over the run and slows to ~5.5 s by question 6 — the phone's own limit, a reason to do less, not to do it
+faster.
