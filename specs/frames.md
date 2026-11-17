@@ -177,6 +177,19 @@ merged 76 / 10 / 22. (A first measure of the two merged models gave the same num
 aligned copy of an unaligned file was named by its name and size — two merged models' `model.safetensors`, one size,
 shared one copy. Fixed in mlx-scala 0.1.0, republished: the copy named by the file's path and time too.)
 
+### 5.9 Round 5: the counterweight (2026-11-17)
+
+Round 4's mix + `FrameData --counter` (500: "average X per <a row>" is no group; "which … have X less/more than N"
+is a condition on rows). Three seeds, as §5.8:
+
+| | seed 1 | seed 2 | seed 3 | mean right | the targets (sales-17, marks-40 × 2) | the group class |
+|---|---|---|---|---|---|---|
+| round 4 | 83 / 5 / 20 | 74 / 7 / 27 | 82 / 4 / 22 | 79.7 | 1, 2, 2 of 4 | 13, 14, 13 of 14 |
+| round 5 | 82 / 3 / 23 | 92 / 5 / 11 | 76 / 3 / 29 | 83.3 | 2, 4, 4 of 4 | 11, 13, 7 of 14 |
+
+Better on the mean and on its targets, but the seeds spread wider (76–92): one seed gave the group class back. A
+counterweight pulls against the form it weighs; the seeds say how hard. Seed 2 is the best reader measured so far.
+
 ## 6. The frame reader as a program over effects (2026-11-15)
 
 `FrameReading.read` (core) is a program over `Read` (the model) and `Person` (the one asked): one program for the
