@@ -64,6 +64,7 @@ object FrameBench:
         guess = sys.env.get("FRAME_GUESS").fold(0.0)(_.toDouble), prune = sys.env.contains("FRAME_PRUNE"))
       FrameReading.pruneNumbers = !sys.env.contains("FRAME_KEEP_NUMBERS")
       FrameReading.sections = sys.env.get("FRAME_SECTIONS").fold(0.0)(_.toDouble)
+      FrameReading.pruneSingle = !sys.env.contains("FRAME_KEEP_SINGLE")
       val person = if doubt.isEmpty then Person.silent[Read, FrameReading.Reading]
         else Person.byFrame[Read, FrameReading.Reading](a.frame)
       val read = Read.run(handle(program, person), reading)

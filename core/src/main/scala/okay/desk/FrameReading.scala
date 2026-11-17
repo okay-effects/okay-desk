@@ -59,6 +59,7 @@ object FrameReading:
   /** the options but the conditions on a value the question does not name: a text value not linked (`weighed`'s
    * guesses), a number it does not write (`pruneNumbers`); a line left with none keeps all */
   var pruneNumbers: Boolean = true
+  var pruneSingle: Boolean = true
   private def pruned(options: Vector[String], so: Reading, tables: Map[String, Table], question: String)
       : Vector[String] =
     val table = so.lines.headOption.map(_.stripPrefix("table: ").trim).flatMap(tables.get)
@@ -78,7 +79,14 @@ object FrameReading:
       case o => Links.named(o) match
         case Some(n @ (_, v)) => linked(n) || !text(v)
         case None => true }
-    if kept.isEmpty then options else kept
+    // ONE NUMBER ASKED (an aggregate, no group yet): order, limit and keep cannot change a single row — not weighed
+    // (theory E6: decide only what changes the answer); a group chosen later brings them back on its next line
+    val answer = so.lines.find(_.startsWith("answer: ")).map(_.stripPrefix("answer: "))
+    val single = pruneSingle && answer.exists(a => a != "rows" && a != "cannot") &&
+      !so.lines.exists(_.startsWith("group: "))
+    val useful = if !single then kept
+      else kept.filterNot(o => o.startsWith("order: ") || o.startsWith("limit: ") || o.startsWith("keep: "))
+    if useful.isEmpty then options else useful
 
   /** THE SECTION FIRST (`sections` > 0, theory.md E6): a line of many options over several sections (where, group,
    * order, limit, keep, end) weighs the sections' heads first ("where:", "end"…); where the best head leads the
