@@ -105,6 +105,43 @@ object FrameReading:
         ranked = heads.zip(raw).sortBy(-_._2)
       yield if ranked.head._2 - ranked(1)._2 >= sections then options.filter(section(_) == ranked.head._1) else options
 
+  /** ONE LINE AHEAD WHERE IN DOUBT (`lookahead` > 0): a line whose best options are within `lookahead` of each other
+   * — the answer line most of all: «Hours by role» read as `rows` before `group: role` could be offered — is chosen
+   * by the option with its best next line, the best `wide` options each weighed with what can follow it; greedy
+   * reading decides a line before the line that shows what it meant. Only the answer line (`aheadAll` false) or any
+   * line; `end` and lines after which nothing follows are taken as they are */
+  var lookahead: Double = 0.0
+  var aheadAll: Boolean = false
+  var wide: Int = 3
+  private def ahead[R[_]](tables: Map[String, Table], question: String, link: Double, guess: Double, prune: Boolean,
+      context: Array[Int], newline: Int, end: Int, so: Reading, ranked: Vector[(String, Double)])(
+      using In[Read, R]): Vector[(String, Double)] ! R =
+    val margin = ranked.lift(1).fold(Double.PositiveInfinity)(second => ranked.head._2 - second._2)
+    val answerLine = ranked.headOption.exists(_._1.startsWith("answer: "))
+    if lookahead <= 0 || margin >= lookahead || !(aheadAll || answerLine) then pure(ranked)
+    else
+      val top = ranked.take(wide).filter(_._1 != Frame.end).filter((_, s) => ranked.head._2 - s < lookahead)
+      if top.size < 2 then pure(ranked)
+      else
+        for
+          seen <- Read.each[(String, Double), (String, Double), R](top) { (o, s) =>
+            val taken = so.copy(lines = so.lines :+ o)
+            val next0 = Frame.next(taken.lines, tables, question)
+            val next = if prune then pruned(next0, taken, tables, question) else next0
+            if next.isEmpty then pure((o, s))
+            else
+              for
+                line <- Read.encode[R](o)
+                tokens <- Read.each[String, Array[Int], R](next)(n => Read.encode[R](n))
+                raw <- Read.score[R]((context :+ newline) ++ line :+ newline,
+                  next.zip(tokens).map((n, t) => t :+ (if n == Frame.end then end else newline)))
+                best = weighed(raw, next, taken, tables, question, link, guess).max
+              yield (o, s + best)
+          }
+          rest = ranked.filterNot(r => seen.exists(_._1 == r._1))
+          // the options looked at, by option and next line; those not looked at after them, as they were
+        yield seen.sortBy(-_._2) ++ rest
+
   /** `start`: lines decided already (a person's choice where two readers parted) — read on from them */
   def read[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt] = None, maxLines: Int = 16,
       start: Vector[String] = Vector.empty, link: Double = 0.0,
@@ -138,7 +175,8 @@ object FrameReading:
           raw <- Read.score[R](context :+ newline,
             options.zip(tokens).map((o, t) => t :+ (if o == Frame.end then end else newline)))
           scores = weighed(raw, options, so, tables, question, link, guess)
-          ranked = options.zip(scores).sortBy(-_._2)
+          first = options.zip(scores).sortBy(-_._2)
+          ranked <- ahead(tables, question, link, guess, prune, context, newline, end, so, first)
           margin = ranked.lift(1).fold(Double.PositiveInfinity)(second => ranked.head._2 - second._2)
           chosen <- doubt match
             case Some(d) if margin < d.bar && so.asked < d.maxAsks =>

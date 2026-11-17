@@ -92,12 +92,62 @@ object FrameData:
             (s"Should I choose $v?", s"Стоит ли мне выбрать $v?")))
           Vector(Item(tables, en, lines), Item(tables, ru, lines))
 
+  /** THE GROUP SAID WITHOUT ITS SUM (2026-11-17, Everyday's largest class of errors: «Hours by role», «Who worked the
+   * most hours?» read as rows): a measure by a category, no word for a total — a sum by the group, ordered where the
+   * question orders; which of a category has the most (the least) of a measure — the sum's best group. The teacher's
+   * pairs had them only with "total"/"sum" said, and "which X has the most" only over single rows */
+  def groups(seed: Long): Vector[Item] =
+    val rnd = scala.util.Random(seed)
+    val t = Domains.any(rnd)
+    val d = Domains.all.find(_.table == t.name).get
+    val tables = Map(t.name -> t)
+    def pick[A](xs: Seq[A]): A = xs(rnd.nextInt(xs.size))
+    val nums = d.columns.filter(c => Set(Domains.Role.Money, Domains.Role.Count, Domains.Role.Measure)(c.role))
+    val cats = d.columns.filter(c => c.role == Domains.Role.Category || c.role == Domains.Role.Name)
+    if nums.isEmpty || cats.isEmpty then Vector.empty
+    else
+      val c = pick(nums); val g = pick(cats)
+      val (cn, cg, _) = c.ru; val (gn, _, gd) = g.ru
+      val C = c.name.capitalize; val Cn = cn.capitalize
+      val head = Vector(s"table: ${t.name}", s"answer: sum ${c.name}", s"group: ${g.name}")
+      val who = g.role == Domains.Role.Name
+      pick(Vector("by", "by-desc", "by-asc", "most", "least")) match
+        case "by" =>
+          val lines = head :+ Frame.end
+          Vector(Item(tables, pick(Vector(s"$C by ${g.name}.", s"${c.name} per ${g.name}", s"$C for each ${g.name}?")),
+            lines), Item(tables, pick(Vector(s"$Cn по $gd.", s"$Cn по каждому значению «$gn»")), lines))
+        case "by-desc" =>
+          val lines = head ++ Vector("order: answer desc", Frame.end)
+          Vector(Item(tables, pick(Vector(s"$C by ${g.name}, largest first.", s"$C per ${g.name}, most first.")),
+            lines), Item(tables, s"$Cn по $gd, от больших к меньшим.", lines))
+        case "by-asc" =>
+          val lines = head ++ Vector("order: answer asc", Frame.end)
+          Vector(Item(tables, s"$C by ${g.name}, smallest first.", lines),
+            Item(tables, s"$Cn по $gd, от меньших к большим.", lines))
+        case "most" =>
+          val lines = head ++ Vector("order: answer desc", "limit: 1", Frame.end)
+          val en = if who then pick(Vector(s"Who had the most ${c.name}?", s"Which ${g.name} had the most ${c.name}?"))
+            else pick(Vector(s"Which ${g.name} had the most ${c.name}?", s"Which ${g.name} brought the most ${c.name}?"))
+          Vector(Item(tables, en, lines), Item(tables, s"У какого значения «$gn» больше всего $cg?", lines))
+        case _ =>
+          val lines = head ++ Vector("order: answer asc", "limit: 1", Frame.end)
+          Vector(Item(tables, s"Which ${g.name} had the least ${c.name}?", lines),
+            Item(tables, s"У какого значения «$gn» меньше всего $cg?", lines))
+
   def json(i: Item, seed: Long, source: String): String =
     Json.Obj(Vector("seed" -> Json.num(seed), "source" -> Json.Str(source), "question" -> Json.Str(i.question),
       "lines" -> Json.Arr(i.lines.map(Json.Str.apply)))).render
 
+  /** `FrameData --groups <out.jsonl> <seeds>`: the group forms alone (source "group", not bounded) */
   def main(args: Array[String]): Unit =
-    val out = Path.of(args(0)); val teacherPairs = args.lift(1); val n = args.lift(2).map(_.toInt).getOrElse(600)
+    if args.headOption.contains("--groups") then
+      val out = Path.of(args(1))
+      val items = (1L to args(2).toLong).flatMap(s => groups(s * 7919).map(i => json(i, s * 7919, "group")))
+      Files.write(out, items.asJava)
+      println(s"written $out: ${items.size}")
+    else made(args)
+  private def made(args: Array[String]): Unit =
+    val out = Path.of(args(0));val teacherPairs = args.lift(1); val n = args.lift(2).map(_.toInt).getOrElse(600)
     Files.deleteIfExists(out)
     def write(line: String) = Files.writeString(out, line + "\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND)
     var counts = Map.empty[String, Int].withDefaultValue(0)

@@ -65,6 +65,10 @@ object FrameBench:
       FrameReading.pruneNumbers = !sys.env.contains("FRAME_KEEP_NUMBERS")
       FrameReading.sections = sys.env.get("FRAME_SECTIONS").fold(0.0)(_.toDouble)
       FrameReading.pruneSingle = !sys.env.contains("FRAME_KEEP_SINGLE")
+      // FRAME_AHEAD=<bar>: one line ahead where the best options are that close; FRAME_AHEAD_ALL: on any line
+      FrameReading.lookahead = sys.env.get("FRAME_AHEAD").fold(0.0)(_.toDouble)
+      FrameReading.aheadAll = sys.env.contains("FRAME_AHEAD_ALL")
+      FrameReading.wide = sys.env.get("FRAME_WIDE").fold(3)(_.toInt)
       val person = if doubt.isEmpty then Person.silent[Read, FrameReading.Reading]
         else Person.byFrame[Read, FrameReading.Reading](a.frame)
       val read = Read.run(handle(program, person), reading)

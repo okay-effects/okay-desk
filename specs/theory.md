@@ -221,3 +221,10 @@ strategy) → E1 (the words as options) → E7 (speed) → E8 (the person) → E
   ("my total income" = where type = in) lost their condition: the head "where:" says nothing; the evidence is in the
   condition's last tokens. A line is decided by its whole options, not by a prefix of them (`FrameReading.sections`,
   off).
+- **One line ahead where in doubt — NEGATIVE (2026-11-17).** Everyday's largest class of errors (9 of 25): a group
+  said without its sum («Hours by role», «Who worked the most hours?») read `answer: rows`. The answer line's best
+  three options each weighed with their best next line (`FrameReading.lookahead`, bar 2 and 5 nats; on every line
+  too): no group question changed, en 38→37 right, ru 34→33, a question 1.1 → 1.9–3.2 s. The reader does not doubt
+  `rows` there — the next line agrees with it; the error is learned, not greedy: the training texts had these groups
+  only with "total"/"sum" said, and "which X has the most" only over single rows. Off; the remedy is the data
+  (round 4, `FrameData.groups`).
