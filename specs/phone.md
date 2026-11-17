@@ -92,3 +92,28 @@ holds ~1.5 GB of GPU memory in all; the page with the reader goes over it (the w
 the other readers' files the frames path also fetches: statement reader, facts, relations). A 1.7B (~1 GB at 4 bits)
 cannot fit beside the rest in a browser tab on this phone. Speed is the second wall: 1/20 of the Mac's shader rate.
 Bugs found on the way: BACKLOG P'.
+
+### 4.2 The frame reader runs on the iPhone (2026-11-17, the same day; okay-desk 2e94f84, okay-llm f684612)
+
+The ten questions of §3.1 on the operator's iPhone, the whole run in one tab, no reload: **6 right** (1, 2, 4, 5, 6,
+7: 4 unpaid, 1460 paid, the three largest, ann's November, 3 from Lviv, the average 365), **3 asked** (3, 8, 9),
+**the refusal right** (10) — the same answers as WebKit as a phone on the Mac. With the model loaded, 704 MB more of
+GPU memory were taken before the tab died (the room left). GPU in textures: 240 MB weights, ~360 steady, peak 393.
+
+What it took, each measured (WebKit as a phone on the Mac, then the iPhone):
+
+| change | why | measured |
+|---|---|---|
+| the tokenizer by the browser's `JSON.parse` (`Tokenizer.of`) | a tree of the 11 MB file in Scala values | −190 MB of the page |
+| the weights onto the device a file at a time (`Preloaded`), from the file's bytes (`quantizedFrom`), one reused buffer | all files and three copies of every weight held at once | page peak 1470 → ~870 MB |
+| ONE reader on a phone: the adapter MERGED into the weights (`model-frames-merged`, FrameMerge), its bar 0.3 | the adapter beside every projection; bar 1.0 is two readers' | page ~950 → 709 MB, GPU 483 → 402 MB; more answered |
+| the prefix cache in halves on a phone; the budget 768 MiB | | |
+| a line's options weighed in parts of 16, each normed over all the options' tokens (`OnQwen.parts`, `score over`) | a `where` of 171 options was ONE GPU task of minutes: the iPhone killed the tab in it (traced by the kept last read) | the tab lives; the numbers of one forward |
+
+The wall that was hit was not the model's memory but one GPU task too long: the weighing of 171 options packed into
+one forward. A phone needs its work in pieces it can finish.
+
+**Now the wall is time:** loading over Wi-Fi ~3.5 min; a question 25–245 s (median ~150 s) on the iPhone against
+2–14 s on the Mac — the iPhone's shader rate is 1/20 of the Mac's (§4.1). Next: fewer and smaller forwards per
+question — decide only what changes the answer and the data's exact words first (theory.md §11 E5, E6), options
+packed in a trie (E7), the prefix shorter (the tables a question names, not all of them).
