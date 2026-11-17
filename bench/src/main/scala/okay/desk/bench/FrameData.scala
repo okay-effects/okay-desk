@@ -134,6 +134,41 @@ object FrameData:
           Vector(Item(tables, s"Which ${g.name} had the least ${c.name}?", lines),
             Item(tables, s"У какого значения «$gn» меньше всего $cg?", lines))
 
+  /** THE GROUP FORMS' COUNTERWEIGHT (round 5, 2026-11-17): where round 4's groups reached too far — "per" a row of
+   * the table is no group («Average units per sale»: the average over rows), and "less/more than N" is a condition
+   * on rows («Who got less than 3 in math?»), not the least sum */
+  def counter(seed: Long): Vector[Item] =
+    val rnd = scala.util.Random(seed)
+    val t = Domains.any(rnd)
+    val d = Domains.all.find(_.table == t.name).get
+    val tables = Map(t.name -> t)
+    def pick[A](xs: Seq[A]): A = xs(rnd.nextInt(xs.size))
+    val nums = d.columns.filter(c => Set(Domains.Role.Money, Domains.Role.Count, Domains.Role.Measure)(c.role))
+    val names = d.columns.filter(_.role == Domains.Role.Name)
+    if nums.isEmpty then Vector.empty
+    else
+      val c = pick(nums)
+      val (cn, _, _) = c.ru; val (_, tg, _, _) = d.ru
+      // a row of the table, said in English: the table's name in the singular
+      val row = t.name.replace('_', ' ') match
+        case n if n.endsWith("ies") => n.dropRight(3) + "y"
+        case n if n.endsWith("s") => n.dropRight(1)
+        case _ => "entry"
+      val n = c.low + rnd.nextInt(math.max(1, c.high - c.low))
+      val head = Vector(s"table: ${t.name}")
+      pick(Vector("per-row", "less", "more")) match
+        case "per-row" =>
+          val lines = head ++ Vector(s"answer: avg ${c.name}", Frame.end)
+          Vector(Item(tables, pick(Vector(s"Average ${c.name} per $row.", s"How much ${c.name} per $row on average?")),
+            lines), Item(tables, s"Сколько в среднем «$cn» на одну запись $tg?", lines))
+        case op =>
+          val (sign, en, ru) = if op == "less" then ("<", "less than", "меньше") else (">", "more than", "больше")
+          val lines = head ++ Vector("answer: rows", s"where: ${c.name} $sign $n", Frame.end)
+          val who = names.headOption.filter(_ => rnd.nextBoolean())
+          val q = who.fold(s"Which ${t.name.replace('_', ' ')} have ${c.name} $en $n?")(_ =>
+            s"Who has ${c.name} $en $n?")
+          Vector(Item(tables, q, lines), Item(tables, s"У каких $tg «$cn» $ru $n?", lines))
+
   def json(i: Item, seed: Long, source: String): String =
     Json.Obj(Vector("seed" -> Json.num(seed), "source" -> Json.Str(source), "question" -> Json.Str(i.question),
       "lines" -> Json.Arr(i.lines.map(Json.Str.apply)))).render
@@ -143,6 +178,11 @@ object FrameData:
     if args.headOption.contains("--groups") then
       val out = Path.of(args(1))
       val items = (1L to args(2).toLong).flatMap(s => groups(s * 7919).map(i => json(i, s * 7919, "group")))
+      Files.write(out, items.asJava)
+      println(s"written $out: ${items.size}")
+    else if args.headOption.contains("--counter") then
+      val out = Path.of(args(1))
+      val items = (1L to args(2).toLong).flatMap(s => counter(s * 6271).map(i => json(i, s * 6271, "counter")))
       Files.write(out, items.asJava)
       println(s"written $out: ${items.size}")
     else made(args)
