@@ -295,6 +295,9 @@ Not features — the things without which the aim cannot be reached or cannot be
 3. **The size curve.** The teacher reads 43/54, the 0.6B 25 (two agreeing). Whether the gap is DATA or CAPACITY is
    not known — and it decides the phone's path (browser 0.6B, or a native app with 1.7B–4B). Needed: the same recipe
    (frames, the same data) at 0.6B / 1.7B / 4B, one curve right/wrong vs size, before more data work on the 0.6B.
+   **Measured 2026-11-17 (frames.md §5.7):** capacity from 0.6B to 1.7B (wrong halved on 1004 unseen questions),
+   a plateau from 1.7B to 4B for this recipe; the two readers' bound set on the calibration does not hold on
+   `Everyday` (risk 0.10 for 1.7B at ε 0.02) — points 1 and 6 grow in weight with size.
 4. **Proof of extensibility.** The claim is "a new ability = a grammar, an engine, its words — no training of its
    own" (theory.md §10). It has not happened once. Needed: a second ability (`Calculate`) built only through one
    `Ability` interface, read by the shared matcher with no training of its own, with its numbers (E3).

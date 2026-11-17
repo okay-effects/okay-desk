@@ -120,6 +120,39 @@ the released model's first layers with the frame adapter.
 - What is left: the student (12 layers) reads frames worse (§5.5) — the phone's size needs its own step; the misses
   of kinds (§5.1) are data's: `type = in/out` for income and spending, sum against count, the row of the largest.
 
+### 5.7 The size curve: round 3's recipe at 0.6B / 1.7B / 4B, three seeds (2026-11-16/17; technology.md §12.3)
+
+The same texts, LoRA r16, lr 2e-4, one epoch; the released Qwen3 at three sizes, 4-bit. Measures: `Everyday` and the
+calibration set (1004 questions never trained on, guarantees.md §8). Runs, records and scripts:
+`okay-desk-private/size/` (results.md).
+
+| model | calibration right (wrong), seeds 1 / 2 / 3 | Everyday en right/wrong, seeds | ru |
+|---|---|---|---|
+| 0.6B | 809 (191) / 794 (209) / 825 (167) | 33/20, 29/25, 28/26 | 24/28, 24/30, 24/30 |
+| 1.7B | 914 (81) / 871 (110) / 894 (102) | 40/14, 39/15, 35/15 | 38/16, 36/16, 35/15 |
+| 4B | 895 (109) / 851 (149) / 917 (86) | 40/14, 36/17, 38/16 | 32/22, 31/23, 39/15 |
+| 35B ceiling | — | 43/11 | 43/11 |
+
+Two readers (seeds 1, 2) agreeing, the conformal bar for ε = 2% set on the calibration (`FrameCalibrate`):
+
+| model | calibration right / asked / wrong | Everyday (108) right / asked / wrong — the risk |
+|---|---|---|
+| 0.6B | 653 / 332 / 19 | 40 / 63 / 5 — 0.046 |
+| 1.7B | 842 / 139 / 19 | 64 / 33 / 11 — 0.102 |
+| 4B | 778 / 207 / 19 | 59 / 29 / 20 — 0.185 |
+
+- **0.6B → 1.7B: capacity.** Beyond the seed spread on both measures: the calibration's wrong halved, Everyday +8
+  en, +12 ru; Polish and Ukrainian (least data) gain most. The 0.6B is held by its size, not only by the data.
+- **1.7B → 4B: a plateau** for this recipe (calibration mean 893 against 888; 4B's spread larger, 851–917). The recipe
+  was set for the 0.6B — a tuned 4B is untried.
+- **The bound does not carry to `Everyday`.** At the same 19 wrong on the calibration the 1.7B answers 842 of 1004
+  (0.6B 653) — but on `Everyday` the risk is 5× ε (4B 9×): `Everyday` is not drawn as the calibration is, and a
+  larger model's two readers agree more often on the SAME wrong frame. The guarantee needs calibration questions
+  drawn as people's (technology §12.1) and a second opinion of another kind (§12.6), more with size, not less.
+- Misses shared by every size (`change` "growth by dish", a group taken as a filter) are the data's and the
+  language's, not the size's.
+- For the phone: the 1.7B at 4 bits is ≈ 1 GB — whether WebGL2 on an iPhone carries it is P2/P3's question.
+
 ## 6. The frame reader as a program over effects (2026-11-15)
 
 `FrameReading.read` (core) is a program over `Read` (the model) and `Person` (the one asked): one program for the
