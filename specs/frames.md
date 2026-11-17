@@ -143,8 +143,8 @@ Two readers (seeds 1, 2) agreeing, the conformal bar for ε = 2% set on the cali
 
 - **0.6B → 1.7B: capacity.** Beyond the seed spread on both measures: the calibration's wrong halved, Everyday +8
   en, +12 ru; Polish and Ukrainian (least data) gain most. The 0.6B is held by its size, not only by the data.
-- **1.7B → 4B: a plateau** for this recipe (calibration mean 893 against 888; 4B's spread larger, 851–917). The recipe
-  was set for the 0.6B — a tuned 4B is untried.
+- **1.7B → 4B: a plateau** for this recipe (calibration mean 893 against 888; 4B's spread larger, 851–917).
+  The recipe was set for the 0.6B — a tuned 4B is untried.
 - **The bound does not carry to `Everyday`.** At the same 19 wrong on the calibration the 1.7B answers 842 of 1004
   (0.6B 653) — but on `Everyday` the risk is 5× ε (4B 9×): `Everyday` is not drawn as the calibration is, and a
   larger model's two readers agree more often on the SAME wrong frame. The guarantee needs calibration questions
