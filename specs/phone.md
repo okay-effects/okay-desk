@@ -74,4 +74,21 @@ writes beside this list before P3), seconds, any reload.
 
 ## 4. The phone's numbers (filled by P2–P4)
 
-(none yet)
+### 4.1 The phone bench on the operator's iPhone (2026-11-17, `scripts/phonebench`)
+
+The published page (build b1e98078c706) served from the Mac on the local network with `bench.js`; every step logged
+on the Mac (`okay-desk-private/phonebench/log.txt`). The device: iOS 18.7, Safari, 414×896@2, WebGL2 (float targets),
+no WebGPU, "Apple GPU".
+
+| measure | the iPhone | the Mac (M4 Max, Chromium as a phone) |
+|---|---|---|
+| a 1024² product in a fragment shader | 34 GFLOPS (63 ms) | 650–715 GFLOPS (3 ms) |
+| GPU memory taken in an empty page before the tab is killed | ~1.5 GB (killed taking the 1.6th GB) | > 3 GB (the bench's limit) |
+| the frame reader (28 layers 4-bit + two adapters) | the tab killed by iOS 19 s after the last weight file, twice, before any answer | stopped by the page's own 512 MiB WebGL2 budget → silently "needs external evidence" |
+| loading the reader over Wi-Fi from the Mac | ~4 min (~1.7 MB/s) | — |
+
+What it says: the frame reader does not run on this iPhone at all — memory, not speed, is the first wall. The tab
+holds ~1.5 GB of GPU memory in all; the page with the reader goes over it (the weights' CPU copies, two adapters,
+the other readers' files the frames path also fetches: statement reader, facts, relations). A 1.7B (~1 GB at 4 bits)
+cannot fit beside the rest in a browser tab on this phone. Speed is the second wall: 1/20 of the Mac's shader rate.
+Bugs found on the way: BACKLOG P'.
