@@ -15,6 +15,25 @@
     "Кто из клиентов сделал больше всего заказов?",
     "Почему bob не оплатил заказ?",
   ];
+  // on http over the local network the page is no secure context and has no Cache API; the page's path without one
+  // (OnDisk/Engine `caches` undefined) never finishes opening a table (found 2026-11-17 by this bench) — so here a
+  // cache in memory: the opened tables kept, the model's files not (they come from the Mac over Wi-Fi each time)
+  if (!window.isSecureContext) {
+    const stores = new Map();
+    const store = name => {
+      if (!stores.has(name)) {
+        const m = new Map(), keep = name !== "okay-desk-model";
+        stores.set(name, {
+          put: async (k, r) => { if (keep) m.set(String(k), await r.clone().text()); },
+          match: async k => m.has(String(k)) ? new Response(m.get(String(k))) : undefined,
+          delete: async k => m.delete(String(k)),
+        });
+      }
+      return stores.get(name);
+    };
+    try { Object.defineProperty(window, "caches", { value: { open: async n => store(n) }, configurable: true }); }
+    catch (e) {}
+  }
   const t0 = performance.now();
   const ms = () => Math.round(performance.now() - t0);
   const saved = JSON.parse(sessionStorage.getItem("phonebench") || "null");

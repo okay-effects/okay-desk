@@ -55,6 +55,7 @@ val here = Path.of(sys.props.getOrElse("bench.dir", "scripts/phonebench"))
   server.createContext("/", x =>
     try
       val path = x.getRequestURI.getPath
+      if path != "/log" then println(s"${LocalTime.now.withNano(0)} ${x.getRemoteAddress.getAddress.getHostAddress} ${x.getRequestMethod} ${x.getRequestURI}")
       if x.getRequestMethod == "POST" && path == "/log" then
         val line = String(x.getRequestBody.readAllBytes(), UTF_8).replace("\n", " ")
         val from = x.getRemoteAddress.getAddress.getHostAddress

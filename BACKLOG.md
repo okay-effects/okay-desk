@@ -3,6 +3,16 @@
 What is planned and not built, with the spec that holds the design. Done items move to the spec's "built" section
 and leave this file. The operator decides the order; the numbers that motivate each item are in the specs.
 
+## P'. Found by the phone bench (2026-11-17, scripts/phonebench)
+
+- **Without the Cache API a table never opens.** On a page with no `caches` (http on a local address: no secure
+  context — Safari and Chromium alike) "Open" stops at "fetching sample/orders.csv…" for ever, no error: the
+  `js.isUndefined(caches)` paths of `OnDisk` / `Engine.fetch` are never taken on the published https page and do not
+  finish. Repro: `scripts/phonebench/server.scala`, the page at http://<LAN address>:8750/?nobench, WebKit.
+- **The frame reader over the WebGL2 budget.** On WebGL2 (no WebGPU: every iPhone) the 28-layer base with two
+  adapters reaches the page's 512 MiB budget (`OnWebGl2.texture` ← `Adapted.both`) and the data question silently
+  falls to "This question needs external evidence…" — the person is not told the model stopped.
+
 ## A. The dialogue and the sources (specs/pilot.md, docs/calculus.md §10)
 
 (1, 2, 10, 12 in part, 15 at the calculus level: written 2026-11-08 — specs/organs.md §11; their numbers pending.)
