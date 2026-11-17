@@ -51,12 +51,12 @@ object Engine:
     val done = traced(op)
     (op match
       case _: Read.States | _: Read.Logits => Execution.model.submit(on.handler(op))
-      case _ => chunked(op)).map { x => done(); x }
+      case _ => chunked(op)).map { x => done(x); x }
   private def chunked[X](op: Read[X]): Future[X] = on.handler(op)
   /** THE LAST READ, KEPT (local storage, written before and after each): a phone that kills the tab mid-forward leaves
    * what it was doing — the op, its sizes, the GPU bytes — for the next visit to say (scripts/phonebench) */
   private var reads = 0
-  private def traced(op: Read[?]): () => Unit =
+  private def traced(op: Read[?]): Any => Unit =
     reads += 1
     val what = op match
       case Read.Score(context, options) => s"score context ${context.length} options ${options.size} " +
@@ -68,8 +68,13 @@ object Engine:
     val t0 = js.Date.now()
     def put(s: String): Unit = try dom.window.localStorage.setItem("okay-desk.read", s) catch case _: Exception => ()
     put(s"read $reads: $what, GPU ${gpu / 1048576} MB — begun")
-    () =>
-      val s = s"read $reads: $what, GPU ${memoryInfo()._1 / 1048576} MB — done in ${(js.Date.now() - t0).toInt} ms"
+    (x: Any) =>
+      // a weighing: its best three (the margin the doubt reads), to compare one device with another
+      val top = x match
+        case v: Vector[?] if v.headOption.exists(_.isInstanceOf[Double]) =>
+          v.asInstanceOf[Vector[Double]].sorted.reverse.take(3).map(d => f"$d%.4f").mkString(" best ", " ", "")
+        case _ => ""
+      val s = s"read $reads: $what, GPU ${memoryInfo()._1 / 1048576} MB — done in ${(js.Date.now() - t0).toInt} ms$top"
       put(s)
       if js.Dynamic.global.window.okayTraceReads.asInstanceOf[js.UndefOr[Boolean]].contains(true) then
         println("model " + s)
@@ -376,6 +381,7 @@ object Engine:
       // a weighing in parts a forward (OnQwen.parts; the iPhone): 48 options of a trie are about the rows of 16 packed
       // whole (~110), the size the iPhone finished; fewer parts, fewer passes over the weights
       if phone then on.parts = 48
+      on.checkTrie = dom.window.location.search.contains("checktree")
       statementReader = stated.filter(_.heads.d == config.hidden)
       plainReader = plain.filter(_.heads.d == config.hidden)
       statementGate = gated
@@ -883,7 +889,7 @@ object Engine:
     println(s"frame links: ${tables.toVector.map((n, t) => s"$n -> ${Links.of(t, question).mkString(", ")}").mkString("; ")}")
     type Out = Either[(Vector[String], Vector[String]), FrameReading.Reading]
     def run(p: Out ! AsyncRead): Future[Out] = Read.future(p, [X] => (op: Read[X]) => {
-      val done = traced(op); chunked(op).map { x => done(); x } })
+      val done = traced(op); chunked(op).map { x => done(x); x } })
     // a reader of the two: its adapter in use, the prefix cache of the other let go (its states are another's)
     def by(reader: Int)(p: => Out ! AsyncRead): Future[Out] =
       framesAdapted.foreach { a => if a.current != reader then { a.current = reader; on.clearCache() } }

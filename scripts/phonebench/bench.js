@@ -35,6 +35,8 @@
     try { Object.defineProperty(window, "caches", { value: { open: async n => store(n) }, configurable: true }); }
     catch (e) {}
   }
+  // ?trace: every model read to the log, with a weighing's best three (the page prints them; the console hook sends)
+  if (location.search.includes("trace")) window.okayTraceReads = true;
   const t0 = performance.now();
   const ms = () => Math.round(performance.now() - t0);
   const saved = JSON.parse(sessionStorage.getItem("phonebench") || "null");

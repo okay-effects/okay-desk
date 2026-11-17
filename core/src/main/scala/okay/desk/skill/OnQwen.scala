@@ -25,6 +25,8 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     model.c.close()
   /** the options of one weighing at most, a forward (0: all at once) — a phone sets it (Engine) */
   var parts: Int = 0
+  /** the trie's numbers checked against the packed segments', each weighing of a part (a device's law, a driver's flag) */
+  var checkTrie: Boolean = false
   private var cached: Option[(Array[Int], model.Cache)] = None
   /** the forward: after the cached prefix when `ids` begins with it, else whole and kept */
   private def run(ids: Array[Int], at: Seq[Int], withLogits: Boolean): Future[(Vector[Array[Float]], Array[Float])] =
@@ -73,7 +75,16 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
       // (`over`), so the numbers are the one forward's
       val all = options.flatten.toArray
       ensure(context ++ options.flatten).flatMap(_ => ready).flatMap { cache =>
-        if parts <= 0 || options.size <= parts then model.score(cache, context.last, options, within = true)
+        if parts <= 0 || options.size <= parts then
+          val got = model.score(cache, context.last, options, within = true)
+          // THE TRIE CHECKED ON THE DEVICE (`checkTrie`): the same weighing by packed segments, the largest
+          // difference said
+          if !checkTrie then got
+          else got.flatMap(a => model.score(cache, context.last, options, within = true, trie = Some(false)).map { b =>
+            val diff = a.zip(b).map((x, y) => math.abs(x - y)).max
+            println(f"model trie check: ${options.size} options, max diff $diff%.2e, " +
+              f"best ${a.indexOf(a.max)} vs ${b.indexOf(b.max)}")
+            a })
         else options.grouped(parts).foldLeft(Future.successful(Vector.empty[Double])) { (acc, part) =>
           acc.flatMap(got => model.score(cache, context.last, part, within = true, over = Some(all)).map(got ++ _)) } }
   def handler: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => answer[X](op)
