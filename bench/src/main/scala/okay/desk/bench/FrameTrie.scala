@@ -57,3 +57,32 @@ object FrameMix:
     println(s"${options.size} options for: $q")
     options.groupBy(o => o.split(" ").take(2).mkString(" ")).toVector.sortBy(-_._2.size).foreach((k, v) =>
       println(f"${v.size}%4d  $k%-24s e.g. ${v.take(3).mkString("; ")}"))
+
+/** THE GROWN CACHE'S LAW: a cache grown by a weighed trie's path (`extend`, no forward) weighs the next line as the
+ * cache run over the same tokens does. `FrameExtendLaw <model dir>` */
+object FrameExtendLaw:
+  def main(args: Array[String]): Unit =
+    import scala.concurrent.{Await, ExecutionContext}
+    import scala.concurrent.duration.*
+    given ExecutionContext = ExecutionContext.global
+    def await[A](f: scala.concurrent.Future[A]): A = Await.result(f, 30.minutes)
+    val dir = Path.of(args(0))
+    val tok = mlx.llm.Chat.load(dir).tokenizer
+    val config = okay.llm.qwen.Qwen3Config.parse(java.nio.file.Files.readString(dir.resolve("config.json")))
+    val st = okay.llm.qwen.Safetensors(java.nio.file.Files.readAllBytes(dir.resolve("model.safetensors")))
+    val model = okay.llm.qwen.Qwen3Compute(okay.llm.compute.OnMlx(), st, config)
+    val q = "How many orders are unpaid?"
+    val nl = tok.encode("\n").last
+    val context = tok.encode(s"Tables: orders(id, customer, amount, status)\nQuestion: $q\ntable: orders").toArray
+    val (_, _, c0) = await(model.run(context, config.layers, Nil, withLogits = false, None, keep = true))
+    val options = Vector("answer: count", "answer: rows", "answer: sum amount").map(o => tok.encode(o).toArray :+ nl)
+    await(model.score(c0.get, nl, options, within = true, trie = Some(true)))      // the trie kept
+    val chosen = tok.encode("answer: count").toArray
+    val suffix = nl +: chosen
+    val grown = model.extend(c0.get, suffix).getOrElse(sys.error("no path kept"))
+    val (_, _, run) = await(model.run(context ++ suffix, config.layers, Nil, withLogits = false, c0, keep = true))
+    val next = Vector("where: status = unpaid", "where: status = paid", "end").map(o => tok.encode(o).toArray :+ nl)
+    val a = await(model.score(grown, nl, next, within = true, trie = Some(false)))
+    val b = await(model.score(run.get, nl, next, within = true, trie = Some(false)))
+    println(f"grown ${grown.n} rows, run ${run.get.n}; max |grown − run| = ${a.zip(b).map((x, y) => math.abs(x - y)).max}%.2e; " +
+      s"best ${a.indexOf(a.max)} vs ${b.indexOf(b.max)}")

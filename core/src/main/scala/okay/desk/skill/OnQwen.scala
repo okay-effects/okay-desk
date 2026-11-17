@@ -19,7 +19,7 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     using ExecutionContext):
   def rehead(): Unit = model.rehead()
   def clearCache(): Unit =
-    cached.foreach(_._2.free()); cached = None
+    cached.foreach(_._2.free()); cached = None; model.dropTrees()
   def close(): Unit =
     clearCache()
     model.c.close()
@@ -68,6 +68,12 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
       // (a def: run only after the blocks are loaded)
       def ready: Future[model.Cache] = cached match
         case Some((prefix, cache)) if prefix.sameElements(head) => Future.successful(cache)
+        // THE LINE CHOSEN, ALREADY RUN: its tokens were rows of the trie just weighed — the cache grows by them with no
+        // forward (Qwen3Compute.extend; a phone: one forward a line instead of two)
+        case Some((prefix, cache)) if head.startsWith(prefix) && head.length > prefix.length &&
+            model.extend(cache, head.drop(prefix.length)).exists { next =>
+              cache.free(); cached = Some(head -> next); true } =>
+          Future.successful(cached.get._2)
         case Some((prefix, cache)) if head.startsWith(prefix) =>
           model.run(head, layer, Nil, withLogits = false, Some(cache), keep = true).map { (_, _, next) =>
             cache.free(); cached = next.map(head -> _); next.get }
