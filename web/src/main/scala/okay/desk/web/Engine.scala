@@ -74,6 +74,31 @@ object Engine:
         }
       }
     }
+  /** A FILE READ INTO A BUFFER THE PAGE ALREADY HAS (`into`, reused file after file): its length. Every weight file as
+   * a new 60 MB ArrayBuffer raised a phone's tab by the sum of them all — Safari does not give them back between
+   * files (WebKit measured: +440 MB for 340 MB of files). The disk's cache is written beside the reading, not before
+   * it (awaited first, the stream held a second whole copy of the file the while) */
+  private def fetchInto(name: String, into: Uint8Array): Future[Int] =
+    cache("okay-desk-model").flatMap { c =>
+      val hit = c.fold(Future.successful(null: js.Dynamic))(cc =>
+        cc.`match`(name).asInstanceOf[js.Promise[js.Dynamic]].toFuture)
+      hit.flatMap { cached =>
+        val response: Future[js.Dynamic] =
+          if cached != null && !js.isUndefined(cached) then Future.successful(cached)
+          else dom.fetch(name).toFuture.map { r =>
+            if !r.ok then throw IllegalStateException(s"$name: HTTP ${r.status}")
+            c.foreach(cc => cc.put(name, r.clone()).asInstanceOf[js.Promise[Unit]].toFuture.recover { case _ => () })
+            r.asInstanceOf[js.Dynamic] }
+        response.flatMap { r =>
+          val reader = r.body.getReader()
+          def loop(at: Int): Future[Int] = reader.read().asInstanceOf[js.Promise[js.Dynamic]].toFuture.flatMap { s =>
+            if s.done.asInstanceOf[Boolean] then Future.successful(at)
+            else
+              val chunk = s.value.asInstanceOf[Uint8Array]
+              require(at + chunk.length <= into.length, s"$name: larger than its buffer (${into.length} bytes)")
+              into.set(chunk, at)
+              loop(at + chunk.length) }
+          loop(0) } } }
   private def text(ab: ArrayBuffer): String = js.Dynamic.newInstance(js.Dynamic.global.TextDecoder)().decode(ab).asInstanceOf[String]
   /** THE EMBEDDING IN BLOCKS BY LANGUAGE (okay-llm `Vocab`): the manifest names a file a block and an index (a byte a
    * token: its block); the page loads the blocks of its languages — common, latin-en, cyrillic — and fetches another
@@ -95,10 +120,65 @@ object Engine:
       else missing.foldLeft(Future.unit)((acc, b) => acc.flatMap(_ => loadBlock(dir, b))).map { _ =>
         Option(on).foreach(_.rehead()); idle() }
     case None => Future.unit
+  /** THE TOKENIZER, read by the browser's own JSON.parse: the file's 11 MB as a tree of Scala values was 340 MB of a
+   * phone's tab (WebKit, measured by scripts/phonebench); the parts go to `Tokenizer.of` straight from the JS
+   * objects */
+  private def tokenizer(b: ArrayBuffer): Tokenizer =
+    val j = js.JSON.parse(text(b))
+    val model = j.model
+    require(model.`type`.asInstanceOf[String] == "BPE", "a BPE model expected")
+    val vocab = model.vocab.asInstanceOf[js.Dictionary[Int]]
+    val merges = model.merges.asInstanceOf[js.Array[js.Any]]
+    val added = j.added_tokens.asInstanceOf[js.Array[js.Dynamic]].toSeq.map(t =>
+      (t.content.asInstanceOf[String], t.id.asInstanceOf[Int],
+        t.special.asInstanceOf[js.UndefOr[Boolean]].getOrElse(false)))
+    val nfc = j.normalizer match
+      case n if n == null || js.isUndefined(n) => false
+      case n if n.`type`.asInstanceOf[String] == "NFC" => true
+      case n => sys.error(s"a normalizer not supported: ${js.JSON.stringify(n)}")
+    Tokenizer.of(js.Object.keys(vocab.asInstanceOf[js.Object]).iterator.map(k => k -> vocab(k)),
+      merges.iterator.map(m => if js.Array.isArray(m) then m.asInstanceOf[js.Array[String]].mkString(" ")
+        else m.asInstanceOf[String]), added, nfc)
   /** the weights: the files manifest.json lists (a few layers each, `Tensors.Many` reads them as one — a page never
    * holds the whole of them twice; GitHub Pages caps a file at 100 MB), else the one model.safetensors; and the
    * embedding: in blocks when the manifest has them */
-  private def weights(dir: String, vocab: Int): Future[(Tensors, Option[okay.llm.qwen.Rows])] =
+  /** the one buffer the weight files are read into, while a model loads */
+  private var shared: Option[Uint8Array] = None
+  /** A LINEAR CUT BETWEEN TWO WEIGHT FILES: its parts (copies, the file they came from let go) until all three came */
+  private val split = scala.collection.mutable.HashMap.empty[String, scala.collection.mutable.HashMap[String, js.Any]]
+  /** ONE WEIGHT FILE ONTO WEBGL2 FROM ITS OWN BYTES: each linear's words sent from a view of the fetched buffer, its
+   * BF16 scales and biases made halves in one pass (OnWebGl2.quantizedFrom); the norms copied, the file let go after.
+   * A weight on its way was three copies before (Scala array, typed array, padded): ~400 MB of the iPhone's tab */
+  private def putFile(k: okay.llm.compute.Preloaded.Kept, pre: okay.llm.compute.Preloaded, gl: OnWebGl2,
+      st: Safetensors, b: ArrayBuffer): Unit =
+    val at = st.dataStart
+    def bytes(e: st.Entry): ArrayBuffer = b.slice(at + e.from, at + e.until)
+    def words(e: st.Entry, keep: Boolean): Uint32Array =
+      val off = at + e.from
+      if off % 4 == 0 && !keep then new Uint32Array(b, off, (e.until - e.from) / 4) else new Uint32Array(bytes(e))
+    val byPrefix = st.entries.groupBy((name, _) => name.take(name.lastIndexOf('.')))
+    for (prefix, es) <- byPrefix do
+      for (name, e) <- es do k.keepShape(name, e.shape)
+      val isLinear = es.exists((n, e) => n.endsWith(".weight") && e.dtype == "U32") ||
+        es.keys.exists(n => n.endsWith(".scales") || n.endsWith(".biases"))
+      if !isLinear then for (name, _) <- es do k.keepSmall(name, st.floats(name))
+      else
+        val whole = es.size == 3 && split.get(prefix).isEmpty
+        val got = if whole then scala.collection.mutable.HashMap.empty[String, js.Any]
+          else split.getOrElseUpdate(prefix, scala.collection.mutable.HashMap.empty)
+        for (name, e) <- es do
+          val part = name.drop(name.lastIndexOf('.') + 1)
+          got(part) = if part == "weight" then words(e, keep = !whole) else new Uint16Array(bytes(e))
+        if got.size == 3 then
+          val shape = k.shape(prefix + ".weight")
+          val w = gl.quantizedFrom(shape(0), shape(1) * 8, got("weight").asInstanceOf[Uint32Array],
+            got("scales").asInstanceOf[Uint16Array], got("biases").asInstanceOf[Uint16Array])
+          k.keepLinear(prefix, pre.putMade(shape(0), shape(1) * 8, w.asInstanceOf[pre.base.W]))
+          split.remove(prefix)
+  /** `onto`: the device the weights go to a file at a time (`Preloaded`): each file put there as it comes and let go,
+   * so a phone's tab never holds the files together (the operator's iPhone, specs/phone.md §4.1) */
+  private def weights(dir: String, vocab: Int, onto: Option[okay.llm.compute.Preloaded])
+      : Future[(Tensors, Option[okay.llm.qwen.Rows])] =
     fetch(s"$dir/manifest.json").map(b => Option(text(b))).recover { case _ => None }.flatMap {
       case None => fetch(s"$dir/model.safetensors").map(b => (new Safetensors(TypedArrayBuffer.wrap(b)), None))
       case Some(t) =>
@@ -112,9 +192,25 @@ object Engine:
         val blocks = m.get("embedding") match
           case Some(okay.effects.json.Json.Obj(fs)) => fs.collect { case (k, okay.effects.json.Json.Str(v)) => k -> v }.toMap
           case _ => Map.empty[String, String]
+        val kept = onto.map(_ => okay.llm.compute.Preloaded.Kept())
         val layers = files.zipWithIndex.foldLeft(Future.successful(Vector.empty[Tensors])) { (acc, f) => acc.flatMap { got =>
           stage(s"the weights: file ${f._2 + 1} of ${files.size}…")
-          fetch(s"$dir/${f._1}").map(b => got :+ (new Safetensors(TypedArrayBuffer.wrap(b)): Tensors)) } }
+          (onto, kept) match
+            // ON WEBGL2: the file read into the one buffer of the load and each weight sent from its bytes
+            case (Some(device), Some(k)) if device.base.isInstanceOf[OnWebGl2] =>
+              val into = shared.getOrElse { val u = new Uint8Array(64 * 1048576); shared = Some(u); u }
+              fetchInto(s"$dir/${f._1}", into).map { n =>
+                putFile(k, device, device.base.asInstanceOf[OnWebGl2],
+                  new Safetensors(TypedArrayBuffer.wrap(into.buffer, 0, n)), into.buffer)
+                got }
+            case _ => fetch(s"$dir/${f._1}").map { b =>
+              val st = new Safetensors(TypedArrayBuffer.wrap(b))
+              (onto, kept) match
+                case (Some(device), Some(k)) => k.add(device, st); got   // on the device now; the file let go
+                case _ => got :+ (st: Tensors) } } }.map(ls => kept.fold(ls) { k =>
+              require(k.complete && split.isEmpty, "the weight files left a linear without all its parts")
+              shared = None   // the buffer of the load let go
+              Vector(k) })
         val embedding: Future[Option[okay.llm.qwen.Rows]] =
           if blocks.isEmpty then Future.successful(None)
           else
@@ -124,7 +220,7 @@ object Engine:
               blocksOf = Some((dir, blocks, new Int8Array(ib).toArray, rows))
               wanted.filter(blocks.contains).foldLeft(Future.unit)((acc, b) => acc.flatMap(_ => loadBlock(dir, b))).map(_ => Some(rows))
             }
-        for ls <- layers; e <- embedding yield (Tensors.Many(ls), e)
+        for ls <- layers; e <- embedding yield (if ls.size == 1 then ls.head else Tensors.Many(ls), e)
     }
   /** THE STAGE, KEPT (local storage): a phone that kills the tab reloads it with no word — the next visit says where
    * the last one ended */
@@ -153,6 +249,9 @@ object Engine:
     try dom.window.localStorage.removeItem(pendingQuestionKey)
     catch case _: Exception => ()
   private var memoryInfo: () => (Long, Long) = () => (0L, 0L)
+  // THE GPU BYTES, LIVE: `okayGpu()` — the bytes in textures now and the peak, for a driver (scripts/phonebench)
+  dom.window.asInstanceOf[js.Dynamic].updateDynamic("okayGpu")(
+    ((() => { val (n, p) = memoryInfo(); js.Array(n.toDouble, p.toDouble) }): js.Function0[js.Array[Double]]))
   private def memoryStage(words: String): Unit =
     val (bytes, peak) = memoryInfo()
     dom.window.asInstanceOf[js.Dynamic].updateDynamic("okayModelProgress")(js.Dynamic.literal(
@@ -177,15 +276,17 @@ object Engine:
     val source = if dir == framesDir then "model-full" else dir
     (for
       config <- fetch(s"$source/config.json").map(text).map(Qwen3Config.parse)
-      tok <- fetch(s"$source/tokenizer.json").map(t => Tokenizer.fromJson(okay.effects.json.Json.fromText(text(t))))
+      tok <- fetch(s"$source/tokenizer.json").map(tokenizer)
       skillBytes <- if understanding || dir == framesDir then Future.successful(new ArrayBuffer(0))
         else fetch(s"$dir/readers.skill")
       adapter <- if understanding && !generate then
         fetch(Execution.versioned(s"$dir/semantic-adapter.safetensors")).map(Some(_))
         else if dir == framesDir then fetch(Execution.versioned(s"$dir/frame.adapter.safetensors")).map(Some(_))
         else Future.successful(None)
-      // the second frame reader's adapter (agreement as the doubt, P4), if the page has it
-      second <- if dir == framesDir then fetch(Execution.versioned(s"$dir/frame2.adapter.safetensors")).map(Some(_))
+      // the second frame reader's adapter (agreement as the doubt, P4), if the page has it — not on a phone: its tab
+      // has no room for a second adapter (the operator's iPhone, specs/phone.md §4.1); there one reader, its margin
+      second <- if dir == framesDir && !phone then
+          fetch(Execution.versioned(s"$dir/frame2.adapter.safetensors")).map(Some(_))
           .recover { case _ => None } else Future.successful(None)
       facts <- if understanding then Future.successful(None) else
         fetch(Execution.versioned(s"$dir/facts.skill")).map(b => FactReader.parse(text(b)).toOption)
@@ -207,20 +308,22 @@ object Engine:
           .recover { case _ => None }
       gpu <- OnWebGpu.create()
       device = gpu.left.flatMap(why => OnWebGl2.create(if phone then 64L * 1048576 else 96L * 1048576,
-        headsAtOnce = if phone then 2 else 16, maximum = if phone then 512L * 1048576 else 1536L * 1048576,
-        compactCache = phone && understanding)
+        headsAtOnce = if phone then 2 else 16, maximum = if phone then 768L * 1048576 else 1536L * 1048576,
+        compactCache = phone)   // the prefix cache in halves on a phone, every model: half its memory (the iPhone)
         .left.map(more => s"$why; $more"))
       c = device.fold(_ => OnCpu(), identity)
+      // the weights go to the device a file at a time; the model is made from what is already there
+      pre = okay.llm.compute.Preloaded(c)
       // the weights last, read straight from the fetched buffer (no copy) onto the device, and not kept: a phone's
       // tab has no room for a second copy of 244 MB
-      model <- weights(source, config.vocab).map { (st, embed) =>
+      model <- weights(source, config.vocab, Some(pre)).map { (st, embed) =>
         stage(s"the weights to ${c.api}…")
         try
           adapter match
             case None => logic match
-              case None => Qwen3Compute(c, st, config, headOnCpu = phone && c.api != "WebGPU", embedGiven = embed)
+              case None => Qwen3Compute(pre, st, config, headOnCpu = phone && c.api != "WebGPU", embedGiven = embed)
               case Some(bytes) =>
-                val adapted = Adapted(c, st, new Safetensors(TypedArrayBuffer.wrap(bytes)))
+                val adapted = Adapted(pre, st, new Safetensors(TypedArrayBuffer.wrap(bytes)))
                 val loaded = Qwen3Compute(adapted, adapted.tensors, config,
                   headOnCpu = phone && c.api != "WebGPU", embedGiven = embed)
                 adapted.releaseSources()
@@ -228,7 +331,7 @@ object Engine:
                 logicAdapter = Some(adapted)
                 loaded
             case Some(bytes) =>
-              val adapted = Adapted(c, st, new Safetensors(TypedArrayBuffer.wrap(bytes)),
+              val adapted = Adapted(pre, st, new Safetensors(TypedArrayBuffer.wrap(bytes)),
                 second.toVector.map(b => new Safetensors(TypedArrayBuffer.wrap(b))))
               val loaded = Qwen3Compute(adapted, adapted.tensors, config,
                 headOnCpu = phone && c.api != "WebGPU", embedGiven = embed)
@@ -713,10 +816,11 @@ object Engine:
   private type Paused = Option[String] => Either[(Vector[String], Vector[String]), FrameReading.Reading] ! AsyncRead
   /** the reading paused at a question, its continuation a value: the person's choice resumes it (never a replay) */
   private var paused: Option[(String, Paused)] = None
-  /** the doubt's bar: a line's margin below it asks the person — 1.0: about one press a question, the wrong answers
-   * halved (guarantees.md §9) */
-  private val frameBar = "frameBar=([0-9.]+)".r.findFirstMatchIn(dom.window.location.search).map(_.group(1).toDouble)
-    .getOrElse(1.0)
+  /** the doubt's bar: a line's margin below it asks the person — with two readers 1.0: about one press a question,
+   * the wrong answers halved (guarantees.md §9); with ONE reader (a phone: no room for the second adapter) 0.3, its
+   * measured bar (frames.md §5.4: en 30/15/9, ru 19/25/10) — 1.0 there asked about nearly every question */
+  private def frameBar: Double = "frameBar=([0-9.]+)".r.findFirstMatchIn(dom.window.location.search)
+    .map(_.group(1).toDouble).getOrElse(if framesAdapted.isEmpty then 0.3 else 1.0)
   /** THE PERSON ON THE PAGE: asked, the reading stops with the question and keeps `k`; the buttons resume it */
   private def pausing: Handler[Person, AsyncRead, FrameReading.Reading,
       Either[(Vector[String], Vector[String]), FrameReading.Reading]] =

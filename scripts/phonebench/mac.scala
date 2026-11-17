@@ -15,7 +15,7 @@ import scala.jdk.CollectionConverters.*
   val p = c.newPage()
   p.addInitScript("Object.defineProperty(navigator, 'gpu', { get: () => undefined });" +
     "Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 5 });")
-  p.onConsoleMessage(m => if m.`type`() == "error" || m.text().contains("frame reader") || m.text().contains("ask") then println("console: " + m.text().take(300)))
+  p.onConsoleMessage(m => if m.`type`() == "error" || m.text().contains("frame reader") || m.text().contains("ask") || m.text().contains("weights") || m.text().contains("stage") then println("console: " + m.text().take(300)))
   p.navigate(url)
   p.waitForFunction("() => (sessionStorage.getItem('phonebench') || '').includes('\"done\"')", null,
     Page.WaitForFunctionOptions().setTimeout(1800000).setPollingInterval(2000))

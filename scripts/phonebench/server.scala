@@ -1,6 +1,7 @@
 // THE PHONE BENCH'S SERVER (specs/phone.md §5): the published page served on the local network with bench.js put
 // into it; every other file fetched once from the published site and kept on disk; POST /log appended to a file.
-// scala-cli run scripts/phonebench/server.scala -- <port> <cache dir> <log file>
+// scala-cli run scripts/phonebench/server.scala -- <port> <cache dir> <log file> [<overlay dir>]
+// <overlay dir>: a local build of the page (main.js, worker.js, model files…) served before the published one
 // The phone opens http://<this Mac's address>:<port>/ — the bench starts by itself and logs here.
 //> using scala 3.3.8
 import com.sun.net.httpserver.{HttpExchange, HttpServer}
@@ -14,7 +15,8 @@ import java.util.concurrent.Executors
 val upstream = "https://okay-effects.github.io/okay-desk"
 val here = Path.of(sys.props.getOrElse("bench.dir", "scripts/phonebench"))
 
-@main def phoneBench(port: Int, cacheDir: String, logFile: String): Unit =
+@main def phoneBench(port: Int, cacheDir: String, logFile: String, overlayDir: String*): Unit =
+  val overlay = overlayDir.headOption.map(Path.of(_))
   val cache = Path.of(cacheDir); Files.createDirectories(cache)
   val log = Path.of(logFile); Files.createDirectories(log.getParent)
   val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
@@ -30,7 +32,9 @@ val here = Path.of(sys.props.getOrElse("bench.dir", "scripts/phonebench"))
   /** the published file, from the disk when fetched before; None when the site has none */
   def file(path: String): Option[Path] = lock.synchronized {
     val local = cache.resolve(path.stripPrefix("/"))
-    if Files.exists(local) then Some(local)
+    val built = overlay.map(_.resolve(path.stripPrefix("/"))).filter(f => Files.isRegularFile(f))
+    if built.nonEmpty then built
+    else if Files.exists(local) then Some(local)
     else
       val r = client.send(HttpRequest.newBuilder(URI.create(upstream + path)).build(),
         HttpResponse.BodyHandlers.ofByteArray())

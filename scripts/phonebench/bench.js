@@ -24,7 +24,8 @@
       if (!stores.has(name)) {
         const m = new Map(), keep = name !== "okay-desk-model";
         stores.set(name, {
-          put: async (k, r) => { if (keep) m.set(String(k), await r.clone().text()); },
+          // the caller's clone of a model file is cancelled: a clone never read holds a second copy of the file
+          put: async (k, r) => { if (keep) m.set(String(k), await r.text()); else if (r.body) r.body.cancel().catch(() => {}); },
           match: async k => m.has(String(k)) ? new Response(m.get(String(k))) : undefined,
           delete: async k => m.delete(String(k)),
         });
@@ -195,11 +196,21 @@
   async function main() {
     await until(() => document.body, 10000);
     document.body.appendChild(panel);
-    if (saved) log("reloaded", { after: saved.step });   // the device dropped the page: where it was
+    // the device dropped the page: where the bench was, the page's last stage and GPU bytes (the beat below)
+    if (saved) log("reloaded", { after: saved.step, lastBeat: sessionStorage.getItem("phonebench-beat"),
+      pageStage: localStorage.getItem("okay-desk.stage") });
+    // THE BEAT: the page's stage and GPU bytes kept every second — a killed tab tells them on its reload
+    let beat = "";
+    setInterval(() => {
+      const g = window.okayGpu ? window.okayGpu() : [0, 0];
+      const now = (localStorage.getItem("okay-desk.stage") || "-") + " | GPU " + Math.round(g[0] / 1048576) +
+        " MB, peak " + Math.round(g[1] / 1048576) + " MB";
+      if (now !== beat) { beat = now; sessionStorage.setItem("phonebench-beat", ms() + " ms: " + now); log("beat", { now }); }
+    }, 1000);
     if (state.step === "start") {
       show("the device…");
       log("device", device());
-      for (const n of [512, 1024]) {
+      for (const n of (location.search.includes("speed") ? [512, 1024] : [])) {   // known: 34 GFLOPS (phone.md §4.1)
         state.step = `speed ${n}`; keep();
         try { log("speed", speed(n)); } catch (e) { log("speed", { n, error: String(e) }); }
       }
