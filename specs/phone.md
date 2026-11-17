@@ -117,3 +117,33 @@ one forward. A phone needs its work in pieces it can finish.
 2–14 s on the Mac — the iPhone's shader rate is 1/20 of the Mac's (§4.1). Next: fewer and smaller forwards per
 question — decide only what changes the answer and the data's exact words first (theory.md §11 E5, E6), options
 packed in a trie (E7), the prefix shorter (the tables a question names, not all of them).
+
+### 4.3 Faster on the iPhone (2026-11-17 afternoon; okay-llm d87bf1d, 7232958; okay-desk 80069d5, c8fc5ca, 594b88a)
+
+The same ten questions, the same answers (✅ 1 2 4 5 6 7, ❓ 3 8 9, ⛔ 10 right), seconds a question on the iPhone:
+
+| question | morning (§4.2) | the trie, parts of 48 | + the tables' prefix kept |
+|---|---|---|---|
+| 1 (with loading the model) | 308 | 248 | 250 |
+| 2 | 160 | 66 | **45** |
+| 3 ❓ | 30 | 25 | **4** |
+| 4 | 94 | 45 | **24** |
+| 5 | 243 | 88 | **67** |
+| 6 | 223 | 66 | **45** |
+| 7 | 197 | 67 | **45** |
+| 8 ❓ | 128 | 44 | **23** |
+| 9 ❓ | 38 | 35 | **11** |
+| 10 ⛔ | 25 | 30 | **5** |
+
+- **The options as a trie** (`Qwen3Compute.scoreTree`, `OnWebGl2` tree shaders): a `where` line's 171 options are 317
+  rows, not 1037; the numbers are the segments' — law on MLX (2e-6) and checked ON the iPhone (`?checktree`: 0).
+  The heaviest weighing 45–65 s → ~20 s. Parts of 48 options (the rows of 16 packed whole, the size the iPhone
+  finished).
+- **The prompt's beginning kept between questions** (`Cache.take`, `OnQwen`): the rule and the tables are the same
+  for every question over them; only the question's own tokens run — ~35 s less a question on the iPhone.
+- **The bench over HTTPS** (self-signed, port 8753): a secure context — the Wake Lock keeps the screen on (the
+  silent-video trick no longer works on iOS 18), the Cache API keeps the model for the next visit; a download with
+  no byte for 20 s is tried again (the screen had locked mid-file).
+
+Now: a question 5–67 s (median ~35 s) after the first. Left: the first question's prompt (~35 s) and loading
+(~3.5 min the first visit, then from the device's cache); E5/E6 (fewer lines weighed); the published page.
