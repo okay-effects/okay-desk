@@ -147,3 +147,26 @@ The same ten questions, the same answers (✅ 1 2 4 5 6 7, ❓ 3 8 9, ⛔ 10 rig
 
 Now: a question 5–67 s (median ~35 s) after the first. Left: the first question's prompt (~35 s) and loading
 (~3.5 min the first visit, then from the device's cache); E5/E6 (fewer lines weighed); the published page.
+
+### 4.4 Pruned, and the model from the device's cache (2026-11-17, okay-desk efe9a0f)
+
+A condition on a value the question does not name is no longer weighed (theory E5: a text value not linked to the
+question, a number it does not write — a column of at most 4 values keeps its own, "the second term"): a `where`
+line 172 → 64 options. Everyday on the JVM: 107 of 108 frames as before; shifts-33 went asked → wrong (its
+runner-up was a pruned condition — the doubt had leaned on an option no question names). The iPhone, over HTTPS, the
+model from the Cache API of the earlier visit:
+
+| question | morning (§4.2) | §4.3 | **now** |
+|---|---|---|---|
+| 1 (with loading the model) | 308 | 250 | **32** |
+| 2 | 160 | 45 | **17** |
+| 3 ❓ | 30 | 4 | **4** |
+| 4 | 94 | 24 | **11** |
+| 5 | 243 | 67 | **30** |
+| 6 | 223 | 45 | **23** |
+| 7 | 197 | 45 | **26** |
+| 8 ❓ | 128 | 23 | **12** |
+| 9 ❓ | 38 | 11 | **11** |
+| 10 ⛔ | 25 | 5 | **6** |
+
+The ten questions with the model's loading: ~3 minutes, was ~25 this morning. The same answers as the Mac's.
