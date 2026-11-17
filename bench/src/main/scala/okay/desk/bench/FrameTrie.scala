@@ -48,3 +48,12 @@ object FrameTrieLaw:
     val diff = seg.zip(tree).map((a, b) => math.abs(a - b)).max
     println(f"${options.size} options: max |segments − trie| = $diff%.2e; best ${seg.indexOf(seg.max)} vs " +
       f"${tree.indexOf(tree.max)}; segments ${(t1 - t0) / 1e9}%.1f s, trie (row-at-a-time) ${(t2 - t1) / 1e9}%.1f s")
+
+/** what a line's options are: by section and column (`FrameMix`) */
+object FrameMix:
+  def main(args: Array[String]): Unit =
+    val q = args.headOption.getOrElse("How many orders are unpaid?")
+    val options = Frame.next(Vector("table: orders", "answer: count"), Sample.tables, q)
+    println(s"${options.size} options for: $q")
+    options.groupBy(o => o.split(" ").take(2).mkString(" ")).toVector.sortBy(-_._2.size).foreach((k, v) =>
+      println(f"${v.size}%4d  $k%-24s e.g. ${v.take(3).mkString("; ")}"))

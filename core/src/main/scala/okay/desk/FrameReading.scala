@@ -56,10 +56,34 @@ object FrameReading:
       case Some(n @ (_, v)) if !linked(n) && text(v) => s - guess
       case _ => s)
 
+  /** the options but the conditions on a value the question does not name: a text value not linked (`weighed`'s
+   * guesses), a number it does not write (`pruneNumbers`); a line left with none keeps all */
+  var pruneNumbers: Boolean = true
+  private def pruned(options: Vector[String], so: Reading, tables: Map[String, Table], question: String)
+      : Vector[String] =
+    val table = so.lines.headOption.map(_.stripPrefix("table: ").trim).flatMap(tables.get)
+    val linked = table.fold(Set.empty[(String, String)])(t => Links.of(t, question).toSet)
+    def text(v: String) = !v.matches("-?[\\d.]+") && !v.matches("\\d{4}-\\d{2}.*") && !v.startsWith("column ")
+    // a number the question does not write (a column's own values, offered where they are few) — but 0 and 1
+    val written = Frame.numbers(question).toSet ++ Set("0", "1")
+    def number(v: String) = v.matches("-?[\\d.]+")
+    // a condition's value whatever its operator ("where: amount >= 120" → 120)
+    val condition = "^(?:where|part|from|to): (\\S+) (?:=|!=|<|>|<=|>=) (.+)$".r
+    // a column of a few values (a term, a quarter, a mark: "the second term" is term = 2) keeps its own; a wide one
+    // (amounts, ids) only the numbers the question writes
+    val few = table.fold(Set.empty[String])(t => t.columns.indices.filter(i =>
+      t.rows.map(_(i).text).distinct.size <= 4).map(t.columns(_)).toSet)
+    val kept = options.filter {
+      case condition(c, v) if number(v) => written(v) || few(c) || !pruneNumbers
+      case o => Links.named(o) match
+        case Some(n @ (_, v)) => linked(n) || !text(v)
+        case None => true }
+    if kept.isEmpty then options else kept
+
   /** `start`: lines decided already (a person's choice where two readers parted) — read on from them */
   def read[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt] = None, maxLines: Int = 16,
       start: Vector[String] = Vector.empty, link: Double = 0.0,
-      guess: Double = 0.0)(using In[Read, R], In[Person, R]): Reading ! R =
+      guess: Double = 0.0, prune: Boolean = false)(using In[Read, R], In[Person, R]): Reading ! R =
     val (system, user) = Frame.prompt(tables, question)
     for
       prompt <- Read.prompt[R](system, user)
@@ -67,16 +91,19 @@ object FrameReading:
       end <- Read.encode[R]("<|im_end|>").map(_.last)
       decided <- Read.each[String, Array[Int], R](start)(l => Read.encode[R](l))
       context = decided.foldLeft(prompt)((c, t) => (c :+ newline) ++ t)
-      read <- step(tables, question, doubt, maxLines, link, guess, context, newline, end,
+      read <- step(tables, question, doubt, maxLines, link, guess, prune, context, newline, end,
         Reading(start, Vector.fill(start.size)(Double.PositiveInfinity)))
     yield read
 
   private def step[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt], maxLines: Int,
-      link: Double, guess: Double, context: Array[Int], newline: Int, end: Int, so: Reading)(
+      link: Double, guess: Double, prune: Boolean, context: Array[Int], newline: Int, end: Int, so: Reading)(
       using In[Read, R], In[Person, R]): Reading ! R =
     if so.lines.lastOption.contains(Frame.end) || so.unresolved || so.lines.size >= maxLines then pure(so)
     else
-      val options = Frame.next(so.lines, tables, question)
+      // PRUNED (`prune`, theory.md E5): a condition on a text value the question does not name is not weighed at all —
+      // `guess` took it down by nats anyway; the where lines of 171 options were most of a question's time on a phone
+      val options = if prune then pruned(Frame.next(so.lines, tables, question), so, tables, question)
+        else Frame.next(so.lines, tables, question)
       if options.isEmpty then pure(so.copy(lines = so.lines :+ Frame.end))
       else
         for
@@ -95,7 +122,7 @@ object FrameReading:
             case (None, asked) => pure[Reading, R](so.copy(margins = so.margins :+ margin, asked = asked,
               unresolved = true))
             case (Some(line), asked) =>
-              Read.encode[R](line).flatMap(t => step(tables, question, doubt, maxLines, link, guess,
+              Read.encode[R](line).flatMap(t => step(tables, question, doubt, maxLines, link, guess, prune,
                 (context :+ newline) ++ t, newline, end,
                 Reading(so.lines :+ line, so.margins :+ margin, asked)))
         yield next

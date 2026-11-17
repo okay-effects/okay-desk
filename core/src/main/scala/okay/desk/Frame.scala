@@ -44,7 +44,7 @@ object Frame:
     "7" -> Vector("seven", "семь", "сім", "siedem"), "8" -> Vector("eight", "восемь", "вісім", "osiem"),
     "9" -> Vector("nine", "девять", "дев'ять", "dziewięć"), "10" -> Vector("ten", "десять", "dziesięć"),
     "12" -> Vector("twelve", "двенадцать", "дванадцять", "dwanaście"))
-  private def numbers(question: String): Vector[String] =
+  def numbers(question: String): Vector[String] =
     val words = "(?U)\\b\\w[\\w']*\\b".r.findAllIn(question.toLowerCase).toVector
     val said = spoken.collect { case (n, stems)
         if words.exists(w => stems.exists(s => w == s || w.startsWith(s) && s.length >= 4)) => n }
