@@ -203,7 +203,7 @@
         state.step = `speed ${n}`; keep();
         try { log("speed", speed(n)); } catch (e) { log("speed", { n, error: String(e) }); }
       }
-      state.step = "q 0"; keep();
+      state.step = location.search.includes("room") ? "room" : "q 0"; keep();
     }
     if (state.step.startsWith("q ")) {
       await until(() => asking(), 60000);
