@@ -85,6 +85,35 @@ object Engine:
   private def cache(name: String): Future[Option[js.Dynamic]] =
     if js.isUndefined(caches) then Future.successful(None)
     else caches.open(name).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map(Some(_)).recover { case _ => None }
+  /** A DOWNLOAD THAT COMES BACK: the body read chunk by chunk (each to `chunk`), the try aborted when no byte came for
+   * 20 s, and the whole file tried again (`restart` first) up to five times — the iPhone's screen locked mid-file and
+   * the page waited for ever for a download iOS had dropped. `onResponse`: the response, before its body is read */
+  private def download(address: String, restart: () => Unit, chunk: Uint8Array => Unit,
+      onResponse: js.Dynamic => Unit): Future[Unit] =
+    def once(): Future[Unit] =
+      val ctl = js.Dynamic.newInstance(js.Dynamic.global.AbortController)()
+      var last = js.Date.now()
+      val stalled = scala.concurrent.Promise[Unit]()
+      val watch = js.timers.setInterval(2000) {
+        if js.Date.now() - last > 20000 then
+          stalled.tryFailure(IllegalStateException(s"$address: no byte for 20 s")); ctl.abort() }
+      val read = dom.fetch(address, js.Dynamic.literal(signal = ctl.signal).asInstanceOf[dom.RequestInit]).toFuture
+        .flatMap { r =>
+          if !r.ok then Future.failed(IllegalStateException(s"$address: HTTP ${r.status}"))
+          else
+            onResponse(r.asInstanceOf[js.Dynamic])
+            val reader = r.body.asInstanceOf[js.Dynamic].getReader()
+            def loop(): Future[Unit] = reader.read().asInstanceOf[js.Promise[js.Dynamic]].toFuture.flatMap { s =>
+              last = js.Date.now()
+              if s.done.asInstanceOf[Boolean] then Future.unit
+              else { chunk(s.value.asInstanceOf[Uint8Array]); loop() } }
+            loop() }
+      Future.firstCompletedOf(Seq(read, stalled.future)).andThen(_ => js.timers.clearInterval(watch))
+    def tries(left: Int): Future[Unit] =
+      restart()
+      once().recoverWith { case e if left > 1 && !e.getMessage.contains("HTTP 404") =>
+        stage(s"downloading again: ${address.takeWhile(_ != '?')}…"); tries(left - 1) }
+    tries(5)
   private def fetch(name: String): Future[ArrayBuffer] =
     val address = if name.startsWith("model-understanding/") && !name.contains("?") then
       Execution.versioned(name) else name
@@ -93,13 +122,15 @@ object Engine:
         cc.`match`(address).asInstanceOf[js.Promise[js.Dynamic]].toFuture)
       hit.flatMap { r =>
         if r != null && !js.isUndefined(r) then r.arrayBuffer().asInstanceOf[js.Promise[ArrayBuffer]].toFuture
-        else dom.fetch(address).toFuture.flatMap { r =>
-          if !r.ok then Future.failed(IllegalStateException(s"$address: HTTP ${r.status}"))
-          else
-            val kept = c.fold(Future.unit)(cc => cc.put(address, r.clone()).asInstanceOf[js.Promise[Unit]]
-              .toFuture.recover { case _ => () })
-            kept.flatMap(_ => r.arrayBuffer().toFuture)
-        }
+        else
+          // the chunks gathered (a stalled download tried again, `download`), then one buffer of them
+          var parts = js.Array[Uint8Array](); var size = 0
+          download(address, () => { parts = js.Array(); size = 0 }, u => { parts.push(u); size += u.length },
+            r => c.foreach(cc => cc.put(address, r.applyDynamic("clone")()).asInstanceOf[js.Promise[Unit]].toFuture
+              .recover { case _ => () })).map { _ =>
+            val out = new Uint8Array(size); var at = 0
+            parts.foreach { p => out.set(p, at); at += p.length }
+            out.buffer }
       }
     }
   /** A FILE READ INTO A BUFFER THE PAGE ALREADY HAS (`into`, reused file after file): its length. Every weight file as
@@ -111,13 +142,14 @@ object Engine:
       val hit = c.fold(Future.successful(null: js.Dynamic))(cc =>
         cc.`match`(name).asInstanceOf[js.Promise[js.Dynamic]].toFuture)
       hit.flatMap { cached =>
-        val response: Future[js.Dynamic] =
-          if cached != null && !js.isUndefined(cached) then Future.successful(cached)
-          else dom.fetch(name).toFuture.map { r =>
-            if !r.ok then throw IllegalStateException(s"$name: HTTP ${r.status}")
-            c.foreach(cc => cc.put(name, r.clone()).asInstanceOf[js.Promise[Unit]].toFuture.recover { case _ => () })
-            r.asInstanceOf[js.Dynamic] }
-        response.flatMap { r =>
+        var at = 0
+        def put(u: Uint8Array): Unit =
+          require(at + u.length <= into.length, s"$name: larger than its buffer (${into.length} bytes)")
+          into.set(u, at); at += u.length
+        if cached == null || js.isUndefined(cached) then
+          download(name, () => at = 0, put, r => c.foreach(cc => cc.put(name, r.applyDynamic("clone")())
+            .asInstanceOf[js.Promise[Unit]].toFuture.recover { case _ => () })).map(_ => at)
+        else Future.successful(cached).flatMap { r =>
           val reader = r.body.getReader()
           def loop(at: Int): Future[Int] = reader.read().asInstanceOf[js.Promise[js.Dynamic]].toFuture.flatMap { s =>
             if s.done.asInstanceOf[Boolean] then Future.successful(at)
