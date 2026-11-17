@@ -80,6 +80,15 @@ if [ -f "$FRAMES_ADAPTER" ]; then
   FRAMES_ADAPTER2=${FRAMES_ADAPTER2:-$HOME/.cache/okay-desk/frame-lora3-s2.adapter.safetensors}
   if [ -f "$FRAMES_ADAPTER2" ]; then cp "$FRAMES_ADAPTER2" "$out/model-frames/frame2.adapter.safetensors"; fi
 fi
+# The frame reader for a phone: the same adapter merged into the weights (FrameMerge) — one reader, no adapter
+# beside every projection; the operator's iPhone ran it where the base with its adapter beside it died (phone.md §4)
+FRAMES_MERGED=${FRAMES_MERGED:-$HOME/.cache/okay-desk/frame-0.6b-r3}
+if [ -f "$FRAMES_MERGED/model.safetensors" ]; then
+  mkdir -p "$out/model-frames-merged"
+  cp web/page/qwen-LICENSE.txt "$out/model-frames-merged/LICENSE"
+  cp "$FRAMES_MERGED/config.json" "$FRAMES_MERGED/tokenizer.json" "$out/model-frames-merged/"
+  sbt -batch "bench/runMain okay.desk.bench.SplitWeights $FRAMES_MERGED $out/model-frames-merged" > /dev/null
+fi
 # The model the student was distilled from, all 28 layers as released, to compare with it (?models): the same
 # readers, read at its layer 19 (where they were trained); the logic and fact readers are the student's, not here
 FULL_DIR=${FULL_DIR:-$HOME/.cache/huggingface/hub/models--mlx-community--Qwen3-0.6B-4bit/snapshots/main}

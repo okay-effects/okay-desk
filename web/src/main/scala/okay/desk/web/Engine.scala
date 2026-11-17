@@ -273,7 +273,10 @@ object Engine:
     val understanding = dir == "model-understanding"
     // THE FRAME READER: the released model's weights (model-full) and its adapter beside them (model-frames, a small
     // file — a second reader is a second small file, not a second model)
-    val source = if dir == framesDir then "model-full" else dir
+    // ON A PHONE: the one reader merged into the weights (model-frames-merged, FrameMerge) — no adapter file, no planes
+    // beside every projection: the iPhone's tab died building and running the base with its adapter beside it
+    val merged = phone && dir == framesDir
+    val source = if merged then "model-frames-merged" else if dir == framesDir then "model-full" else dir
     (for
       config <- fetch(s"$source/config.json").map(text).map(Qwen3Config.parse)
       tok <- fetch(s"$source/tokenizer.json").map(tokenizer)
@@ -281,7 +284,8 @@ object Engine:
         else fetch(s"$dir/readers.skill")
       adapter <- if understanding && !generate then
         fetch(Execution.versioned(s"$dir/semantic-adapter.safetensors")).map(Some(_))
-        else if dir == framesDir then fetch(Execution.versioned(s"$dir/frame.adapter.safetensors")).map(Some(_))
+        else if dir == framesDir && !merged then
+          fetch(Execution.versioned(s"$dir/frame.adapter.safetensors")).map(Some(_))
         else Future.successful(None)
       // the second frame reader's adapter (agreement as the doubt, P4), if the page has it — not on a phone: its tab
       // has no room for a second adapter (the operator's iPhone, specs/phone.md §4.1); there one reader, its margin
