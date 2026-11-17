@@ -246,7 +246,7 @@
     show("done — thank you, the results are on the Mac. (Open with ?again to run once more.)");
   }
   if (location.search.includes("nobench")) return;
-  if (location.search.includes("again")) { sessionStorage.removeItem("phonebench"); location.search = ""; }
+  if (location.search.includes("again")) { sessionStorage.removeItem("phonebench"); location.search = location.search.replace(/[?&]?again/, "").replace(/^&/, "?"); }
   else if (saved && saved.step === "done") { document.addEventListener("DOMContentLoaded", () => {
     document.body.appendChild(panel); show("already done on this tab — open with ?again to run once more"); }); }
   else main();
