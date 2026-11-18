@@ -60,7 +60,7 @@ object FrameReading:
    * guesses), a number it does not write (`pruneNumbers`); a line left with none keeps all */
   var pruneNumbers: Boolean = true
   var pruneSingle: Boolean = true
-  private def pruned(options: Vector[String], so: Reading, tables: Map[String, Table], question: String)
+  def pruned(options: Vector[String], so: Reading, tables: Map[String, Table], question: String)
       : Vector[String] =
     val table = so.lines.headOption.map(_.stripPrefix("table: ").trim).flatMap(tables.get)
     val linked = table.fold(Set.empty[(String, String)])(t => Links.of(t, question).toSet)

@@ -78,16 +78,46 @@ object FrameTrain:
       val (system, user) = Frame.prompt(i.tables, i.question)
       val prompt = chat.prompt(Vector(msg("system", system), msg("user", user)), Nil, Map("enable_thinking" -> false))
       (prompt ++ (tok.encode(answer(i.lines)) :+ end), prompt.length)
+    // FRAME_LISTWISE=<k>: TRAINED AS IT READS (okay-inlay concept.md §5 role 2) — each line of the frame a choice
+    // among the options the reading offers there (`Frame.next`, pruned as the page prunes), the meant line against
+    // k others (half of them, where there are, of its own section: `where:` against `where:`), the listwise loss
+    // over one trie a batch (mlx-scala `Lora.stepChoices`)
+    val listwise = sys.env.get("FRAME_LISTWISE").map(_.toInt)
+    val newline = tok.encode("\n").head
+    def choicesOf(i: FrameData.Item, prompt: Array[Int], wide: Int): Vector[Lora.Choice] =
+      var ctx = prompt
+      i.lines.indices.toVector.flatMap { li =>
+        val gold = i.lines(li)
+        val so = FrameReading.Reading(i.lines.take(li), Vector.empty)
+        val offered = FrameReading.pruned(Frame.next(so.lines, i.tables, i.question), so, i.tables, i.question)
+        val c = Option.when(offered.contains(gold) && offered.size > 1) {
+          val head = gold.takeWhile(_ != ':')
+          val (same, other) = rnd.shuffle(offered.filterNot(_ == gold)).partition(_.takeWhile(_ != ':') == head)
+          val fromOther = math.min(other.size, wide / 2)
+          val negatives = (same.take(wide - fromOther) ++ other.take(fromOther)).take(wide)
+          val opts = rnd.shuffle(gold +: negatives)
+          Lora.Choice(ctx :+ newline, opts.map(o => tok.encode(o) :+ (if o == Frame.end then end else newline)),
+            opts.indexOf(gold))
+        }
+        ctx = (ctx :+ newline) ++ tok.encode(gold)
+        c
+      }
     for e <- 1 to epochs do
       var sum = 0f; var k = 0; var shown = 0
-      val order = rnd.shuffle(items).map(tokens)
+      val order = rnd.shuffle(items).map(i => (tokens(i), i))
       val batches = if batch <= 1 then order.map(Vector(_))
         else order.grouped(batch * 16).toVector.flatMap(w =>
-          (if tree then w.sortBy(_._1) else w.sortBy(_._1.length)).grouped(batch).toVector)
+          (if tree || listwise.nonEmpty then w.sortBy(_._1._1) else w.sortBy(_._1._1.length)).grouped(batch).toVector)
       // (one a step: the order as before, the seed's runs reproduced)
-      for b <- if batch <= 1 then batches else rnd.shuffle(batches) do
-        val loss = if b.size == 1 then lora.step(b.head._1, b.head._2)
-          else if tree then lora.stepTree(b) else lora.stepBatch(b)
+      for b0 <- if batch <= 1 then batches else rnd.shuffle(batches) do
+        val b = b0.map(_._1)
+        val loss = listwise match
+          case Some(wide) =>
+            val cs = b0.flatMap((t, i) => choicesOf(i, t._1.take(t._2), wide))
+            if cs.isEmpty then 0f else lora.stepChoices(cs)
+          case None =>
+            if b.size == 1 then lora.step(b.head._1, b.head._2)
+            else if tree then lora.stepTree(b) else lora.stepBatch(b)
         sum += loss * b.size; k += b.size
         if k / 200 > shown then
           shown = k / 200
