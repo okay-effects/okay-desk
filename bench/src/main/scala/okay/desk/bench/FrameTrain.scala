@@ -65,14 +65,24 @@ object FrameTrain:
     // FRAME_SEED: the order the texts are seen in — the protocol's seeds
     val rnd = new scala.util.Random(sys.env.get("FRAME_SEED").map(_.toLong).getOrElse(5L))
     val t0 = System.nanoTime()
+    // FRAME_BATCH: so many examples a step in one pass (mlx-scala's `Lora.stepBatch`); within a window of 16 batches
+    // of the shuffled order the examples sorted by length, so a batch pads little
+    val batch = sys.env.get("FRAME_BATCH").map(_.toInt).getOrElse(1)
+    def tokens(i: FrameData.Item): (Array[Int], Int) =
+      val (system, user) = Frame.prompt(i.tables, i.question)
+      val prompt = chat.prompt(Vector(msg("system", system), msg("user", user)), Nil, Map("enable_thinking" -> false))
+      (prompt ++ (tok.encode(answer(i.lines)) :+ end), prompt.length)
     for e <- 1 to epochs do
-      var sum = 0f; var k = 0
-      for i <- rnd.shuffle(items) do
-        val (system, user) = Frame.prompt(i.tables, i.question)
-        val prompt = chat.prompt(Vector(msg("system", system), msg("user", user)), Nil, Map("enable_thinking" -> false))
-        val a = tok.encode(answer(i.lines)) :+ end
-        sum += lora.step(prompt ++ a, prompt.length); k += 1
-        if k % 200 == 0 then
+      var sum = 0f; var k = 0; var shown = 0
+      val order = rnd.shuffle(items).map(tokens)
+      val batches = if batch <= 1 then order.map(Vector(_))
+        else order.grouped(batch * 16).toVector.flatMap(w => w.sortBy(_._1.length).grouped(batch).toVector)
+      // (one a step: the order as before, the seed's runs reproduced)
+      for b <- if batch <= 1 then batches else rnd.shuffle(batches) do
+        val loss = if b.size == 1 then lora.step(b.head._1, b.head._2) else lora.stepBatch(b)
+        sum += loss * b.size; k += b.size
+        if k / 200 > shown then
+          shown = k / 200
           println(f"epoch $e, $k/${items.size}: mean loss ${sum / k}%.4f (${(System.nanoTime() - t0) / 1e9}%.0f s)")
       println(f"epoch $e: mean loss ${sum / k}%.4f")
     val out = sys.env.getOrElse("FRAME_OUT", sys.props("user.home") + "/.cache/okay-desk/frame-lora.safetensors")

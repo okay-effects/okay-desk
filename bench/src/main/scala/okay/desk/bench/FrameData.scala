@@ -206,6 +206,25 @@ object FrameData:
       val items = (1L to args(2).toLong).flatMap(s => groups(s * 7919).map(i => json(i, s * 7919, "group")))
       Files.write(out, items.asJava)
       println(s"written $out: ${items.size}")
+    else if args.headOption.contains("--failures") then
+      // THE COUNTEREXAMPLES (okay-inlay concept.md §5, role 5): a pool of the teacher's pairs read by the current
+      // reader (`FrameBench` with FRAME_SET and FRAME_RECORDS); the ones it read wrong or could not read, as texts
+      // with their gold frames — the errors choose the mix, not a template written by hand
+      val (pairs, records, out) = (Path.of(args(1)), Path.of(args(2)), Path.of(args(3)))
+      val missed = Files.readAllLines(records).asScala.filter(_.nonEmpty).map(Json.fromText).flatMap { j =>
+        val key = j.field("key").collect { case Json.Str(s) => s }
+        val outcome = j.field("outcome").collect { case Json.Str(s) => s }
+        key.filter(_ => outcome.exists(_ != "right"))
+      }.toSet
+      val items = TeacherBench.load(pairs).zipWithIndex.flatMap { (p, i) =>
+        Option.when(missed(s"${p.seed}-$i")) {
+          val tables = Teacher.point(p.seed)._1
+          Query.parse(p.program).toOption.flatMap(Frame.of(_, tables))
+            .map(lines => json(Item(tables, p.question, lines), p.seed, "failure"))
+        }.flatten
+      }
+      Files.write(out, items.asJava)
+      println(s"written $out: ${items.size} of ${missed.size} missed")
     else if args.headOption.contains("--spent") then
       val out = Path.of(args(1))
       val items = (1L to args(2).toLong).flatMap(s => spent(s * 3571).map(i => json(i, s * 3571, "spent")))
