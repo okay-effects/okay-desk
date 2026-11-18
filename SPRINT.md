@@ -29,6 +29,13 @@ over three seeds with right / asked / wrong, the phone profile's seconds where s
 - T4 **E2 / E6 decide only what changes the answer**, the surest hole next.
 - T5 **E1 canonical words as the options**.
 - T6 **E7 trie-packed scoring** — speed on the phone.
+- T7 **the reverse reading as the second opinion** (BACKLOG M.6; the operator, 2026-11-18) — no training: the frame
+  said back in words (`FrameSay`) and the QUESTION scored given it, `log P(question | said frame)`, beside the
+  forward choice `P(frame | question)`; doubt = the two directions disagree on the best frame (among the forward's
+  top-k). Measured on the 1004 calibration questions (`FrameCalibrate`) and `Everyday`, 0.6B and 1.7B, three seeds.
+  Check: the share "agreed AND wrong" against the second adapter's (frames.md §5.7 — two adapters agree on the same
+  wrong frame, more with size); the conformal bound of guarantees.md §6.1 holds on `Everyday` or does not; one more
+  forward a question on the phone profile, in seconds. A negative result is written with its reason.
 - Then: E8 (memory), E3 / E9 (one matcher, soft labels), one code path.
 
 1. **The schema with values; `month` in `Query`** (direction §4.1) — built; check: `CeilingBench` again (first run

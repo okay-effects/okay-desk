@@ -271,6 +271,8 @@ control closed 0/32 held-out Test definitions. Do not package an all-abstain hea
 4. **Extensibility shown**: `Calculate` through the `Ability` interface alone, no training of its own (E3).
 5. **The phone's runtime decided** by P2–P3's numbers: browser 0.6B or a native app.
 6. **An independent second opinion**: a matcher of another kind, or the person's check as the default in doubt.
+   First candidate, queued as SPRINT T7: the same model read in the other direction (the question given the frame
+   said back) — no new weights.
 7. **One history**: `bench/history.tsv` for every run, a weekly target, SPRINT the only queue.
 
 ## Moved to okay-llm (2026-11-16)
