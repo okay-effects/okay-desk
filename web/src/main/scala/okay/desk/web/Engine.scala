@@ -918,6 +918,11 @@ object Engine:
             pause = Some((c: Option[String]) => k(c.asInstanceOf[X]))
             pure(Left((decided, options))))
   private var pause: Option[Paused] = None
+  /** an option's words: its canonical words (FrameSay), and the frame's end — which says nothing more — as words of
+   * its own (its button was empty: «2 ·») */
+  private def optionSaid(line: String, lang: String): String =
+    if line == Frame.end then (if lang == "ru" then "больше ничего — так и считать" else "nothing more — compute it")
+    else FrameSay.say(Vector(line), lang)
   /** a line's question in the person's language */
   private def lineQuestion(line: String, ru: Boolean): String = line.takeWhile(_ != ':') match
     case "table" => if ru then "О какой таблице вопрос?" else "Which table is the question about?"
@@ -949,7 +954,7 @@ object Engine:
     said = said :+ next
     def run(p: Out ! AsyncRead): Future[Out] = Read.future(p, [X] => (op: Read[X]) => op match
       case Read.Note(line) =>
-        said = said.init :+ FrameSay.say(Vector(line), lang) :+ next; wake()
+        said = said.init :+ optionSaid(line, lang) :+ next; wake()
         Future.successful(().asInstanceOf[X])
       case _: Read.Score => drawn().flatMap { _ => val done = traced(op); chunked(op).map { x => done(x); x } }
       case _ => val done = traced(op); chunked(op).map { x => done(x); x })
@@ -988,7 +993,7 @@ object Engine:
         pause.foreach(k => paused = Some((question, k)))
         // the options as buttons: each line's canonical words (FrameSay), the choice carries the line itself
         Left(s"ask: ${lineQuestion(options.head, ru)}\n" +
-          options.map(o => s"$o=>${FrameSay.say(Vector(o), lang)}").mkString(" | "))
+          options.map(o => s"$o=>${optionSaid(o, lang)}").mkString(" | "))
       case Right(r) if r.unresolved => Left(if ru then "Не понял вопрос — перефразируйте, пожалуйста."
         else "I did not understand the question — please rephrase it.")
       // outside the language (a cause, a forecast): said plainly, no answer and no search
