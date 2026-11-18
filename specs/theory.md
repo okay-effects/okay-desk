@@ -274,3 +274,17 @@ account for; the honest outcome is to ask.
 **To measure before building (SPRINT T9):** of the wrong terms of the runs already made, the share that violates
 the account. Large → the account is the second opinion; small → the errors are licensed misreadings, and the
 logic adds explanations and the lexicon, not a guarantee.
+
+### 12.1 The account from quantities we already compute (2026-11-18, a hypothesis)
+
+The license needs no new reader if it is read from the two directions of the same model:
+- **an invention** is a part of the term the text does not support: its option's gain from the text,
+  `log P(w | x) − log P(w | x₀)` (E4's PMI), is near zero — the part would be as likely with no question at all;
+- **an omission** is a token of the text the said term does not explain: its surprisal given `σ(t)` (T7's reverse
+  forward, one pass for all the tokens) stays high. Function words are cheap either way and do not count; a
+  content word the term covers becomes cheap; a content word it misses stays dear.
+
+So T7, T9 and E4 are one experiment: per-part PMI forward, per-token surprisal backward, a bar on each. And a third
+repair is the grammar's, not the reader's: an option that makes no sense in its context (a group with no
+aggregate — §11.x's largest class of errors) should not be OFFERED, or be a declared default; a systematic error
+of the weigher is first a question to the option space.
