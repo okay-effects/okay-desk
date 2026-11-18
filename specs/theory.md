@@ -229,7 +229,7 @@ strategy) → E1 (the words as options) → E7 (speed) → E8 (the person) → E
   only with "total"/"sum" said, and "which X has the most" only over single rows. Off; the remedy is the data
   (round 4, `FrameData.groups`).
 
-## 12. The missing judgment: the text licenses the term (2026-11-18, the operator: "a logic for the kernel of understanding")
+## 12. The missing judgment: the text licenses the term (2026-11-18, the operator: "a logic of understanding")
 
 §1 says which terms are well formed (`t : τ`) and what they denote. The text enters only as an opaque argument of
 the weigher: "t is the meaning of x" is nowhere DEFINED, only estimated. So the kernel can check the computation
