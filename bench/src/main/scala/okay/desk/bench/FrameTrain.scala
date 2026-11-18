@@ -68,6 +68,12 @@ object FrameTrain:
     // FRAME_BATCH: so many examples a step in one pass (mlx-scala's `Lora.stepBatch`); within a window of 16 batches
     // of the shuffled order the examples sorted by length, so a batch pads little
     val batch = sys.env.get("FRAME_BATCH").map(_.toInt).getOrElse(1)
+    // FRAME_TREE: a batch as a trie (`Lora.stepTree`): the rule and a table run once for the questions over it; the
+    // window's examples sorted by their tokens, so a batch holds questions over one table
+    val tree = sys.env.contains("FRAME_TREE")
+    given Ordering[Array[Int]] = (a, b) =>
+      val i = a.indices.find(k => k >= b.length || a(k) != b(k))
+      i.fold(a.length - b.length)(k => if k >= b.length then 1 else Integer.compare(a(k), b(k)))
     def tokens(i: FrameData.Item): (Array[Int], Int) =
       val (system, user) = Frame.prompt(i.tables, i.question)
       val prompt = chat.prompt(Vector(msg("system", system), msg("user", user)), Nil, Map("enable_thinking" -> false))
@@ -76,10 +82,12 @@ object FrameTrain:
       var sum = 0f; var k = 0; var shown = 0
       val order = rnd.shuffle(items).map(tokens)
       val batches = if batch <= 1 then order.map(Vector(_))
-        else order.grouped(batch * 16).toVector.flatMap(w => w.sortBy(_._1.length).grouped(batch).toVector)
+        else order.grouped(batch * 16).toVector.flatMap(w =>
+          (if tree then w.sortBy(_._1) else w.sortBy(_._1.length)).grouped(batch).toVector)
       // (one a step: the order as before, the seed's runs reproduced)
       for b <- if batch <= 1 then batches else rnd.shuffle(batches) do
-        val loss = if b.size == 1 then lora.step(b.head._1, b.head._2) else lora.stepBatch(b)
+        val loss = if b.size == 1 then lora.step(b.head._1, b.head._2)
+          else if tree then lora.stepTree(b) else lora.stepBatch(b)
         sum += loss * b.size; k += b.size
         if k / 200 > shown then
           shown = k / 200
