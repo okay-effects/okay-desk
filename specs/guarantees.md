@@ -129,6 +129,25 @@ At 5% the reader answers 75% of the calibration's questions itself (round 3: 65%
 page's one-reader bar is λ̂(5%) = 0.38 (was 0.3, set by eye). The dialogue asks at most two lines a question: a
 third line in doubt is read on unasked — a small leak beside the bound, the operator's marks will show its size.
 
+### 8.2 The tools fixed, the same reader (2026-11-18)
+
+The frame language's reach measured (`FrameLaws`, okay-frames' law `reach`) on the 970 never-trained questions with
+a gold frame: 26 gold lines were never offered — dates said as «11.01.2026», "10 marca 2026", «10 марта» (read as
+the number 11.01 or a limit of 10) and «топ-3» (read as −3) — and 120 more were pruned away as the page prunes: a
+text value the question says in its own language («автобусом», «на вынос», «тварин», «теплиці») is not linked to
+`bus`, `takeaway`, `animals`, `greenhouse`, and an unlinked text value was not offered. Both fixed: dates are days,
+not numbers; text values are kept (only unwritten numbers pruned). The same merged reader on the 1004:
+
+| tools | right / asked / wrong (no dialogue) | a question (JVM) |
+|---|---|---|
+| as published | 807 / 3 / 194 | 0.7 s |
+| dates and «топ-3» | 827 / 3 / 174 | 0.7 s |
+| text values kept | **863 / 3 / 138** | 0.8 s |
+
+`Everyday` unchanged (84 / 0 / 24). Calibrated again: ε 5% → λ̂ 0.325, the calibration's 795 / 159 / 49 (the reader
+answers 79% itself, was 75%), `Everyday` at it 68 / 34 / 6 (risk 0.056). The page's bar 0.33. A wrong answer the
+model could not avoid is the tools' to fix: measure reach before training more.
+
 ## 9. The dialogue and two readers, measured (2026-11-15)
 
 The dialogue (`FRAME_DIALOGUE`, the person played by the gold frame; the round-3 reader; `Everyday`):

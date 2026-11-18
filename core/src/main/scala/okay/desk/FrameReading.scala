@@ -60,9 +60,10 @@ object FrameReading:
    * guesses), a number it does not write (`pruneNumbers`); a line left with none keeps all */
   var pruneNumbers: Boolean = true
   var pruneSingle: Boolean = true
-  /** text values not linked pruned too (off: kept — a value the question says in another language, «автобусом» for
-   * `bus`, is not linked, and was pruned away from 120 of 970 never-trained questions; FrameLaws 2026-11-18) */
-  var pruneText: Boolean = true
+  /** text values not linked pruned too — OFF since 2026-11-18: a value the question says in another language
+   * («автобусом» for `bus`) is not linked, and was pruned away from 120 of 970 never-trained questions (FrameLaws);
+   * kept, the merged reader's wrong 174 → 138 of 1004, 0.7 → 0.8 s a question (specs/theory.md E5) */
+  var pruneText: Boolean = false
   def pruned(options: Vector[String], so: Reading, tables: Map[String, Table], question: String)
       : Vector[String] =
     val table = so.lines.headOption.map(_.stripPrefix("table: ").trim).flatMap(tables.get)

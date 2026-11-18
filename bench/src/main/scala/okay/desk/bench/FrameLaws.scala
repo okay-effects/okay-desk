@@ -17,7 +17,7 @@ import scala.jdk.CollectionConverters.*
  */
 object FrameLaws:
   def main(args: Array[String]): Unit =
-    FrameReading.pruneText = !sys.env.contains("FRAME_KEEP_TEXT")
+    FrameReading.pruneText = sys.env.contains("FRAME_PRUNE_TEXT")
     val sets =Vector("everyday" -> FrameBench.everyday.filter(_.lang == "en")) ++
       sys.env.get("FRAME_SET").map(f => "never trained" -> FrameBench.taught(Path.of(f))).toVector
     for (name, set) <- sets do

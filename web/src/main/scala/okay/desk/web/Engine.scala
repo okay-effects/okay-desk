@@ -902,11 +902,11 @@ object Engine:
   /** the reading paused at a question, its continuation a value: the person's choice resumes it (never a replay) */
   private var paused: Option[(String, Paused)] = None
   /** the doubt's bar: a line's margin below it asks the person — with two readers 1.0: about one press a question,
-   * the wrong answers halved (guarantees.md §9); with ONE reader (a phone: no room for the second adapter) 0.38,
-   * CALIBRATED: conformal risk control for ε = 5% over 1004 questions never trained on (round 5 merged, λ̂ 0.383;
-   * guarantees.md §8.1) — Everyday at it 65 / 38 / 5, wrong 4.6% */
+   * the wrong answers halved (guarantees.md §9); with ONE reader (a phone: no room for the second adapter) 0.33,
+   * CALIBRATED: conformal risk control for ε = 5% over 1004 questions never trained on (round 5 merged, text values
+   * kept, λ̂ 0.325; guarantees.md §8.2) — Everyday at it 68 / 34 / 6 */
   private def frameBar: Double = "frameBar=([0-9.]+)".r.findFirstMatchIn(dom.window.location.search)
-    .map(_.group(1).toDouble).getOrElse(if framesAdapted.isEmpty then 0.38 else 1.0)
+    .map(_.group(1).toDouble).getOrElse(if framesAdapted.isEmpty then 0.33 else 1.0)
   /** THE PERSON ON THE PAGE: asked, the reading stops with the question and keeps `k`; the buttons resume it */
   private def pausing: Handler[Person, AsyncRead, FrameReading.Reading,
       Either[(Vector[String], Vector[String]), FrameReading.Reading]] =
