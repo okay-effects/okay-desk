@@ -228,3 +228,49 @@ strategy) → E1 (the words as options) → E7 (speed) → E8 (the person) → E
   `rows` there — the next line agrees with it; the error is learned, not greedy: the training texts had these groups
   only with "total"/"sum" said, and "which X has the most" only over single rows. Off; the remedy is the data
   (round 4, `FrameData.groups`).
+
+## 12. The missing judgment: the text licenses the term (2026-11-18, the operator: "a logic for the kernel of understanding")
+
+§1 says which terms are well formed (`t : τ`) and what they denote. The text enters only as an opaque argument of
+the weigher: "t is the meaning of x" is nowhere DEFINED, only estimated. So the kernel can check the computation
+and not the understanding, and the guarantee on understanding is calibration alone (§4). The second judgment,
+beside the typing:
+
+    x ⊢ t — the text x licenses the term t
+
+A question is a problem — the type of its answer — and the answer its solution (Kolmogorov's reading of logic);
+the license is an account of resources, as in linear logic (glue semantics assembles meanings so, by types and
+not by the order of words — which suits four languages of free order).
+
+**The rules.**
+1. **Word.** A span s of x licenses a constructor c when `match(s, σ(c))` (§10 a) — the one learned relation,
+   now LOCAL: a span against one constructor's words, not the whole text against the whole term. The data's exact
+   words (E5) and the memory of readings (E8) are the same rule with an exact weigher.
+2. **Assembly.** Licensed pieces join by their types only (§1's grammar); each piece is used once.
+3. **Default.** A constructor with no span comes only from a finite DECLARED list per ability ("all rows", "the
+   sum of money"), and is said in `σ(t)` like any other part.
+4. **Skip.** A span with no meaning is allowed only from the class of function words.
+
+**A reading is licensed** when every content span is consumed exactly once and every part of the term is licensed
+by a span or a default. Two violations, both visible: a content word left unexplained (an OMISSION); a part
+neither said nor a default (an INVENTION). §1.3's check "a clue no frame uses" is the omission rule for logic
+tasks; this makes it the rule for every ability.
+
+**What it gives.**
+- A check of UNDERSTANDING in the kernel, of another kind than the weigher's margin — a candidate for the
+  independent second opinion (technology.md §12.6).
+- The question to the person is exact: not "in doubt" but "the word «оборот»: amount or price?".
+- Learning is the lexicon growing: the person's answer is an entry span → constructor for this table — exact,
+  removable, no training (E8 becomes central, not last).
+- The division of labour: the learned match cures a grammar's brittle lexicon; the types and the account cure a
+  learned reader's structure and inventions.
+
+**What stays with the model beyond the lexicon:** where the types do not decide and the order of words does
+(which of two arguments is the greater, what a negation covers). Its share is SPRINT T8's measure.
+
+**Where the logic gives nothing:** a text that is almost all default ("how did we do in March?") — no words to
+account for; the honest outcome is to ask.
+
+**To measure before building (SPRINT T9):** of the wrong terms of the runs already made, the share that violates
+the account. Large → the account is the second opinion; small → the errors are licensed misreadings, and the
+logic adds explanations and the lexicon, not a guarantee.

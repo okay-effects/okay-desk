@@ -44,6 +44,14 @@ over three seeds with right / asked / wrong, the phone profile's seconds where s
   table's synonyms, the memory of readings) against STRUCTURAL (which aggregate, what is grouped or compared: needs
   the model's depth). Decides the model's path: the tools' side and a 0.6B, or the 1.7B on the phone / distilled
   on the choices' distributions.
+- T9 **the account of the text** (theory.md §12; the operator, 2026-11-18) — no training, before anything is built:
+  the wrong frames of the runs already made (the 1004 calibration questions, `Everyday`; 0.6B and 1.7B), each
+  judged for a violation of the license — a content word of the question no part of the frame explains (omission),
+  a part of the frame neither said nor a declared default (invention); the same over the RIGHT frames (false
+  alarms). The first judge is the teacher (35B) given the question and `FrameSay`'s words, a sample checked by
+  hand. Check: the share of wrong frames that violate, the share of right frames that do; against the second
+  adapter's "agreed and wrong" (T7). Large and few false alarms → the account is built into the reading as the
+  second opinion; small → written down as negative with the kinds of licensed misreadings.
 - Then: E8 (memory), E3 / E9 (one matcher, soft labels), one code path.
 
 1. **The schema with values; `month` in `Query`** (direction §4.1) — built; check: `CeilingBench` again (first run
