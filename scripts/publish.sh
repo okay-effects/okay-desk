@@ -72,7 +72,7 @@ if [ -f "$STATEMENT_ADAPTER" ]; then cp "$STATEMENT_ADAPTER" "$out/model-small/s
 if [ -f "$STATEMENT_PLAIN" ]; then cp "$STATEMENT_PLAIN" "$out/model-small/statement-plain.reader"; fi
 if [ -f "$STATEMENT_GATE" ]; then cp "$STATEMENT_GATE" "$out/model-small/statement.gate"; fi
 # The frame reader (specs/frames.md): its adapter beside the released 0.6B's weights (model-full) — a small file
-FRAMES_ADAPTER=${FRAMES_ADAPTER:-$HOME/.cache/okay-desk/frame-lora4.adapter.safetensors}
+FRAMES_ADAPTER=${FRAMES_ADAPTER:-$HOME/.cache/okay-desk/frame-lora5.adapter.safetensors}
 if [ -f "$FRAMES_ADAPTER" ]; then
   mkdir -p "$out/model-frames"
   cp "$FRAMES_ADAPTER" "$out/model-frames/frame.adapter.safetensors"
@@ -82,7 +82,7 @@ if [ -f "$FRAMES_ADAPTER" ]; then
 fi
 # The frame reader for a phone: the same adapter merged into the weights (FrameMerge) — one reader, no adapter
 # beside every projection; the operator's iPhone ran it where the base with its adapter beside it died (phone.md §4)
-FRAMES_MERGED=${FRAMES_MERGED:-$HOME/.cache/okay-desk/frame-0.6b-r4}
+FRAMES_MERGED=${FRAMES_MERGED:-$HOME/.cache/okay-desk/frame-0.6b-r5}
 if [ -f "$FRAMES_MERGED/model.safetensors" ]; then
   mkdir -p "$out/model-frames-merged"
   cp web/page/qwen-LICENSE.txt "$out/model-frames-merged/LICENSE"

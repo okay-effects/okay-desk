@@ -199,6 +199,28 @@ Each form added by templates takes from the forms beside it: a 0.6B reader train
 each form we set by hand. The next step is not another form but the mix itself — the forms weighed by the errors
 they fix on questions never trained on, or a second epoch — and the operator's marked questions as the measure.
 
+### 5.11 The phone's reader chosen on questions never trained on (2026-11-18)
+
+Choosing the seed by Everyday chooses by the test. The teacher's 1004 natural pairs (calib/pairs.jsonl, en/ru/uk/pl,
+other tables, never trained) as the page reads, right / asked / wrong:
+
+| reader | 1004 never trained | Everyday |
+|---|---|---|
+| round 3 seed 1 | 770 / 68 / 166 | 72 / 11 / 25 |
+| round 4 seed 1 | 766 / 57 / 181 | 83 / 5 / 20 |
+| round 4 seed 2 | 660 / 94 / 250 | 74 / 7 / 27 |
+| round 4 seed 3 | 799 / 73 / 132 | 82 / 4 / 22 |
+| round 5 seed 1 | 782 / 129 / **93** | 82 / 3 / 23 |
+| round 5 seed 2 | 768 / 96 / 140 | 92 / 5 / 11 |
+| round 5 seed 3 | 765 / 105 / 134 | 76 / 3 / 29 |
+| **round 5 seed 1, merged (the phone's)** | **810 / 101 / 93** | **91 / 3 / 14** |
+
+Everyday's best seed is not the held-out best: 108 questions over six tables are too few to choose by. Round 5
+seed 1 has the fewest wrong where nothing was trained — wrong is the costly outcome, asked is a dialogue — and the
+round-5 seeds' wrong (93, 140, 134) are all below rounds 3–4's. Merged into the 4-bit weights it reads better still
+(the requantization moved it; measured, not assumed). Published: model-frames-merged = frame-0.6b-r5; the page's
+desktop pair = round 5 seed 1 + round 4 seed 3.
+
 ## 6. The frame reader as a program over effects (2026-11-15)
 
 `FrameReading.read` (core) is a program over `Read` (the model) and `Person` (the one asked): one program for the
