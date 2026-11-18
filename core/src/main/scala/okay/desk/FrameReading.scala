@@ -60,6 +60,9 @@ object FrameReading:
    * guesses), a number it does not write (`pruneNumbers`); a line left with none keeps all */
   var pruneNumbers: Boolean = true
   var pruneSingle: Boolean = true
+  /** text values not linked pruned too (off: kept — a value the question says in another language, «автобусом» for
+   * `bus`, is not linked, and was pruned away from 120 of 970 never-trained questions; FrameLaws 2026-11-18) */
+  var pruneText: Boolean = true
   def pruned(options: Vector[String], so: Reading, tables: Map[String, Table], question: String)
       : Vector[String] =
     val table = so.lines.headOption.map(_.stripPrefix("table: ").trim).flatMap(tables.get)
@@ -77,7 +80,7 @@ object FrameReading:
     val kept = options.filter {
       case condition(c, v) if number(v) => written(v) || few(c) || !pruneNumbers
       case o => Links.named(o) match
-        case Some(n @ (_, v)) => linked(n) || !text(v)
+        case Some(n @ (_, v)) => linked(n) || !text(v) || !pruneText
         case None => true }
     // ONE NUMBER ASKED (an aggregate, no group yet): order, limit and keep cannot change a single row — not weighed
     // (theory E6: decide only what changes the answer); a group chosen later brings them back on its next line

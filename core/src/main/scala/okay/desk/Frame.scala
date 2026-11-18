@@ -45,12 +45,37 @@ object Frame:
     "9" -> Vector("nine", "девять", "дев'ять", "dziewięć"), "10" -> Vector("ten", "десять", "dziesięć"),
     "12" -> Vector("twelve", "двенадцать", "дванадцять", "dwanaście"))
   def numbers(question: String): Vector[String] =
-    val words = "(?U)\\b\\w[\\w']*\\b".r.findAllIn(question.toLowerCase).toVector
+    // a date is no number: «11.01.2026» is not 11.01, "10 marca" not a limit of 10 (FrameLaws, 2026-11-18)
+    val q = undated(question)
+    val words = "(?U)\\b\\w[\\w']*\\b".r.findAllIn(q.toLowerCase).toVector
     val said = spoken.collect { case (n, stems)
         if words.exists(w => stems.exists(s => w == s || w.startsWith(s) && s.length >= 4)) => n }
-    ("(?<![\\d.])-?\\d+(?:[.,]\\d+)?(?![\\d])".r.findAllIn(question).map(_.replace(',', '.')).toVector
+    // a minus only where no letter or digit stands before it: «топ-3» is 3, not −3
+    ("(?<![\\d.])(?:(?<![\\p{L}\\d])-)?\\d+(?:[.,]\\d+)?(?![\\d])".r.findAllIn(q).map(_.replace(',', '.')).toVector
       .filterNot(_.matches("(19|20)\\d\\d")) ++ said).distinct
-  private def dates(question: String): Vector[String] = "\\d{4}-\\d{2}-\\d{2}".r.findAllIn(question).toVector.distinct
+  private val dmy = "(?<!\\d)(\\d{1,2})[./](\\d{1,2})[./]((?:19|20)\\d\\d)(?!\\d)".r
+  private val dayMonth = "(?U)(?<!\\d)(\\d{1,2})(?:-?(?:го|e|th|st|nd|rd))?\\s+(\\p{L}+)".r
+  private val monthDay = "(?U)\\b(\\p{L}+)\\s+(\\d{1,2})(?!\\d)(?![.,]\\d)".r
+  /** the question without its dates (`dates`' forms) */
+  private def undated(question: String): String =
+    val named = (word: String) => Months.in(word).nonEmpty
+    val a = dmy.replaceAllIn(question, " ")
+    val b = dayMonth.replaceAllIn(a, m => if named(m.group(2)) then " " + m.group(2) else m.matched)
+    monthDay.replaceAllIn(b, m => if named(m.group(1)) then m.group(1) + " " else m.matched)
+  /** the days a question names: 2026-01-11, «11.01.2026», "10 marca 2026", «10 марта», "March 10" — the year the
+   * question writes, else the column's (`Months.value`) */
+  private def dates(question: String, ds: Seq[String]): Vector[String] =
+    def day(ym: String, d: String) = Option.when(d.toInt >= 1 && d.toInt <= 31)(f"$ym-${d.toInt}%02d")
+    val iso = "\\d{4}-\\d{2}-\\d{2}".r.findAllIn(question).toVector
+    val numeric = dmy.findAllMatchIn(question).toVector.flatMap(m =>
+      Option.when(m.group(2).toInt >= 1 && m.group(2).toInt <= 12)(f"${m.group(3)}-${m.group(2).toInt}%02d")
+        .flatMap(day(_, m.group(1))))
+    def named(word: String, d: String) = Months.in(word).headOption
+      .flatMap(mo => Months.value(mo, question, ds)).flatMap(day(_, d))
+    val q = question.toLowerCase
+    val spoken = dayMonth.findAllMatchIn(q).toVector.flatMap(m => named(m.group(2), m.group(1))) ++
+      monthDay.findAllMatchIn(q).toVector.flatMap(m => named(m.group(1), m.group(2)))
+    (iso ++ numeric ++ spoken).distinct
   /** the months a question names, as `yyyy-mm` of the column's own dates */
   private def months(t: Table, c: String, question: String): Vector[String] =
     val ds = t.rows.map(_(t.columns.indexOf(c)).text)
@@ -70,8 +95,9 @@ object Frame:
         (for op <- numOps; v <- vs yield s"$c $op $v") ++
           (for op <- Vector("<", ">", "<=", ">="); o <- others yield s"$c $op column $o")
       case _ =>
+        val ds = t.rows.map(_(t.columns.indexOf(c)).text)
         months(t, c, question).map(m => s"$c month $m") ++
-          (for op <- Vector("=", "<", ">=", ">"); d <- dates(question) yield s"$c $op $d")
+          (for op <- Vector("=", "<", ">=", ">"); d <- dates(question, ds) yield s"$c $op $d")
   }
 
   def answers(t: Table): Vector[String] =
