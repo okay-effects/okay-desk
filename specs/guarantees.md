@@ -113,6 +113,22 @@ en 243/263 (92%), ru 214/256 (84%), pl 176/245 (72%), uk 176/240 (73%) — 81% o
   (0.083 for 5%, 0.185 for 10%): the shift costs a factor near two. A bound for people's questions needs a
   calibration of people's questions (their choices on the page: §3).
 
+### 8.1 The phone's reader calibrated (2026-11-18): round 5 seed 1, merged
+
+The same 1004 questions (records with no dialogue, as the page reads: link 2, guess 2, pruned); test = `Everyday`:
+
+| ε | λ̂ | calibration right / asked / wrong | `Everyday` right / asked / wrong | `Everyday`'s risk |
+|---|---|---|---|---|
+| 0.02 | 0.705 | 634 / 350 / 19 | 47 / 59 / 2 | 0.019 |
+| 0.05 | 0.383 | 749 / 205 / 49 | 65 / 38 / 5 | **0.046** |
+| 0.10 | 0.144 | 788 / 116 / 99 | 76 / 20 / 12 | 0.111 |
+| 0.15 | 0.051 | 800 / 53 / 149 | 80 / 13 / 15 | 0.139 |
+
+At 5% the reader answers 75% of the calibration's questions itself (round 3: 65%) and the bound now holds on
+`Everyday`'s other tables too (round 3: 0.083 there) — the shift's factor of two is gone at 5%, not yet at 10%. The
+page's one-reader bar is λ̂(5%) = 0.38 (was 0.3, set by eye). The dialogue asks at most two lines a question: a
+third line in doubt is read on unasked — a small leak beside the bound, the operator's marks will show its size.
+
 ## 9. The dialogue and two readers, measured (2026-11-15)
 
 The dialogue (`FRAME_DIALOGUE`, the person played by the gold frame; the round-3 reader; `Everyday`):
