@@ -95,6 +95,18 @@ and leave this file. The operator decides the order; the numbers that motivate e
 26. **Curiosity as an effect**: the model performs `Ask(question)` to a source (a person, a document, an engine) when
     its readers abstain on a class of questions; the answer becomes a pair; pairs become organs. The loop closes
     inside the calculus: abstention → question → pair → organ → fewer abstentions.
+28. **A textbook compiled into a pair: a theory for an engine and a reader for its problems** (the operator's idea,
+    2026-11-18). At BUILD time, on the Mac, the teacher reads a chapter (definitions, laws, worked examples) and
+    writes (a) the domain's problem language — types, constructors, sayings — and its THEORY as data for an engine
+    that already exists (Horn clauses, equations, constraints; no solver is generated); (b) the reader's part: the
+    lexicon from the book's terms, and pairs made from the formal side — problems sampled from the grammar, solved,
+    said in words, rephrased — for the shared matcher or an adapter. The book's worked examples are the law (a rule
+    that does not reproduce them does not serve), the exercises with answers the held-out measure. At RUN time, on
+    the phone: the small reader, the theory, the engine. First trial: one chapter of one exact domain; the share
+    of exercises answered as the book does (i) from the teacher's statement of each exercise — the theory alone —
+    and (ii) from the small reader's. Open: how well a 35B formalizes prose into rules (unmeasured); the step from
+    a described situation to its formal statement; methods that are search, not laws. Kin: DreamCoder / LAPS
+    (a library and a recognition model learned together), autoformalization.
 27. **Self-consistency as the teacher**: the same question phrased three ways (the space's phrases, the teacher's
     rewrites) must read to one term; where readings disagree, the disagreement is a pair for induction and a question
     for the person. No gold needed.
