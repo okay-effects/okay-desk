@@ -36,6 +36,14 @@ over three seeds with right / asked / wrong, the phone profile's seconds where s
   Check: the share "agreed AND wrong" against the second adapter's (frames.md §5.7 — two adapters agree on the same
   wrong frame, more with size); the conformal bound of guarantees.md §6.1 holds on `Everyday` or does not; one more
   forward a question on the phone profile, in seconds. A negative result is written with its reason.
+- T8 **the anatomy of the size gap** (the operator, 2026-11-18) — no training, the size curve's runs read again
+  (frames.md §5.7, `okay-desk-private/size`): every question the 0.6B reads wrong and the 1.7B right, by the frame
+  line that first differs (table / answer / part / where's column / where's value / group / order / limit / end)
+  and by language. Check: a table of counts per line kind over the 1004 calibration questions and `Everyday`, three
+  seeds; the share that is LEXICAL (a word of the question → a column or a value: curable by exact-first, the
+  table's synonyms, the memory of readings) against STRUCTURAL (which aggregate, what is grouped or compared: needs
+  the model's depth). Decides the model's path: the tools' side and a 0.6B, or the 1.7B on the phone / distilled
+  on the choices' distributions.
 - Then: E8 (memory), E3 / E9 (one matcher, soft labels), one code path.
 
 1. **The schema with values; `month` in `Query`** (direction §4.1) — built; check: `CeilingBench` again (first run
