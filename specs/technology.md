@@ -155,6 +155,9 @@ in the line's spec; then the textbook's chapter is brought up to date.
 
 Each component has prior art; the question is whether we use it as well as it is known to work. Read so far:
 
+- **How a network's parts are organized** — Cammarata (Goodfire, 2026), "Neural Networks Are Already Clean":
+  small models' neurons are coarse, not tangled; what it changes here is in `specs/reading-already-clean.md`.
+
 - **Logic puzzles from text to a solver.** Mitra & Baral (EMNLP 2015, Logicia: clues learned into ASP);
   ZebraTutor (typed FOL → IDP); NeuralExactCover (arXiv 2611.03641, Nov 2026): an off-the-shelf model writes one
   tool call per clue, an exact-cover solver checks it — none: "overconstrained", several: "underconstrained", the
