@@ -221,6 +221,31 @@ round-5 seeds' wrong (93, 140, 134) are all below rounds 3–4's. Merged into th
 (the requantization moved it; measured, not assumed). Published: model-frames-merged = frame-0.6b-r5; the page's
 desktop pair = round 5 seed 1 + round 4 seed 3.
 
+### 5.12 Three ways of training, measured with the tools fixed (2026-11-18/19)
+
+The tools fixed first (guarantees.md §8.2: text values kept, dates read) — which moved every reader, so round 5's
+seeds were measured again with them (base5). The 1004 never trained, with the dialogue at 0.3, right / asked / wrong:
+
+| | seed 1 | seed 2 | seed 3 | Σ right | Σ wrong |
+|---|---|---|---|---|---|
+| round 5 (base5) | 847 / 74 / 83 | 856 / 38 / 110 | 878 / 40 / 86 | 2581 | 279 |
+| **the counterexample loop** (l1) | 827 / 66 / 111 | 887 / 38 / 79 | 869 / 40 / 95 | 2583 | 285 |
+| **trained as tries** (t8, lr 6e-4) | 748 / 82 / 174 | 783 / 30 / 191 | 884 / 40 / 80 | 2415 | 445 |
+| **the listwise loss** (lw, lr 6e-4) | 52 / 766 / 186 | — | — | | |
+
+- **The counterexample loop — a draw.** A fresh pool of the teacher's pairs (seeds 3001–4000, 2538 questions)
+  read by round 5 seed 1; its 564 misses (460 with a gold frame, `FrameData --failures`) added to round 5's mix.
+  Measured before the tools were fixed it looked like a gain; after, the same: most of those misses were the tools'
+  (an unoffered or pruned line), which the fixed tools no longer make. The loop's pool was read with the old tools —
+  a next round reads with the fixed ones.
+- **Tries — 6× faster a step, not yet as good.** mlx-scala `Lora.stepTree`: 8 questions over one table in one pass,
+  the rule and the table once (0.61 s against 3.72 s for 8 examples one at a time). At lr 6e-4 (8× fewer steps) the
+  seeds spread 80–191 wrong: the step too large for some orders. Tuned next: 2e-4, 3e-4 (tree2.sh).
+- **The listwise loss — collapsed.** Trained only on the meant option against 7 offered (mlx-scala
+  `Lora.stepChoices`, the law against single passes within 0.8%): its loss fell (0.125) but the reader asked about
+  766 of 1004 — every line's options near a tie. A loss on differences alone leaves the tokens' own probabilities
+  free; they flattened. To try: the listwise term beside the generative one, not instead of it.
+
 ## 6. The frame reader as a program over effects (2026-11-15)
 
 `FrameReading.read` (core) is a program over `Read` (the model) and `Person` (the one asked): one program for the
