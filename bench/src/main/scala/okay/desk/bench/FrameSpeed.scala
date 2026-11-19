@@ -12,10 +12,11 @@ import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration.*
 
 /** a frame adapter merged into the model's weights (mlx-scala's `LoraMerge`): a model directory the page's engine
- * reads — `FrameMerge <model dir> <adapter> <out dir>` */
+ * reads — `FrameMerge <model dir> <adapter> <out dir> [bits]` (4 by default; 8 keeps an adapter 4 bits lose) */
 object FrameMerge:
   def main(args: Array[String]): Unit =
-    mlx.llm.LoraMerge.qwen3(Path.of(args(0)), Path.of(args(1)), Path.of(args(2)))
+    mlx.llm.LoraMerge.qwen3(Path.of(args(0)), Path.of(args(1)), Path.of(args(2)),
+      bits = args.lift(3).fold(4)(_.toInt))
     println(s"merged: ${args(2)}")
 
 /**
