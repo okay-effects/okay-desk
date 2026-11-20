@@ -1,0 +1,9 @@
+id,customer,amount,status,day,city
+1,ann,120,paid,2026-11-01,Kyiv
+2,bob,80,unpaid,2026-11-02,Lviv
+3,ann,30,paid,2026-11-02,Kyiv
+4,cid,200,unpaid,2026-11-03,Kyiv
+5,bob,1000,paid,2026-11-04,Lviv
+6,dee,45,unpaid,2026-11-04,Odesa
+7,ann,60,unpaid,2026-11-05,Kyiv
+8,eve,310,paid,2026-11-05,Lviv

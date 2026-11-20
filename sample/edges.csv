@@ -1,0 +1,7 @@
+from,to
+web,checkout
+checkout,payments
+checkout,orders-db
+payments,stripe
+search,catalog
+catalog,orders-db
