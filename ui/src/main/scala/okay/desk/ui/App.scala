@@ -611,8 +611,15 @@ object App:
         Button(if s.visibleProofs(i) then "Hide proof" else "Show proof")(Msg.ToggleProof(i): Msg).at(s"proof-$i")
     }.toList
     // while a question is thought about: its steps where the answer will be, no question form
+    // THE UNSTATED UNIQUENESS (GridText.askUnique): the task asked again with it stated, one press — not assumed
+    val uniqueAsk = s.log.lastOption.filter(e => e.role == "model" && okay.desk.puzzle.GridText.asksUnique(e.text))
+      .flatMap(_ => s.log.findLast(_.role == "user")).map { q =>
+        val ru = okay.desk.statement.Reader.russian(q.text)
+        (q.text + "\n" + okay.desk.puzzle.GridText.unique(ru),
+          if ru then "Да, во всех категориях значения разные" else "Yes, all category values are different") }
     val tools = (if s.reasoning.pending.nonEmpty then List(Part.block("clarify")(Part.slot("research"))) else Nil) ++
-      (if s.reasoning.constraints then List(Part.block("clarify")(Part.slot("constraints"))) else Nil)
+      (if s.reasoning.constraints then List(Part.block("clarify")(Part.slot("constraints"))) else Nil) ++
+      uniqueAsk.toList.map(_ => Part.block("clarify")(Part.slot("unique")))
     val end: List[Part] = thinking.fold(s.asking.toList.map((q, _) => Part.block("clarify")(Part.text(Clarified.prompt(q, s.hole)),
       Part.slot("clarify"))) ++ List(questionInput: Part) ++ tools)(
       lines => List(steps(lines)))
@@ -646,6 +653,8 @@ object App:
         (if s.chooser && s.model.isDefined && loading.isEmpty && thinking.isEmpty then
           List(Button("Unload model")(Msg.Unload: Msg).at("model-actions")) else Nil) ++
         choices ++ research ++ constraints ++ chatButtons ++ proofButtons ++ explainButtons ++ markButtons ++
+        (if thinking.isDefined then Nil
+         else uniqueAsk.toList.map((asked, label) => Button(label, Style.Primary)(Msg.Ask(asked): Msg).at("unique"))) ++
         (if s.reasoning.online then List(Button("Turn off online sources")(Msg.Offline: Msg).at("data")) else Nil) ++
         (if thinking.isDefined then Nil else List(Button.submit("Ask", questionInput)(Msg.Ask(_): Msg))))*)
 

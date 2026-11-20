@@ -111,3 +111,20 @@ class NaturalGridSuite extends munit.FunSuite:
     val found = PuzzleDomain.copier.found("Blue Master lives next to blue.", PuzzleDomain.Schema(p)).map(_._2)
     assertEquals(found, Vector("Blue Master", "blue"))
     assert(PuzzleDomain.copier.found("Reddit", PuzzleDomain.Schema(p)).isEmpty)
+
+  test("the classic riddle as people write it: the unstated uniqueness asked in Russian, stated — solved"):
+    val classic = "На улице стоят пять домов. Англичанин живёт в красном доме. У испанца есть собака. " +
+      "В зелёном доме пьют кофе. Украинец пьёт чай. Зелёный дом стоит сразу справа от белого дома. " +
+      "Тот, кто курит Old Gold, разводит улиток. В жёлтом доме курят Kool. В центральном доме пьют молоко. " +
+      "Норвежец живёт в первом доме. Сосед того, кто курит Chesterfield, держит лису. В доме по соседству с тем, " +
+      "в котором держат лошадь, курят Kool. Тот, кто курит Lucky Strike, пьёт апельсиновый сок. Японец курит " +
+      "Parliament. Норвежец живёт рядом с синим домом. Кто пьёт воду? Кто держит зебру?"
+    val asked = parse(classic)
+    assertEquals(asked.problems, Vector(GridText.askUnique(true)))
+    val stated = parse(classic + "\n" + GridText.unique(true))
+    assert(stated.ready, stated.problems.mkString("; ") + stated.clues.filter(_.read.isEmpty).toString)
+    Solver.solve(stated.puzzle) match
+      case Solver.Outcome.One(grid, _) =>
+        assertEquals(Solver.answers(stated.puzzle, grid).map((q, v) => q.of.value -> v),
+          Vector("water" -> "Norwegian", "zebra" -> "Japanese"))
+      case other => fail(other.toString)

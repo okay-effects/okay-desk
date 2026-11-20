@@ -68,13 +68,25 @@ object GridText:
           missing.map((sort, ws) => s"$sort: ${ws.size} of ${ns.head}").mkString("; "))
       else if !groups.forall((sort, _) =>
         okay.desk.know.SourceText.sentences(text).flatMap(uniqueCategories).contains(sort)) then
-        Left("Please state that each category has a different value in every house, or provide category headers.")
+        Left(askUnique(text.exists(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я')))
       else Right(PuzzleDomain.Schema(Puzzle(ns.head, groups.map((sort, ws) => Sort(sort, ws.map(_.value))),
         Vector.empty, None), groups.flatMap(_._2).map(w => w.value -> w.forms).toMap))
 
+  /** THE UNSTATED UNIQUENESS ASKED, NOT ASSUMED (the classic riddle never says it): the question in the text's
+   * language, and the sentence that states it — the page offers it as one press (`App`), the same task asked again
+   * with it */
+  def askUnique(ru: Boolean): String =
+    if ru then "Уточните: в каждом доме все значения разные — у каждого свой цвет, национальность, напиток, сигареты " +
+      "и животное? Текст этого не говорит, а без этого задача не решается однозначно."
+    else "Please state that each category has a different value in every house, or provide category headers."
+  def unique(ru: Boolean): String =
+    if ru then "Во всех категориях все значения разные." else "All category values are different."
+  def asksUnique(text: String): Boolean = text == askUnique(true) || text == askUnique(false)
+
   private def uniqueCategories(line: String): Set[String] =
     val q = line.toLowerCase
-    if q.contains("all category values are different") then vocabulary.map(_._1).toSet
+    if q.contains("all category values are different") || q.contains("во всех категориях все значения разные") then
+      vocabulary.map(_._1).toSet
     else if (q.contains("кажд") || q.contains("все")) &&
       Vector("разн", "различ", "уникальн", "своего").exists(q.contains) then
       Map("colours" -> "цвет", "nations" -> "национальност", "pets" -> "животн",
