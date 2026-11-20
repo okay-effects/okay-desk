@@ -350,7 +350,10 @@ object Engine:
     // file — a second reader is a second small file, not a second model)
     // ON A PHONE: the one reader merged into the weights (model-frames-merged, FrameMerge) — no adapter file, no planes
     // beside every projection: the iPhone's tab died building and running the base with its adapter beside it
-    val merged = phone && dir == framesDir
+    // `?beside` on a phone: the 4-bit base and the adapter beside it after all — a reader trained in tries does not
+    // survive a 4-bit merge (frames.md §5.13), and the tab's death was one GPU task of minutes, since in parts
+    val beside = "[?&]beside".r.findFirstIn(dom.window.location.search).nonEmpty
+    val merged = phone && dir == framesDir && !beside
     val source = if merged then "model-frames-merged" else if dir == framesDir then "model-full" else dir
     (for
       config <- fetch(s"$source/config.json").map(text).map(Qwen3Config.parse)

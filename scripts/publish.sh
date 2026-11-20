@@ -72,12 +72,12 @@ if [ -f "$STATEMENT_ADAPTER" ]; then cp "$STATEMENT_ADAPTER" "$out/model-small/s
 if [ -f "$STATEMENT_PLAIN" ]; then cp "$STATEMENT_PLAIN" "$out/model-small/statement-plain.reader"; fi
 if [ -f "$STATEMENT_GATE" ]; then cp "$STATEMENT_GATE" "$out/model-small/statement.gate"; fi
 # The frame reader (specs/frames.md): its adapter beside the released 0.6B's weights (model-full) — a small file
-FRAMES_ADAPTER=${FRAMES_ADAPTER:-$HOME/.cache/okay-desk/frame-lora5.adapter.safetensors}
+FRAMES_ADAPTER=${FRAMES_ADAPTER:-$HOME/.cache/okay-desk/frame-lora-t8-s1.adapter.safetensors}
 if [ -f "$FRAMES_ADAPTER" ]; then
   mkdir -p "$out/model-frames"
   cp "$FRAMES_ADAPTER" "$out/model-frames/frame.adapter.safetensors"
   # the second reader (agreement as the doubt, P4): another seed's adapter
-  FRAMES_ADAPTER2=${FRAMES_ADAPTER2:-$HOME/.cache/okay-desk/frame-lora4-s3.adapter.safetensors}
+  FRAMES_ADAPTER2=${FRAMES_ADAPTER2:-$HOME/.cache/okay-desk/frame-lora-t8-s3.adapter.safetensors}
   if [ -f "$FRAMES_ADAPTER2" ]; then cp "$FRAMES_ADAPTER2" "$out/model-frames/frame2.adapter.safetensors"; fi
 fi
 # The frame reader for a phone: the same adapter merged into the weights (FrameMerge) — one reader, no adapter
