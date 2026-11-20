@@ -350,10 +350,10 @@ object Engine:
     // file — a second reader is a second small file, not a second model)
     // ON A PHONE: the one reader merged into the weights (model-frames-merged, FrameMerge) — no adapter file, no planes
     // beside every projection: the iPhone's tab died building and running the base with its adapter beside it
-    // `?beside` on a phone: the 4-bit base and the adapter beside it after all — a reader trained in tries does not
-    // survive a 4-bit merge (frames.md §5.13), and the tab's death was one GPU task of minutes, since in parts
-    val beside = "[?&]beside".r.findFirstIn(dom.window.location.search).nonEmpty
-    val merged = phone && dir == framesDir && !beside
+    // SINCE 2026-11-20 A PHONE TOO: the 4-bit base and the adapter beside it — a reader trained in tries does not
+    // survive a 4-bit merge (frames.md §5.13), and the tab's death was one GPU task of minutes, since in parts; the
+    // operator's iPhone ran it. `?merged`: the merged reader of round 5, as before
+    val merged = phone && dir == framesDir && "[?&]merged".r.findFirstIn(dom.window.location.search).nonEmpty
     val source = if merged then "model-frames-merged" else if dir == framesDir then "model-full" else dir
     (for
       config <- fetch(s"$source/config.json").map(text).map(Qwen3Config.parse)
@@ -905,11 +905,11 @@ object Engine:
   /** the reading paused at a question, its continuation a value: the person's choice resumes it (never a replay) */
   private var paused: Option[(String, Paused)] = None
   /** the doubt's bar: a line's margin below it asks the person — with two readers 1.0: about one press a question,
-   * the wrong answers halved (guarantees.md §9); with ONE reader (a phone: no room for the second adapter) 0.33,
-   * CALIBRATED: conformal risk control for ε = 5% over 1004 questions never trained on (round 5 merged, text values
-   * kept, λ̂ 0.325; guarantees.md §8.2) — Everyday at it 68 / 34 / 6 */
+   * the wrong answers halved (guarantees.md §9); with ONE reader (a phone: no room for the second adapter) 0.42,
+   * CALIBRATED (guarantees.md §8.3): the tries-trained reader beside the base, conformal λ̂ for ε = 2% over 1004
+   * questions never trained on — the shift to other tables doubles it: Everyday at it 76 / 26 / 6 (5.6%) */
   private def frameBar: Double = "frameBar=([0-9.]+)".r.findFirstMatchIn(dom.window.location.search)
-    .map(_.group(1).toDouble).getOrElse(if framesAdapted.isEmpty then 0.33 else 1.0)
+    .map(_.group(1).toDouble).getOrElse(if framesAdapted.isEmpty then 0.42 else 1.0)
   /** THE PERSON ON THE PAGE: asked, the reading stops with the question and keeps `k`; the buttons resume it */
   private def pausing: Handler[Person, AsyncRead, FrameReading.Reading,
       Either[(Vector[String], Vector[String]), FrameReading.Reading]] =

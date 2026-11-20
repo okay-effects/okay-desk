@@ -148,6 +148,22 @@ not numbers; text values are kept (only unwritten numbers pruned). The same merg
 answers 79% itself, was 75%), `Everyday` at it 68 / 34 / 6 (risk 0.056). The page's bar 0.33. A wrong answer the
 model could not avoid is the tools' to fix: measure reach before training more.
 
+### 8.3 The tries-trained reader on the phone, calibrated (2026-11-20)
+
+The phone now runs the reader trained in tries (frames.md §5.13: lr 2e-4, seed 1) as an adapter beside the 4-bit
+base — merged at 4 bits it breaks; the operator's iPhone ran it beside. No dialogue: the 1004 877 / 4 / 123 (round 5
+merged 863 / 3 / 138), Everyday 89 / 0 / 19 (84 / 0 / 24); 1.1 s a question on the JVM.
+
+| ε | λ̂ | calibration right / asked / wrong | `Everyday` right / asked / wrong | `Everyday`'s risk |
+|---|---|---|---|---|
+| 0.02 | 0.416 | 781 / 203 / 19 | 76 / 26 / 6 | 0.056 |
+| 0.05 | 0.186 | 838 / 114 / 49 | 82 / 14 / 12 | 0.111 |
+| 0.10 | 0.049 | 870 / 31 / 99 | 87 / 4 / 17 | 0.157 |
+
+The shift to other tables doubles the risk again (5% → 11%), so the page's bar is λ̂(2%) = 0.42: on `Everyday` the
+same 5.6% as round 5's bar gave, with more answered (76 against 68) and on the calibration a third of the wrong
+(19 against 49).
+
 ## 9. The dialogue and two readers, measured (2026-11-15)
 
 The dialogue (`FRAME_DIALOGUE`, the person played by the gold frame; the round-3 reader; `Everyday`):
