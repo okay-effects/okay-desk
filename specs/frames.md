@@ -246,6 +246,27 @@ seeds were measured again with them (base5). The 1004 never trained, with the di
   766 of 1004 — every line's options near a tie. A loss on differences alone leaves the tokens' own probabilities
   free; they flattened. To try: the listwise term beside the generative one, not instead of it.
 
+### 5.13 Tries at lr 2e-4: the best reader — as an adapter, not merged at 4 bits (2026-11-19/20)
+
+The step tuned (tree2): the 1004 never trained, the dialogue at 0.3, right / asked / wrong:
+
+| | seed 1 | seed 2 | seed 3 | Σ wrong | Everyday right (of 108) |
+|---|---|---|---|---|---|
+| round 5, one example a step (base5) | 847 / 74 / 83 | 856 / 38 / 110 | 878 / 40 / 86 | 279 | 82, 92, 76 |
+| **tries of 8, lr 2e-4** | 921 / 35 / 48 | 919 / 30 / 55 | 925 / 28 / 51 | **154** | 95, 92, 91 |
+| tries of 8, lr 3e-4 | 929 / 32 / 43 | 891 / 48 / 65 | 908 / 29 / 67 | 175 | 88, 87, 88 |
+
+Half the wrong, three seeds alike, and 1.8× faster an epoch (18 min against 32). Why (not isolated): 8 examples a
+step average the gradient and take 8× fewer steps — less noise, less forgetting; the trie makes such batches cheap.
+
+MERGED AT 4 BITS IT BREAKS: 3e-4 seed 1 merged (LoraMerge, 4 bits) read 406 / 2 / 596 of the 1004 and 18 of 108
+Everyday; 2e-4 seed 1 merged at 4 bits 7 of 108; the same 3e-4 seed merged at 8 bits 85 of 108 (no dialogue; round
+5 merged at 4 bits 84). The likely mechanism: a merged weight is W + Δ rounded to 16 levels again; round 5's Δ
+(8× more steps) were large enough to survive the rounding, the tries' are below half a step — rounded back, or
+pushed a whole step: noise larger than Δ. A reader for the phone from tries needs its adapter beside the 4-bit
+base (`Adapted`), not merged — the iPhone's tab once died that way, but from one GPU task of minutes (phone.md
+§4.1), since split into parts; to measure on the phone.
+
 ## 6. The frame reader as a program over effects (2026-11-15)
 
 `FrameReading.read` (core) is a program over `Read` (the model) and `Person` (the one asked): one program for the
