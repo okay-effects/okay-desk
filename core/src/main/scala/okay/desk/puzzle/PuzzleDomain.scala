@@ -105,12 +105,18 @@ object PuzzleDomain extends Domain:
     filled.head.toUpper +: filled.tail
 
   /** THE READ-BACK (the person confirms a clue by seeing it): the first phrase of the form, the values' own names */
+  // the case of {B} in the first Russian phrase of a form: «левее белого дома», «рядом с лисой»
+  private val ruCaseOfB = Map("left" -> "gen", "right" -> "gen", "rightNext" -> "gen", "leftNext" -> "gen",
+    "adjacent" -> "ins")
   def readBack(p: Point, language: String, label: String => String = identity): String =
     val t = phrases(p.form).getOrElse(language, phrases(p.form)("en")).head
+    def b(v: String) = ruCaseOfB.get(p.form).filter(_ => language == "ru").fold(label(v))(Ru.decline(label(v), _))
     p match
       case Constraint.At(a, n) => t.replace("{A}", label(a.value)).replace("{N}", n.toString)
       case Constraint.Middle(a) => t.replace("{A}", label(a.value))
-      case other => val Vector(a, b) = other.refs: @unchecked; t.replace("{A}", label(a.value)).replace("{B}", label(b.value))
+      case other =>
+        val Vector(a, bb) = other.refs: @unchecked
+        t.replace("{A}", label(a.value)).replace("{B}", b(bb.value))
 
   def slots(s: Schema): Vector[Slot] = Vector(Slot("form", forms), Slot("a", Vector.empty, copied = true), Slot("b", Vector.empty, copied = true), Slot("n", Vector.empty, copied = true))
   def parts(p: Point): Map[String, String] = p match

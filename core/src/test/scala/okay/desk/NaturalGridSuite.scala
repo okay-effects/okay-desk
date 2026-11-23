@@ -128,3 +128,17 @@ class NaturalGridSuite extends munit.FunSuite:
         assertEquals(Solver.answers(stated.puzzle, grid).map((q, v) => q.of.value -> v),
           Vector("water" -> "Norwegian", "zebra" -> "Japanese"))
       case other => fail(other.toString)
+
+  test("the read-back in Russian cases: «рядом с лисой», «справа от белого дома»"):
+    val cases = Vector(("лиса", "ins", "лисой"), ("синий дом", "ins", "синим домом"), ("белый дом", "gen", "белого дома"),
+      ("лошадь", "ins", "лошадью"), ("норвежец", "ins", "норвежцем"), ("англичанин", "ins", "англичанином"),
+      ("улитки", "ins", "улитками"), ("улитки", "gen", "улиток"), ("апельсиновый сок", "ins", "апельсиновым соком"),
+      ("Kool", "ins", "Kool"), ("собака", "gen", "собаки"), ("молоко", "ins", "молоком"), ("чай", "ins", "чаем"),
+      ("кофе", "ins", "кофе"), ("японец", "gen", "японца"), ("птицы", "gen", "птиц"), ("кошка", "ins", "кошкой"))
+    for (w, c, want) <- cases do assertEquals(Ru.decline(w, c), want, s"$w, $c")
+    val parsed = parse(text)
+    def said(v: String) = PuzzleText.label(parsed, v, "ru")
+    assertEquals(PuzzleDomain.readBack(Constraint.Adjacent(Ref("nations", "Norwegian"), Ref("colours", "blue")),
+      "ru", said), "норвежец рядом с синим домом.")
+    assertEquals(PuzzleDomain.readBack(Constraint.RightNext(Ref("colours", "green"), Ref("colours", "ivory")),
+      "ru", said), "зелёный дом сразу справа от белого дома.")
