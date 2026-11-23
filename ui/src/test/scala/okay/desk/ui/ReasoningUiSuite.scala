@@ -291,6 +291,12 @@ class ReasoningUiSuite extends munit.FunSuite:
       "владеют разными животными, пьют разные напитки и курят разные марки сигарет."
     val p = play(Act.press("Ask", ask -> text))
     assert(shown(p).contains("Норвежец — вода.") && shown(p).contains("Японец — зебра."), shown(p))
-    assert(shown(p).contains("Read categories"), shown(p))
+    // the answer first: the categories read and the clues said back folded under one press, in Russian
+    assert(!shown(p).contains("Прочитанные категории") && !shown(p).contains("норвежец рядом с синим домом."),
+      shown(p))
+    val opened = play(Act.press("Ask", ask -> text), Act.press("Показать объяснение"))
+    assert(shown(opened).contains("Прочитанные категории") && shown(opened).contains("цвет: красный дом"),
+      shown(opened))
+    assert(shown(opened).contains("норвежец рядом с синим домом."), shown(opened))
     assert(requests.isEmpty && loaded.isEmpty)
     assert(!p.at.get.buttons.exists(_.label == "Use online sources"))

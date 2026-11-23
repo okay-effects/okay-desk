@@ -17,8 +17,9 @@ import okay.http.{Fetch, Response}
  */
 object App:
   /** a line of the conversation: who, what; a result's program and its note */
+  /** `explains`: how the answer was got (a reading said back, a model read, the clues), folded with the answer's notes */
   final case class Entry(role: String, text: String, program: Option[String] = None, note: Option[String] = None,
-    url: Option[String] = None)
+    url: Option[String] = None, explains: Boolean = false)
   /** `phone`: a small screen; use native readers and keep only one model's device alive. */
   final case class State(place: String = "chat", tables: Map[String, Data] = Map.empty, log: Vector[Entry] = Vector.empty,
     model: Option[String] = None, modelName: String = Model.default, problem: Option[String] = None,
@@ -352,7 +353,8 @@ object App:
   def explanations(s: State): Set[Int] =
     val question = s.log.indices.map(i => s.log.lastIndexWhere(_.role == "user", i))
     s.log.indices.collect { case i if question(i) >= 0 && i != question(i) && s.log(i).role != "proof" &&
-      (s.log(i).note.nonEmpty || s.log(i).program.nonEmpty || understood(s.log(i))) => question(i) }.toSet
+      (s.log(i).note.nonEmpty || s.log(i).program.nonEmpty || understood(s.log(i)) || s.log(i).explains) =>
+        question(i) }.toSet
   /** the model a question is for: the frame reader when data is open, else the student */
   def forData(s: State): String = if s.tables.nonEmpty then Model.frames else Model.default
 
@@ -581,7 +583,7 @@ object App:
             case (true, false) => "Marked: right"
             case (false, false) => "Marked: wrong")))
         List(Part.block("explain")(Part.slot(s"explain-$q"), mark)) else Nil
-      if folded && understood(e) then toggle
+      if folded && (understood(e) || e.explains) then toggle
       else Part.block(e.role)((List(if code then Part.code(e.text) else if e.role == "user" || e.role == "model" && e.text.contains("\n") then Part.block("lines")(e.text.split("\n").toList.map(Part.text)*) else Part.text(e.text)) ++
         (if folded then Nil else e.note.toList.map(n => if e.role == "result" && n.contains("\n") then Part.code(n)
           else Part.block("small")(n.split("\n").toList.map(Part.text)*))) ++

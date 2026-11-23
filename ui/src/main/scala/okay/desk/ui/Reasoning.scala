@@ -214,7 +214,7 @@ object Reasoning:
     case Step.Formal(program) =>
       val description = okay.desk.know.Formal.describe(program, Knowledge.language(s.reasoning.question) == "ru")
       val interpreted = s.copy(log = s.log :+ App.Entry("system", "Language model interpretation\n" + description,
-        program = Some(program)))
+        program = Some(program), explains = true))
       Model.execute[R](Computation.Job.FormalModel(program)).flatMap {
         case Left(error) => retry[R](interpreted, program, error, observations, searched, round)
         case Right(Computation.Output.FormalResult(result)) =>
@@ -232,7 +232,7 @@ object Reasoning:
     case Step.Plan(program) =>
       val description = okay.desk.know.Planning.describe(program, Knowledge.language(s.reasoning.question) == "ru")
       val interpreted = s.copy(log = s.log :+ App.Entry("system", "Language model transition model\n" + description,
-        program = Some(program)))
+        program = Some(program), explains = true))
       Model.execute[R](Computation.Job.PlanModel(program)).flatMap {
         case Left(error) => retry[R](interpreted, program, error, observations, searched, round)
         case Right(Computation.Output.PlanResult(result)) =>
@@ -472,35 +472,45 @@ object Reasoning:
           s"${i + 1}. ${PuzzleDomain.readBack(clue.read.get, language, label)}"
         }
         .mkString("\n")
+      val ru = language == "ru"
       val evidence = parsed.clues.flatMap(_.evidence).distinct.map { f =>
         App.Entry(
           "source",
           s"${f.subject}: ${f.property} = ${f.values.mkString(", ")}",
           note = Some(f.date),
-          url = Some(f.source)
+          url = Some(f.source),
+          explains = true
         )
       }
+      // the categories in the question's language (the inferred ones are named in English inside)
+      val sortRu = Map("colours" -> "цвет", "nations" -> "национальность", "drinks" -> "напиток",
+        "smokes" -> "сигареты", "pets" -> "животное")
+      def sortName(n: String) = if ru then sortRu.getOrElse(n, n) else n
       val schemaRead = if !parsed.inferred then Vector.empty else Vector(App.Entry("system",
-        parsed.schema.puzzle.sorts.map(sort => sort.name + ": " + sort.values.map(v =>
-          okay.desk.puzzle.PuzzleText.label(parsed, v, Knowledge.language(s.reasoning.question))).mkString(", "))
-          .mkString("Read categories (one different value of each category per house):\n", "\n", "")))
+        parsed.schema.puzzle.sorts.map(sort => sortName(sort.name) + ": " + sort.values.map(label).mkString(", "))
+          .mkString(if ru then "Прочитанные категории (в каждом доме по одному разному значению каждой):\n"
+            else "Read categories (one different value of each category per house):\n", "\n", ""), explains = true))
       val ready = s.copy(
-        log = (s.log ++ schemaRead) :+ App.Entry("system", readBack),
+        log = (s.log ++ schemaRead) :+ App.Entry("system", readBack, explains = true),
         reasoning = s.reasoning.copy(constraints = false, pending = None)
       )
       App.busy[R](ready, "solving the constraints…").flatMap(_ => Model.solve[R](puzzle)).map {
-        case Left(error)                            => finish(ready, "The constraint solver failed: " + error)
+        case Left(error) =>
+          finish(ready, (if ru then "Решатель условий не справился: " else "The constraint solver failed: ") + error)
         case Right(Solver.Outcome.One(grid, trace)) =>
           val rows = Solver.table(puzzle, grid).map(_.map(label).mkString(" | ")).mkString("\n")
           val answers = Solver.answers(puzzle, grid).map { (q, value) =>
             val who = label(value)
             s"${who.head.toUpper +: who.tail} — ${label(q.of.value)}."
           }
-          val answer = if answers.isEmpty then "Solved." else answers.mkString("\n")
+          val answer = if answers.nonEmpty then answers.mkString("\n") else if ru then "Решено." else "Solved."
           val proof = trace.map(t => s"${t.ref.value} → ${t.position} (${t.clue}: ${t.how})").mkString("\n")
           finish(ready.copy(log = ready.log ++ evidence :+ App.Entry("result", rows, note = Some(proof))), answer)
         case Right(Solver.Outcome.Several(n, _, differing)) =>
-          finish(ready, s"Several solutions (at least $n). Unsettled: ${differing.map(_.value).mkString(", ")}.")
+          val open = differing.map(r => label(r.value)).mkString(", ")
+          finish(ready, if ru then s"Решений несколько (не меньше $n). Не определено: $open."
+            else s"Several solutions (at least $n). Unsettled: $open.")
         case Right(Solver.Outcome.None(clashing)) =>
-          finish(ready, "Inconsistent statements: " + clashing.mkString(", "))
+          finish(ready, (if ru then "Условия противоречат друг другу: " else "Inconsistent statements: ") +
+            clashing.mkString(", "))
       }
