@@ -12,7 +12,8 @@ ThisBuild / resolvers ++= Seq(
   "okay-ui" at "https://okay-effects.github.io/okay-ui/maven",
   "okay-faces" at "https://okay-effects.github.io/okay-faces/maven",
   "okay-http" at "https://okay-effects.github.io/okay-http/maven",
-  "okay-scala" at "https://okay-effects.github.io/okay-scala/maven")
+  "okay-scala" at "https://okay-effects.github.io/okay-scala/maven",
+  "okay-frames" at "https://okay-effects.github.io/okay-frames/maven")
 
 /** the tables, the query programs (data), the exact handlers (relational and Datalog), the model's prompt and
  * its answer's parsing — plain Scala: the JVM for the laws, the browser for the page */
@@ -21,6 +22,7 @@ lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
     scalacOptions ++= Seq("-Xmax-inlines", "128"),
     libraryDependencies ++= Seq(
       "io.github.okay-effects" %%% "okay-datalog" % "0.1.0",
+      "io.github.okay-effects" %%% "okay-frames" % "0.1.0",
       "io.github.okay-effects" %%% "okay-inlay" % "0.1.0",
       "io.github.okay-effects" %%% "okay-llm-qwen" % "0.1.0",
       "io.github.okay-effects" %%% "okay-scala" % "0.1.1",

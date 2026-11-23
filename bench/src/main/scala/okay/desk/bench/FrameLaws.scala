@@ -2,6 +2,7 @@ package okay.desk.bench
 
 import java.nio.file.{Files, Path}
 import okay.desk.*
+import okay.frames.Reach
 import okay.effects.json.Json
 import scala.jdk.CollectionConverters.*
 
@@ -21,29 +22,15 @@ object FrameLaws:
     val sets =Vector("everyday" -> FrameBench.everyday.filter(_.lang == "en")) ++
       sys.env.get("FRAME_SET").map(f => "never trained" -> FrameBench.taught(Path.of(f))).toVector
     for (name, set) <- sets do
-      var plain, pruned, trip, n = 0
-      val refused = scala.collection.mutable.Map.empty[String, Int].withDefaultValue(0)
-      val shown = scala.collection.mutable.ArrayBuffer.empty[String]
-      for a <- set; gold <- a.frame do
-        n += 1
-        val steps = gold.indices.map { i =>
-          val so = FrameReading.Reading(gold.take(i), Vector.empty)
-          val offered = Frame.next(gold.take(i), a.tables, a.text)
-          (offered.contains(gold(i)),
-            FrameReading.pruned(offered, so, a.tables, a.text).contains(gold(i)), gold(i))
-        }
-        if steps.forall(_._1) then plain += 1
-        steps.find(!_._2) match
-          case None => pruned += 1
-          case Some((_, _, line)) =>
-            val section = if steps.find(!_._1).nonEmpty then "not offered" else "pruned"
-            refused(s"$section: ${line.takeWhile(_ != ':')}") += 1
-            if shown.size < 12 then shown += s"    [$section] ${a.text} → ${gold.mkString(" | ")} (line: $line)"
-        val back = Frame.query(gold, a.tables).flatMap(Exact.run(a.tables, _)).toOption
-        if a.gold.exists(g => back.exists(Sample.same(_, g))) then trip += 1
-      println(s"$name: $n gold frames; reached as offered $plain, as pruned $pruned; round trip $trip")
-      println(s"  refused: ${refused.toVector.sortBy(-_._2).mkString(", ")}")
-      shown.foreach(println)
+      // the reach is okay-frames' (`Reach.of` over `FrameSpace`): as `Frame.next` allows, and as the page prunes
+      val cases = set.flatMap(a => a.frame.map(g => (a.tables, a.text, FrameTerm(g))))
+      val (all, page) = (Reach.of(FrameSpace.all)(cases, 4), Reach.of(FrameSpace.page)(cases, 4))
+      val trip = set.count(a => a.frame.exists(g => a.gold.exists(want =>
+        Frame.query(g, a.tables).flatMap(Exact.run(a.tables, _)).toOption.exists(Sample.same(_, want)))))
+      println(s"$name: ${cases.size} gold frames; reached as offered ${all.reached}, as pruned ${page.reached}; " +
+        s"round trip $trip")
+      for (how, r) <- Vector("not offered" -> all, "pruned" -> page); (hole, k) <- r.refused do
+        println(s"  $how at the $hole: $k — e.g. ${r.examples(hole).mkString(" / ")}")
     // THE WRONG ONES READ AGAIN: does the reader's answer hold the gold's values?
     for f <- args.headOption; set <- sets.find(_._1 == "never trained").map(_._2) do
       val byKey = set.map(a => a.key -> a).toMap

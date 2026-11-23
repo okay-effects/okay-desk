@@ -65,13 +65,8 @@ object FrameBench:
         link = sys.env.get("FRAME_LINK").fold(0.0)(_.toDouble),
         guess = sys.env.get("FRAME_GUESS").fold(0.0)(_.toDouble), prune = sys.env.contains("FRAME_PRUNE"))
       FrameReading.pruneNumbers = !sys.env.contains("FRAME_KEEP_NUMBERS")
-      FrameReading.sections = sys.env.get("FRAME_SECTIONS").fold(0.0)(_.toDouble)
       FrameReading.pruneSingle = !sys.env.contains("FRAME_KEEP_SINGLE")
       FrameReading.pruneText = sys.env.contains("FRAME_PRUNE_TEXT")
-      // FRAME_AHEAD=<bar>: one line ahead where the best options are that close; FRAME_AHEAD_ALL: on any line
-      FrameReading.lookahead = sys.env.get("FRAME_AHEAD").fold(0.0)(_.toDouble)
-      FrameReading.aheadAll = sys.env.contains("FRAME_AHEAD_ALL")
-      FrameReading.wide = sys.env.get("FRAME_WIDE").fold(3)(_.toInt)
       val person = if doubt.isEmpty then Person.silent[Read, FrameReading.Reading]
         else Person.byFrame[Read, FrameReading.Reading](a.frame)
       val read = Read.run(handle(program, person), reading)

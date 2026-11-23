@@ -92,59 +92,7 @@ object FrameReading:
       else kept.filterNot(o => o.startsWith("order: ") || o.startsWith("limit: ") || o.startsWith("keep: "))
     if useful.isEmpty then options else useful
 
-  /** THE SECTION FIRST (`sections` > 0, theory.md E6): a line of many options over several sections (where, group,
-   * order, limit, keep, end) weighs the sections' heads first ("where:", "end"…); where the best head leads the
-   * second by `sections` or more, only its section's options are weighed — `end` chosen costs a weighing of the heads,
-   * not of 63 options (a phone: ~5 s a line). Less sure, every option as before */
-  var sections: Double = 0.0
-  private def section(o: String): String = if o == Frame.end then o else o.takeWhile(_ != ':') + ":"
-  private def narrowed[R[_]](options: Vector[String], context: Array[Int], newline: Int, end: Int)(
-      using In[Read, R]): Vector[String] ! R =
-    val heads = options.map(section).distinct
-    if sections <= 0 || heads.size < 2 || options.size <= 12 then pure(options)
-    else
-      for
-        tokens <- Read.each[String, Array[Int], R](heads)(h => Read.encode[R](h))
-        raw <- Read.score[R](context :+ newline, heads.zip(tokens).map((h, t) => if h == Frame.end then t :+ end else t))
-        ranked = heads.zip(raw).sortBy(-_._2)
-      yield if ranked.head._2 - ranked(1)._2 >= sections then options.filter(section(_) == ranked.head._1) else options
-
-  /** ONE LINE AHEAD WHERE IN DOUBT (`lookahead` > 0): a line whose best options are within `lookahead` of each other
-   * — the answer line most of all: «Hours by role» read as `rows` before `group: role` could be offered — is chosen
-   * by the option with its best next line, the best `wide` options each weighed with what can follow it; greedy
-   * reading decides a line before the line that shows what it meant. Only the answer line (`aheadAll` false) or any
-   * line; `end` and lines after which nothing follows are taken as they are */
-  var lookahead: Double = 0.0
-  var aheadAll: Boolean = false
-  var wide: Int = 3
-  private def ahead[R[_]](tables: Map[String, Table], question: String, link: Double, guess: Double, prune: Boolean,
-      context: Array[Int], newline: Int, end: Int, so: Reading, ranked: Vector[(String, Double)])(
-      using In[Read, R]): Vector[(String, Double)] ! R =
-    val margin = ranked.lift(1).fold(Double.PositiveInfinity)(second => ranked.head._2 - second._2)
-    val answerLine = ranked.headOption.exists(_._1.startsWith("answer: "))
-    if lookahead <= 0 || margin >= lookahead || !(aheadAll || answerLine) then pure(ranked)
-    else
-      val top = ranked.take(wide).filter(_._1 != Frame.end).filter((_, s) => ranked.head._2 - s < lookahead)
-      if top.size < 2 then pure(ranked)
-      else
-        for
-          seen <- Read.each[(String, Double), (String, Double), R](top) { (o, s) =>
-            val taken = so.copy(lines = so.lines :+ o)
-            val next0 = Frame.next(taken.lines, tables, question)
-            val next = if prune then pruned(next0, taken, tables, question) else next0
-            if next.isEmpty then pure((o, s))
-            else
-              for
-                line <- Read.encode[R](o)
-                tokens <- Read.each[String, Array[Int], R](next)(n => Read.encode[R](n))
-                raw <- Read.score[R]((context :+ newline) ++ line :+ newline,
-                  next.zip(tokens).map((n, t) => t :+ (if n == Frame.end then end else newline)))
-                best = weighed(raw, next, taken, tables, question, link, guess).max
-              yield (o, s + best)
-          }
-          rest = ranked.filterNot(r => seen.exists(_._1 == r._1))
-          // the options looked at, by option and next line; those not looked at after them, as they were
-        yield seen.sortBy(-_._2) ++ rest
+  // (the section first and one line ahead where in doubt — both negative, theory.md §11 — removed 2026-11-23)
 
   /** `start`: lines decided already (a person's choice where two readers parted) — read on from them */
   def read[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt] = None, maxLines: Int = 16,
@@ -166,21 +114,18 @@ object FrameReading:
       using In[Read, R], In[Person, R]): Reading ! R =
     if so.lines.lastOption.contains(Frame.end) || so.unresolved || so.lines.size >= maxLines then pure(so)
     else
-      // PRUNED (`prune`, theory.md E5): a condition on a text value the question does not name is not weighed at all —
-      // `guess` took it down by nats anyway; the where lines of 171 options were most of a question's time on a phone
-      val all = if prune then pruned(Frame.next(so.lines, tables, question), so, tables, question)
-        else Frame.next(so.lines, tables, question)
-      if all.isEmpty then pure(so.copy(lines = so.lines :+ Frame.end))
+      // THE OPTIONS ARE THE SPACE'S (okay-frames `Space`: `FrameSpace`, one definition for the reader and the laws);
+      // PRUNED (`prune`, theory.md E5) as the page offers them: unwritten numbers are not weighed
+      val options = FrameSpace.of(prune).offered(so.lines, tables, question)
+      if options.isEmpty then pure(so.copy(lines = so.lines :+ Frame.end))
       else
         for
-          options <- narrowed(all, context, newline, end)
           tokens <- Read.each[String, Array[Int], R](options)(o => Read.encode[R](o))
           // each option's tokens and the line's end after them (a newline; the turn's end after `end`)
           raw <- Read.score[R](context :+ newline,
             options.zip(tokens).map((o, t) => t :+ (if o == Frame.end then end else newline)))
           scores = weighed(raw, options, so, tables, question, link, guess)
-          first = options.zip(scores).sortBy(-_._2)
-          ranked <- ahead(tables, question, link, guess, prune, context, newline, end, so, first)
+          ranked = options.zip(scores).sortBy(-_._2)
           margin = ranked.lift(1).fold(Double.PositiveInfinity)(second => ranked.head._2 - second._2)
           chosen <- doubt match
             case Some(d) if margin < d.bar && so.asked < d.maxAsks =>
