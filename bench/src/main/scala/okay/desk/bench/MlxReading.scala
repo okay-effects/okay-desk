@@ -65,6 +65,41 @@ final class MlxReading(chat: Chat, model: Model, layer: Int) extends Reading:
         lp.map(p => math.log(math.max(p, 1e-30f).toDouble)).sum / o.length
       }
     finally s.close()
+  /** THE OPTIONS IN ONE PASS (the default; `FRAME_EACH_OPTION` the old way): the context and every option one trie
+   * (mlx-scala `Model.hiddenTree`: each token attends to its ancestors), the logits of the rows that predict the
+   * options' tokens — `score`'s numbers but for bf16 rounding (one forward an option, the state rewound), one
+   * forward a line: a `where` line has up to 170 options */
+  def scoreTree(context: Array[Int], options: Vector[Array[Int]]): Vector[Double] =
+    val ids = scala.collection.mutable.ArrayBuffer.empty[Int]
+    val parent = scala.collection.mutable.ArrayBuffer.empty[Int]
+    val child = scala.collection.mutable.HashMap.empty[(Int, Int), Int]
+    def walk(from: Int, tokens: Array[Int]): Array[Int] =
+      var at = from
+      tokens.map { t => at = child.getOrElseUpdate((at, t), { ids += t; parent += at; ids.size - 1 }); at }
+    val ctx = walk(-1, context)
+    val rows = scala.collection.mutable.ArrayBuffer.empty[Int]
+    val spans = options.map { o =>
+      val nodes = walk(ctx.last, o)
+      val start = rows.size
+      rows ++= (ctx.last +: nodes.init)
+      (start, rows.size)
+    }
+    val s = new Scope
+    given Scope = s
+    try
+      val h = model.hiddenTree(ids.toArray, parent.toArray)
+      val m = rows.size
+      val at = take(reshape(h, ids.size, h.dim(2)), ints(rows.toArray, m), 0)
+      val logits = astype(model.head(reshape(at, 1, m, h.dim(2))), Dtype.Float32)
+      val pred = reshape(logits, m, logits.dim(-1))
+      val targets = options.flatten.toArray
+      val lp = subtract(reshape(takeAlong(pred, ints(targets, m, 1), 1), m), logsumexp(pred, 1)).toFloats
+      spans.map((a, b) => (a until b).map(i => math.max(lp(i).toDouble, math.log(1e-30))).sum / (b - a))
+    finally s.close()
+  // the default since 2026-11-24 (Everyday 1.3 → 0.4 s a question; 1 of 108 outcomes moved, margins within 0.11):
+  // FRAME_EACH_OPTION=1 weighs one option a forward as before
+  private val treeRead = !sys.env.contains("FRAME_EACH_OPTION")
+
   /** the operation answered: `Read`'s one list of what a skill needs, this backend's way */
   def answer[X](op: Read[X]): X = op match
     case Read.States(ids, at) => states(ids, at)
@@ -73,7 +108,7 @@ final class MlxReading(chat: Chat, model: Model, layer: Int) extends Reading:
     case Read.Decode(ids) => decode(ids)
     case Read.Prompt(system, user) => prompt(system, user)
     case Read.Note(_) => ()
-    case Read.Score(context, options) => score(context, options)
+    case Read.Score(context, options) => if treeRead then scoreTree(context, options) else score(context, options)
 
 object MlxReading:
   /** the readers for a model and a layer: loaded from the cache when there (DESK_RETRAIN=1 trains again) */
