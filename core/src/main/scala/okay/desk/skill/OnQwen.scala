@@ -18,8 +18,32 @@ import scala.concurrent.{ExecutionContext, Future}
 final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Array[Int] => Future[Unit] = _ => Future.unit)(
     using ExecutionContext):
   def rehead(): Unit = model.rehead()
+  /** every prefix let go: this reader's and the others' kept (memory wanted elsewhere) */
   def clearCache(): Unit =
+    dropCurrent()
+    shelf.foreach(_._2.foreach(_._2.free())); shelf = Vector.empty
+  /** this reader's prefix let go */
+  private def dropCurrent(): Unit =
     cached.foreach(_._2.free()); cached = None; model.dropTrees()
+  /**
+   * EACH READER ITS OWN PREFIX (two readers agreeing, specs/frames.md §6.2): the adapters beside one base give other
+   * keys and values for the same prompt, so a reader's cache is no use to the other — but it is to itself, after the
+   * other has read. A switch puts this reader's cache on the shelf and takes the other's from it: the prompt with
+   * the tables is run once a reader, not again at each switch (twice a question with a parting). `slots` caches at
+   * most, the least recent let go first.
+   */
+  def use(reader: Int): Unit = if reader != slot then
+    model.dropTrees()
+    shelf = shelf.filterNot(_._1 == slot) :+ (slot -> cached)
+    cached = shelf.find(_._1 == reader).flatMap(_._2)
+    shelf = shelf.filterNot(_._1 == reader)
+    slot = reader
+    while shelf.size > math.max(0, slots - 1) do
+      shelf.head._2.foreach(_._2.free()); shelf = shelf.tail
+  /** the readers' caches kept at most (the one in use among them) */
+  var slots: Int = 2
+  private var slot = 0
+  private var shelf = Vector.empty[(Int, Option[(Array[Int], model.Cache)])]
   def close(): Unit =
     clearCache()
     model.c.close()
@@ -85,7 +109,7 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
           model.run(head, layer, Nil, withLogits = false, Some(shorter), keep = true).map { (_, _, next) =>
             shorter.free(); cached = next.map(head -> _); next.get }
         case _ =>
-          clearCache()
+          dropCurrent()
           model.run(head, layer, Nil, withLogits = false, None, keep = true).map { (_, _, next) =>
             cached = next.map(head -> _); next.get }
       // (the options' tokens' embedding blocks loaded first: the head knows only the loaded rows)

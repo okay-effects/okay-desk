@@ -961,9 +961,9 @@ object Engine:
         Future.successful(().asInstanceOf[X])
       case _: Read.Score => drawn().flatMap { _ => val done = traced(op); chunked(op).map { x => done(x); x } }
       case _ => val done = traced(op); chunked(op).map { x => done(x); x })
-    // a reader of the two: its adapter in use, the prefix cache of the other let go (its states are another's)
+    // a reader of the two: its adapter in use, its own prefix cache taken back (the other's kept for it, OnQwen.use)
     def by(reader: Int)(p: => Out ! AsyncRead): Future[Out] =
-      framesAdapted.foreach { a => if a.current != reader then { a.current = reader; on.clearCache() } }
+      framesAdapted.foreach { a => if a.current != reader then { a.current = reader; on.use(reader) } }
       run(p)
     def reading(start: Vector[String], doubt: Option[FrameReading.Doubt]): Out ! AsyncRead =
       handle(FrameReading.read[FrameRow](tables, question, doubt, start = start, link = 2.0, guess = 2.0,
