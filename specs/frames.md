@@ -265,7 +265,18 @@ Everyday; 2e-4 seed 1 merged at 4 bits 7 of 108; the same 3e-4 seed merged at 8 
 (8× more steps) were large enough to survive the rounding, the tries' are below half a step — rounded back, or
 pushed a whole step: noise larger than Δ. A reader for the phone from tries needs its adapter beside the 4-bit
 base (`Adapted`), not merged — the iPhone's tab once died that way, but from one GPU task of minutes (phone.md
-§4.1), since split into parts; to measure on the phone.
+§4.1), since split into parts; to measure on the phone. The operator's iPhone ran it (2026-11-20): published as the
+phone's reader (guarantees.md §8.3); `?merged` keeps round 5 merged.
+
+### 5.14 On okay-frames; the benches read a line in one pass (2026-11-24)
+
+- `FrameSpace` (core): the frame as an okay-frames `Space[Tables, FrameTerm]` — the reader weighs the space's
+  options (`FrameReading`), the laws measure the same options (`FrameSpaceSuite`: reach, round trip, distinct on
+  Everyday's golds; `FrameLaws` on `Reach.of`). The term is the frame, not its `Query`. Everyday read the same, line
+  by line and margin by margin, before and after.
+- The benches' reader (`MlxReading.scoreTree`) weighs a line's options in one forward over a trie (mlx-scala
+  `hiddenTree`) instead of one forward an option: Everyday 1.3 → 0.4 s a question; 1 of 108 outcomes moved, margins
+  within 0.11 (bf16). Numbers from here on are read this way; `FRAME_EACH_OPTION` the old.
 
 ## 6. The frame reader as a program over effects (2026-11-15)
 
