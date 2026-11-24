@@ -5,6 +5,17 @@ What is being done now, each item with its check; done items move to their spec'
 The direction: `specs/direction.md` (the tools and the model's reading grow together, measured by the ceiling);
 the design before it: `specs/loop.md`, `specs/core-joint.md`, `specs/everyday.md`; the tools: `docs/toolkit.md`.
 
+**K. THE CORE MODEL FIRST** (the operator, 2026-11-24: "когда будет эта модель ядра?" — planned since 2026-11-18 as
+theory.md E1, never done; nothing else in okay-desk before it). One small model judging whether a plain restatement
+means what the person asked; the program walks the formal space, engines compute, the restatement is shown:
+
+- K1 **the canonical reader** — options weighed as their plain clauses (`FRAME_CANONICAL`, 14fe3c3); trained as l2,
+  measured against l2 on `Everyday` and the 1004. Running 2026-11-24 11:48; result the same day.
+- K2 **the domains' restatements and data** (by 2026-11-26) — tables (done), logic grids (`Said`), units and the
+  calendar (okay-inlay `Units`); the clauses' words in Ukrainian and Polish too.
+- K3 **the core model v1** (by 2026-11-27) — one adapter over the 0.6B (or the looped one, if not worse) trained on all
+  the domains at once; measured on a domain it never saw and on each seen one, one table; on the page if it holds.
+
 **P. The phone first** (the operator, 2026-11-15: the result SEEN on his iPhone; a small model doing what a large one
 does is the point) — `specs/phone.md`; these go before item 7's later parts and land the page the others use:
 
