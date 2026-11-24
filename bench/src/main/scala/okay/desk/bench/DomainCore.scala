@@ -96,6 +96,7 @@ object DomainBench:
     val reading = MlxReading(chat, model, 1)
     val texts = Files.readAllLines(Path.of(args(0))).asScala.toVector.filter(_.trim.nonEmpty).map(Json.fromText)
     println(s"$repo${sys.env.get("FRAME_ADAPTER").fold("")(" with " + _)}: ${texts.size} texts")
+    var failures = Vector.empty[String]
     val t0 = System.nanoTime()
     val records = texts.map { j =>
       val domain = j("domain").string
@@ -112,6 +113,8 @@ object DomainBench:
           (Clues.answer(w, r.lines), Clues.answer(w, gold))
         case other => sys.error(s"no space for $other")
       val o = if got.isRight && got == want then "right" else "wrong"
+      // FRAME_FAILURES: the misread texts kept as they are (the truth known: the meaning was drawn) — self-play's mix
+      if o == "wrong" then failures :+= j.render
       println(s"  [$domain $lang] $o $q → ${got.fold(e => s"($e)", identity)} (want ${want.fold(identity, identity)})")
       (lang, o)
     }
@@ -120,4 +123,30 @@ object DomainBench:
       val mine = records.filter(_._1 == lang)
       println(s"total $lang: right ${mine.count(_._2 == "right")}, wrong ${mine.count(_._2 == "wrong")} " +
         s"of ${mine.size}")
+    for out <- sys.env.get("FRAME_FAILURES") do
+      Files.write(Path.of(out), failures.asJava)
+      println(s"failures: ${failures.size} written to $out")
     model.close()
+
+/**
+ * THE GATE OF SELF-PLAY (SPRINT K4): a new adapter against the current, measure by measure — the logs of the same
+ * sets (`FrameBench`: right / asked / wrong; `DomainBench`: right / wrong). Accepted only when no set has more wrong
+ * than before (the silent errors the guarantee is about) and all of them together have more right.
+ * `sbt "bench/runMain okay.desk.bench.Gate <old logs, comma-separated> <new logs, the same order>"`: prints ACCEPT
+ * or REJECT and the table
+ */
+object Gate:
+  private val total = """total \w+: right (\d+)(?:, asked (\d+))?, wrong (\d+)""".r
+  /** right and wrong summed over a log's languages */
+  def tally(log: Path): (Int, Int) =
+    Files.readAllLines(log).asScala.flatMap(l => total.findFirstMatchIn(l)).foldLeft((0, 0)) { (acc, m) =>
+      (acc._1 + m.group(1).toInt, acc._2 + m.group(3).toInt) }
+  def main(args: Array[String]): Unit =
+    val (olds, news) = (args(0).split(",").toVector.map(Path.of(_)), args(1).split(",").toVector.map(Path.of(_)))
+    require(olds.size == news.size, "the same sets, in the same order")
+    val rows = olds.zip(news).map((o, n) => (n.getFileName.toString, tally(o), tally(n)))
+    for (name, (r0, w0), (r1, w1)) <- rows do println(f"  $name%-40s right $r0%4d → $r1%4d   wrong $w0%4d → $w1%4d")
+    val noMoreWrong = rows.forall((_, o, n) => n._2 <= o._2)
+    val moreRight = rows.map(_._3._1).sum > rows.map(_._2._1).sum
+    println(if noMoreWrong && moreRight then "ACCEPT" else
+      s"REJECT (${if !noMoreWrong then "more wrong somewhere" else "no more right"})")
