@@ -34,7 +34,7 @@ object Person:
 object FrameReading:
   /** the lines read, each choice's margin, the questions asked, and whether none of the options offered was meant */
   final case class Reading(lines: Vector[String], margins: Vector[Double], asked: Int = 0,
-      unresolved: Boolean = false):
+      unresolved: Boolean = false, runnersUp: Vector[Option[String]] = Vector.empty):
     def margin: Double = margins.minOption.getOrElse(0.0)
 
   /** where the person is asked: a line's margin below `bar`; the best `offer` options; at most `maxAsks` questions */
@@ -106,7 +106,8 @@ object FrameReading:
       decided <- Read.each[String, Array[Int], R](start)(l => Read.encode[R](l))
       context = decided.foldLeft(prompt)((c, t) => (c :+ newline) ++ t)
       read <- step(tables, question, doubt, maxLines, link, guess, prune, context, newline, end,
-        Reading(start, Vector.fill(start.size)(Double.PositiveInfinity)))
+        Reading(start, Vector.fill(start.size)(Double.PositiveInfinity),
+          runnersUp = Vector.fill(start.size)(None)))
     yield read
 
   private def step[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt], maxLines: Int,
@@ -139,5 +140,6 @@ object FrameReading:
               Read.note[R](line).flatMap(_ => Read.encode[R](line)).flatMap(t => step(tables, question, doubt,
                 maxLines, link, guess, prune,
                 (context :+ newline) ++ t, newline, end,
-                Reading(so.lines :+ line, so.margins :+ margin, asked)))
+                Reading(so.lines :+ line, so.margins :+ margin, asked, runnersUp = so.runnersUp :+
+                  ranked.map(_._1).find(_ != line))))
         yield next

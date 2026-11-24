@@ -56,6 +56,7 @@ object FrameBench:
     val reading = MlxReading(chat, model, 1)
     val t0 = System.nanoTime()
     var asks = 0
+    var reverseLog = Vector.empty[(String, Boolean, String)]
     val records = asked.map { a =>
       // FRAME_DIALOGUE=<bar>: where in doubt the person is asked; here the person is played by the gold frame — the
       // option offered that is one of its lines, else none of them
@@ -73,7 +74,19 @@ object FrameBench:
       asks += read.asked
       val got = if read.unresolved then None
         else Frame.query(read.lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption
-      val o = outcome(a.gold, got)
+      val forward = outcome(a.gold, got)
+      // FRAME_REVERSE=1 (T7): the reverse reading's second opinion — where it prefers another candidate, a person is
+      // asked (the outcome "asked"); FRAME_REVERSE=switch: the reverse's frame taken instead
+      val o = sys.env.get("FRAME_REVERSE").filter(_ => !read.unresolved).fold(forward) { mode =>
+        def readOn(start: Vector[String]) = handle(FrameReading.read[RP](a.tables, a.text, None, start = start,
+          link = sys.env.get("FRAME_LINK").fold(0.0)(_.toDouble),
+          guess = sys.env.get("FRAME_GUESS").fold(0.0)(_.toDouble), prune = sys.env.contains("FRAME_PRUNE")),
+          Person.silent[Read, FrameReading.Reading])
+        val v = Read.run(FrameReverse.candidates[Read](read, readOn).flatMap(fs =>
+          FrameReverse.judge[Read](a.tables, a.text, a.lang, fs)), reading)
+        val switched = outcome(a.gold, Frame.query(v.best, a.tables).flatMap(Exact.run(a.tables, _)).toOption)
+        reverseLog :+= (forward, v.agrees, switched)
+        if v.agrees then forward else if mode == "switch" then switched else "asked" }
       val margin = read.margin
       val said = read.lines.dropRight(1).drop(1).mkString(" | ")
       println(f"  [${a.key}%-12s ${a.lang}] $o%-6s $margin%6.2f ${a.text} → $said")
@@ -83,6 +96,11 @@ object FrameBench:
     for b <- sys.env.get("FRAME_DIALOGUE") do
       val each = asks.toDouble / asked.size
       println(f"the dialogue at the bar $b: $asks questions asked of the person, $each%.2f a question")
+    if reverseLog.nonEmpty then
+      val dis = reverseLog.filterNot(_._2)
+      println(s"the reverse reading: disagreed on ${dis.size} of ${reverseLog.size}; there the forward was right " +
+        s"${dis.count(_._1 == "right")}, wrong ${dis.count(_._1 == "wrong")}; the reverse's frame right " +
+        s"${dis.count(_._3 == "right")}; agreed and wrong ${reverseLog.count(r => r._2 && r._1 == "wrong")}")
     for lang <- records.map(_._1.lang).distinct.sorted do
       val mine = records.filter(_._1.lang == lang)
       println(s"total $lang: right ${mine.count(_._2 == "right")}, asked ${mine.count(_._2 == "asked")}, " +
