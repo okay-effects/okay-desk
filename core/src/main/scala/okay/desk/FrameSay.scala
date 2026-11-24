@@ -28,6 +28,13 @@ object FrameSay:
     "по убыванию", "по возрастанию", "первые", "и")
   private def words(lang: String) = if lang == "ru" then ru else en
 
+  /** THE CANONICAL READER'S LANGUAGE (the improvements, step 1): the question's — Russian words for a Cyrillic question,
+   * English else (Ukrainian and Polish have no words of their own here yet) */
+  def langOf(question: String): String = if question.exists(c => c >= '\u0400' && c <= '\u04ff') then "ru" else "en"
+  /** A LINE AS THE CANONICAL READER WRITES IT: its clause, the end as "that is all" */
+  def line(l: String, lang: String): String =
+    if l == Frame.end then (if lang == "ru" then "это всё" else "that is all") else say(Vector(l), lang)
+
   private def condSaid(w: Words, c: String): String =
     val p = c.split(" ", 3).toVector
     p match

@@ -94,16 +94,24 @@ object FrameReading:
 
   // (the section first and one line ahead where in doubt — both negative, theory.md §11 — removed 2026-11-23)
 
+  /** THE CANONICAL READER (the improvements, step 1; theory: the model judges the meaning of plain clauses, the
+   * program walks the formal space): the options weighed as their clauses in the question's language (`FrameSay.line`),
+   * the lines chosen written so; the frame itself unchanged. Off: the lines as written (`where: city = Lviv`) */
+  var canonical: Boolean = false
+  private def written(line: String, question: String): String =
+    if canonical then FrameSay.line(line, FrameSay.langOf(question)) else line
+
   /** `start`: lines decided already (a person's choice where two readers parted) — read on from them */
   def read[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt] = None, maxLines: Int = 16,
       start: Vector[String] = Vector.empty, link: Double = 0.0,
       guess: Double = 0.0, prune: Boolean = false)(using In[Read, R], In[Person, R]): Reading ! R =
-    val (system, user) = Frame.prompt(tables, question)
+    val (rule, user) = Frame.prompt(tables, question)
+    val system = if canonical then Frame.canonicalRule else rule
     for
       prompt <- Read.prompt[R](system, user)
       newline <- Read.encode[R]("\n").map(_.head)
       end <- Read.encode[R]("<|im_end|>").map(_.last)
-      decided <- Read.each[String, Array[Int], R](start)(l => Read.encode[R](l))
+      decided <- Read.each[String, Array[Int], R](start)(l => Read.encode[R](written(l, question)))
       context = decided.foldLeft(prompt)((c, t) => (c :+ newline) ++ t)
       read <- step(tables, question, doubt, maxLines, link, guess, prune, context, newline, end,
         Reading(start, Vector.fill(start.size)(Double.PositiveInfinity),
@@ -121,7 +129,7 @@ object FrameReading:
       if options.isEmpty then pure(so.copy(lines = so.lines :+ Frame.end))
       else
         for
-          tokens <- Read.each[String, Array[Int], R](options)(o => Read.encode[R](o))
+          tokens <- Read.each[String, Array[Int], R](options)(o => Read.encode[R](written(o, question)))
           // each option's tokens and the line's end after them (a newline; the turn's end after `end`)
           raw <- Read.score[R](context :+ newline,
             options.zip(tokens).map((o, t) => t :+ (if o == Frame.end then end else newline)))
@@ -137,7 +145,7 @@ object FrameReading:
               unresolved = true))
             case (Some(line), asked) =>
               // the line said as soon as it is chosen (a page shows the reading going on)
-              Read.note[R](line).flatMap(_ => Read.encode[R](line)).flatMap(t => step(tables, question, doubt,
+              Read.note[R](line).flatMap(_ => Read.encode[R](written(line, question))).flatMap(t => step(tables, question, doubt,
                 maxLines, link, guess, prune,
                 (context :+ newline) ++ t, newline, end,
                 Reading(so.lines :+ line, so.margins :+ margin, asked, runnersUp = so.runnersUp :+

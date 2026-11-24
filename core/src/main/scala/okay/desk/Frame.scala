@@ -256,6 +256,14 @@ object Frame:
       |or month(date), week(date), year(date); keep: a condition on the answer after grouping; order: the answer or
       |a column, desc or asc; limit: a number of rows; end.""".stripMargin
 
+  /** THE CANONICAL READER'S RULE (the improvements, step 1): the question said again in plain clauses, one a line, each
+   * one of the options offered — the same model choosing words a person reads, not a formal notation */
+  val canonicalRule: String =
+    """You restate a question about a table in plain clauses, one a line, each one of the options offered: the table;
+      |what is asked (rows, a number of rows, a sum, an average, a share, a change, or that the data cannot compute
+      |it); the conditions on the rows; the grouping; the order; how many rows; then "that is all". Names and values
+      |are in «».""".stripMargin
+
   /** the prompt's text: the rule, the table with its values, the question */
   def prompt(tables: Map[String, Table], question: String): (String, String) =
     (rule, tables.values.toVector.sortBy(_.name).map(_.describe).mkString("\n") + s"\n\nQuestion: $question")

@@ -76,10 +76,16 @@ object FrameTrain:
     given Ordering[Array[Int]] = (a, b) =>
       val i = a.indices.find(k => k >= b.length || a(k) != b(k))
       i.fold(a.length - b.length)(k => if k >= b.length then 1 else Integer.compare(a(k), b(k)))
+    // FRAME_CANONICAL: THE CANONICAL READER (the improvements, step 1) — the frame's lines as their plain clauses in the
+    // question's language (`FrameSay.line`), under the canonical rule; FrameBench reads with the same switch
+    val canonical = sys.env.contains("FRAME_CANONICAL")
     def tokens(i: FrameData.Item): (Array[Int], Int) =
-      val (system, user) = Frame.prompt(i.tables, i.question)
+      val (rule, user) = Frame.prompt(i.tables, i.question)
+      val system = if canonical then Frame.canonicalRule else rule
+      val lang = FrameSay.langOf(i.question)
+      val lines = if canonical then i.lines.map(FrameSay.line(_, lang)) else i.lines
       val prompt = chat.prompt(Vector(msg("system", system), msg("user", user)), Nil, Map("enable_thinking" -> false))
-      (prompt ++ (tok.encode(answer(i.lines)) :+ end), prompt.length)
+      (prompt ++ (tok.encode(answer(lines)) :+ end), prompt.length)
     // FRAME_LISTWISE=<k>: TRAINED AS IT READS (okay-inlay concept.md §5 role 2) — each line of the frame a choice
     // among the options the reading offers there (`Frame.next`, pruned as the page prunes), the meant line against
     // k others (half of them, where there are, of its own section: `where:` against `where:`), the listwise loss
