@@ -15,6 +15,8 @@ means what the person asked; the program walks the formal space, engines compute
   calendar (okay-inlay `Units`); the clauses' words in Ukrainian and Polish too.
 - K3 **the core model v1** (by 2026-11-27) — one adapter over the 0.6B (or the looped one, if not worse) trained on all
   the domains at once; measured on a domain it never saw and on each seen one, one table; on the page if it holds.
+  MEASURED 2026-11-24 (frames.md §5.16): units 300/300, the tables unchanged (the 1004 928/27/49 against l2's 927/28/49),
+  clues never trained 61/300. Next: the clues' texts in the mix; values linked by multilingual embeddings.
 
 **P. The phone first** (the operator, 2026-11-15: the result SEEN on his iPhone; a small model doing what a large one
 does is the point) — `specs/phone.md`; these go before item 7's later parts and land the page the others use:

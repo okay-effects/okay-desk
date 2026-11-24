@@ -351,3 +351,28 @@ The looped student starts nearer the model with the SVD start (loss 4.25 against
 at 1000; the full model 0.57 / 0.16) but ends far worse (Everyday 59 against 91): two epochs of frame training do not
 give back what the borrowed layers lost — it needs distillation toward the full model's states first, or a gentler
 loop.
+
+### 5.16 The core model v1 and the checks, measured (2026-11-24; SPRINT K3)
+
+**The core v1**: one adapter over the 0.6B, round l2's recipe, trained on the tables' texts AND 2000 drawn units
+questions (`CORE_TEXTS`, `LineSpace.UnitsAndDates`); measured by `DomainBench` (300 held-out units questions, 300
+logic-puzzle clues of a domain it never saw) and `FrameBench` (right / asked / wrong):
+
+| reader | units (300) | clues, never trained (300) | Everyday | the 1004 |
+|---|---|---|---|---|
+| the 0.6B, no adapter | 171 | 6 | — | — |
+| l2 (tables only) | 225 | 29 | 91 / 4 / 13 | 927 / 28 / 49 |
+| **core v1 (tables + units)** | **300** | **61** | 91 / 3 / 14 | **928 / 27 / 49** |
+
+One adapter learns a second domain completely (units 300 of 300) and loses nothing on the first (the 1004 the same
+to one question): domains add, they do not compete. A domain never trained on is read badly (clues 61 of 300 — twice
+the tables-only reader's, so something carries, but far from use): a new domain needs its own texts, drawn from its
+grammar (cheap: `DomainData`), not none.
+
+**The checks** (l2-s1, the 1004): the reverse reading (T7) as a second opinion turns silent wrong 49 → 15 (1.5%) but
+asks 324 times (right 927 → 665): its doubt is mostly false (where it disagreed, the forward was right 262 times of
+296) — a guarantee bought too dear; the result checked against the question (`FrameChecks`) 49 → 47. Of the 49 wrong
+(read by hand): ~12 a value said in another language («роман» for novel, «терраса» for terrace) read as a group
+instead of a condition; ~12 order and limit (the longest as min, a limit not asked for or missed); ~8 a "growth" with
+no second period in the data; the rest invented conditions and Polish / Ukrainian forms. The largest class asks for
+the values linked across languages by meaning, not by a hand lexicon: next, multilingual embeddings (`Links`).
