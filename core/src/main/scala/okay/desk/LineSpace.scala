@@ -124,3 +124,79 @@ object CoreReading:
         next <- step(space, w, question, maxLines, (context :+ newline) ++ t, newline, end,
           Reading(so.lines :+ line, math.min(so.margin, margin)))
       yield next
+
+/** A CLUE'S WORLD: the positions in a row and the lists placed on them (a logic puzzle's, okay-desk `puzzle`) */
+final case class ClueWorld(positions: Int, sorts: Vector[okay.desk.puzzle.Sort])
+
+/**
+ * A LOGIC PUZZLE'S CLUE (SPRINT K2, the domain held out of training): one sentence of a grid puzzle read into its
+ * constraint — the relation, the things it names (values of the lists), a position or a distance where it has one.
+ * The exact part is the constraint itself (the solver takes it); two readings are the same when their constraints are
+ * (a symmetric relation in either order).
+ */
+object Clues extends LineSpace[ClueWorld]:
+  import okay.desk.puzzle.{Constraint, Ref}
+  val name = "clues"
+  val rule: String =
+    """You read one clue of a logic puzzle into lines, one at a time, each line one of the options: relation: same |
+      |differ | at | not at | middle | left of | right next to | beside | apart; then the things it names, a: VALUE
+      |(and b: VALUE for a relation of two); then n: a position or a distance where the relation has one;
+      |end.""".stripMargin
+  def describe(w: ClueWorld): String =
+    s"positions: 1 to ${w.positions}\n" + w.sorts.map(s => s"${s.name}: ${s.values.mkString(", ")}").mkString("\n")
+  private val two = Set("same", "differ", "left of", "right next to", "beside", "apart")
+  private val counted = Set("at", "not at", "apart")
+  private def value(taken: Vector[String], key: String): Option[String] =
+    taken.find(_.startsWith(key + ": ")).map(_.drop(key.length + 2))
+  def next(w: ClueWorld, question: String, taken: Vector[String]): Vector[String] =
+    if taken.lastOption.contains(Frame.end) then Vector.empty
+    else
+      val values = w.sorts.flatMap(_.values)
+      value(taken, "relation") match
+        case None => Vector("same", "differ", "at", "not at", "middle", "left of", "right next to", "beside", "apart")
+          .map("relation: " + _)
+        case Some(r) =>
+          if value(taken, "a").isEmpty then values.map("a: " + _)
+          else if two(r) && value(taken, "b").isEmpty then values.filterNot(value(taken, "a").contains).map("b: " + _)
+          else if counted(r) && value(taken, "n").isEmpty then
+            (if r == "apart" then 2 to math.max(2, w.positions - 1) else 1 to w.positions).map(n => s"n: $n").toVector
+          else Vector(Frame.end)
+  /** the constraint of a reading's lines */
+  def constraint(w: ClueWorld, lines: Vector[String]): Option[Constraint] =
+    def ref(v: String) = w.sorts.find(_.values.contains(v)).map(s => Ref(s.name, v))
+    for
+      r <- value(lines, "relation"); a <- value(lines, "a").flatMap(ref)
+      c <- r match
+        case "same" => value(lines, "b").flatMap(ref).map(Constraint.Same(a, _))
+        case "differ" => value(lines, "b").flatMap(ref).map(Constraint.Differ(a, _))
+        case "left of" => value(lines, "b").flatMap(ref).map(Constraint.Left(a, _))
+        case "right next to" => value(lines, "b").flatMap(ref).map(Constraint.RightNext(a, _))
+        case "beside" => value(lines, "b").flatMap(ref).map(Constraint.Adjacent(a, _))
+        case "apart" => for b <- value(lines, "b").flatMap(ref); n <- value(lines, "n").flatMap(_.toIntOption)
+          yield Constraint.Apart(a, b, n)
+        case "at" => value(lines, "n").flatMap(_.toIntOption).map(Constraint.At(a, _))
+        case "not at" => value(lines, "n").flatMap(_.toIntOption).map(Constraint.NotAt(a, _))
+        case "middle" => Some(Constraint.Middle(a))
+        case _ => None
+    yield c
+  /** a constraint as its lines (the gold of a drawn clue) */
+  def lines(c: Constraint): Vector[String] = (c match
+    case Constraint.Same(a, b) => Vector("relation: same", s"a: ${a.value}", s"b: ${b.value}")
+    case Constraint.Differ(a, b) => Vector("relation: differ", s"a: ${a.value}", s"b: ${b.value}")
+    case Constraint.At(a, n) => Vector("relation: at", s"a: ${a.value}", s"n: $n")
+    case Constraint.NotAt(a, n) => Vector("relation: not at", s"a: ${a.value}", s"n: $n")
+    case Constraint.Middle(a) => Vector("relation: middle", s"a: ${a.value}")
+    case Constraint.Left(a, b) => Vector("relation: left of", s"a: ${a.value}", s"b: ${b.value}")
+    case Constraint.RightNext(a, b) => Vector("relation: right next to", s"a: ${a.value}", s"b: ${b.value}")
+    case Constraint.Adjacent(a, b) => Vector("relation: beside", s"a: ${a.value}", s"b: ${b.value}")
+    case Constraint.Apart(a, b, d) => Vector("relation: apart", s"a: ${a.value}", s"b: ${b.value}", s"n: $d")) :+
+    Frame.end
+  /** the constraint in a canonical form: a symmetric relation's two things in order */
+  private def canonical(c: Constraint): String = c match
+    case Constraint.Same(a, b) => s"same ${Vector(a.value, b.value).sorted.mkString(" ")}"
+    case Constraint.Differ(a, b) => s"differ ${Vector(a.value, b.value).sorted.mkString(" ")}"
+    case Constraint.Adjacent(a, b) => s"beside ${Vector(a.value, b.value).sorted.mkString(" ")}"
+    case Constraint.Apart(a, b, d) => s"apart ${Vector(a.value, b.value).sorted.mkString(" ")} $d"
+    case other => other.toString
+  def answer(w: ClueWorld, lines: Vector[String]): Either[String, String] =
+    constraint(w, lines).map(canonical).toRight("not a constraint")

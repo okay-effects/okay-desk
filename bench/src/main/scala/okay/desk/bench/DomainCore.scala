@@ -17,19 +17,68 @@ import scala.jdk.CollectionConverters.*
 object DomainData:
   def main(args: Array[String]): Unit =
     val (domain, n, seed, out) = (args(0), args(1).toInt, args(2).toLong, Path.of(args(3)))
-    require(domain == "units", s"no data for $domain yet")
     val rnd = scala.util.Random(seed)
+    val rows = if domain == "clues" then clues(rnd, n) else units(rnd, n)
+    Files.write(out, rows.asJava)
+    println(s"$out: ${rows.size} $domain texts")
+
+  private def row(domain: String, lang: String, q: String, system: String, user: String, lines: Vector[String],
+      world: Json = Json.Null): String =
+    Json.obj("domain" -> Json.str(domain), "lang" -> Json.str(lang), "question" -> Json.str(q),
+      "system" -> Json.str(system), "user" -> Json.str(user), "lines" -> Json.Arr(lines.map(Json.str)),
+      "world" -> world).render
+
+  private def units(rnd: scala.util.Random, n: Int): Vector[String] =
     val space = LineSpace.UnitsAndDates
-    val rows = (1 to n).map { _ =>
+    (1 to n).toVector.map { _ =>
       val p = Units.random(rnd, Units)
       val lang = if rnd.nextBoolean() then "ru" else "en"
       val q = Units.say(rnd, p, Units, lang)
       val (system, user) = space.prompt((), q)
-      Json.obj("domain" -> Json.str(domain), "lang" -> Json.str(lang), "question" -> Json.str(q),
-        "system" -> Json.str(system), "user" -> Json.str(user),
-        "lines" -> Json.Arr(space.lines(p).map(Json.str))).render }
-    Files.write(out, rows.asJava)
-    println(s"$out: ${rows.size} $domain texts")
+      row("units", lang, q, system, user, space.lines(p)) }
+
+  /** CLUES OF DRAWN GRIDS (the houses, the floors, the race): a true constraint of a drawn placement, said by the
+   * setting's voice (`Grids.Voice`, either order where it has two), with its world: the positions and the lists */
+  private def clues(rnd: scala.util.Random, n: Int): Vector[String] =
+    import okay.desk.puzzle.{Constraint, Ref, Sort}
+    import okay.desk.tasks.Grids
+    Iterator.continually {
+      val s = Vector(Grids.houses, Grids.floors, Grids.race)(rnd.nextInt(3))
+      val k = 3 + rnd.nextInt(3)
+      val people = rnd.shuffle(s.people).take(k)
+      val features = rnd.shuffle(s.features).take(2 + rnd.nextInt(2))
+        .map(f => f.copy(items = rnd.shuffle(f.items).take(k)))
+      val sorts = Sort(s.sort, people.map(_.key)) +: features.map(f => Sort(f.sort, f.items.map(_.key)))
+      val values = sorts.flatMap(_.values)
+      Option.when(values.distinct.size == values.size) {
+        val at: Map[Ref, Int] = sorts.flatMap(so => rnd.shuffle((1 to k).toVector).zip(so.values)
+          .map((p, v) => Ref(so.name, v) -> p)).toMap
+        val refs = at.keys.toVector
+        def pick[A](xs: Vector[A]): Option[A] = Option.when(xs.nonEmpty)(xs(rnd.nextInt(xs.size)))
+        val pairs = for a <- refs; b <- refs if a != b yield (a, b)
+        val kinds = Vector[() => Option[Constraint]](
+          () => pick(pairs.filter((a, b) => a.sort != b.sort && at(a) == at(b))).map(Constraint.Same(_, _)),
+          () => pick(pairs.filter((a, b) => a.sort != b.sort && at(a) != at(b))).map(Constraint.Differ(_, _)),
+          () => pick(refs).map(r => Constraint.At(r, at(r))),
+          () => if s.notAt.isEmpty then None
+            else pick(refs).flatMap(r => pick((1 to k).filter(_ != at(r)).toVector).map(Constraint.NotAt(r, _))),
+          () => if k % 2 == 0 then None else pick(refs.filter(r => at(r) == (k + 1) / 2)).map(Constraint.Middle(_)),
+          () => pick(pairs.filter((a, b) => at(a) < at(b) - 1)).map(Constraint.Left(_, _)),
+          () => pick(pairs.filter((a, b) => at(a) == at(b) + 1)).map(Constraint.RightNext(_, _)),
+          () => pick(pairs.filter((a, b) => (at(a) - at(b)).abs == 1)).map(Constraint.Adjacent(_, _)),
+          () => if s.between.isEmpty || k < 3 then None
+            else pick(pairs.filter((a, b) => (2 to 3).contains((at(a) - at(b)).abs)))
+              .map((a, b) => Constraint.Apart(a, b, (at(a) - at(b)).abs)))
+        kinds(rnd.nextInt(kinds.size))().map { c =>
+          val (words, _) = Grids.Voice(s, people, features).say(c, mirror = rnd.nextBoolean())
+          val lang = if rnd.nextBoolean() then "ru" else "en"
+          val q = okay.desk.statement.Writing.plain(words.in(lang == "ru"))
+          val w = ClueWorld(k, sorts)
+          val (system, user) = Clues.prompt(w, q)
+          row("clues", lang, q, system, user, Clues.lines(c), Json.obj("positions" -> Json.num(k),
+            "sorts" -> Json.Arr(sorts.map(so => Json.obj("name" -> Json.str(so.name),
+              "values" -> Json.Arr(so.values.map(Json.str))))))) } }
+    }.flatten.flatten.take(n).toVector
 
 /**
  * THE CORE MODEL MEASURED ON A DOMAIN (SPRINT K3): each text read by `CoreReading` (the model's choices among the
@@ -56,6 +105,11 @@ object DomainBench:
           val s = LineSpace.UnitsAndDates
           val r = Read.run(CoreReading.read[Unit, Read](s, (), q), reading)
           (s.answer((), r.lines), s.answer((), gold))
+        case "clues" =>
+          val w = ClueWorld(j("world")("positions").int, j("world")("sorts").list.map(s =>
+            okay.desk.puzzle.Sort(s("name").string, s("values").list.map(_.string))))
+          val r = Read.run(CoreReading.read[ClueWorld, Read](Clues, w, q), reading)
+          (Clues.answer(w, r.lines), Clues.answer(w, gold))
         case other => sys.error(s"no space for $other")
       val o = if got.isRight && got == want then "right" else "wrong"
       println(s"  [$domain $lang] $o $q → ${got.fold(e => s"($e)", identity)} (want ${want.fold(identity, identity)})")
@@ -64,5 +118,6 @@ object DomainBench:
     println(f"the core reading, ${(System.nanoTime() - t0) / 1e9 / math.max(1, texts.size)}%.2f s a text")
     for lang <- records.map(_._1).distinct.sorted do
       val mine = records.filter(_._1 == lang)
-      println(s"total $lang: right ${mine.count(_._2 == "right")}, wrong ${mine.count(_._2 == "wrong")} of ${mine.size}")
+      println(s"total $lang: right ${mine.count(_._2 == "right")}, wrong ${mine.count(_._2 == "wrong")} " +
+        s"of ${mine.size}")
     model.close()
