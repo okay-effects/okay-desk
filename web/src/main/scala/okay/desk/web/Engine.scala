@@ -333,6 +333,7 @@ object Engine:
       stage = words, gpuBytes = bytes.toDouble, peakGpuBytes = peak.toDouble))
   /** Release the previous device before loading another model: a phone holds one set of weights. */
   private def unload(): Future[Unit] =
+    loadedAs = None
     authorQuestion = ""; authorContext = ""; authorHistory = Vector.empty; authorOutput = None; authorObserved = 0
     Option(on).foreach(_.close())
     memoryInfo = () => (0L, 0L)
@@ -575,12 +576,60 @@ object Engine:
   private def begin(name: String): Unit =
     progressWords = s"loading ${Model.choices.toMap.getOrElse(name, name)}…"
     status = s => { progressWords = s; dom.window.localStorage.setItem("okay-desk.stage", s) }   // (not `stage`: it calls `status`)
-    loading = Some(unload().flatMap { _ =>
+    // (the model already there, or loading in the background for the tables opened: that one, not loaded again)
+    loading = Some((loadedAs, background) match
+      case (Some((n, r)), _) if n == name && on != null => Future.successful(r)
+      case (_, Some((n, f))) if n == name => f
+      case _ => loadAs(name))
+  /** the model `name` loaded (the one before let go), and noted as loaded */
+  private def loadAs(name: String): Future[Either[String, String]] =
+    unload().flatMap { _ =>
       Model.nativeModels.get(name).fold(
         if name == nativeGenerated then webGpu.flatMap(gpu =>
           if gpu then loadWebLlm(name) else loadReaders("model-understanding", 28, generate = true))
         else loadWebLlm(name))((dir, layer) => loadReaders(dir, layer))
-    }.recover { case t => Left(s"model loading failed: ${t.getMessage}") })
+    }.recover { case t => Left(s"model loading failed: ${t.getMessage}") }
+      .map { r => if r.isRight then loadedAs = Some(name -> r); r }
+  private var loadedAs: Option[(String, Either[String, String])] = None
+  private var background: Option[(String, Future[Either[String, String]])] = None
+  // THE PROMPT WARMED WHILE THE QUESTION IS TYPED (SPRINT P6): the tables open now; the frame reader's prompt up to
+  // the question's own words run for each reader and kept (`OnQwen.warm`); a question waits for it, then runs only
+  // its own rest
+  private var prepared: Map[String, Table] = Map.empty
+  private var warming: Future[Unit] = Future.unit
+  private def prepare(tables: Map[String, Table]): Unit =
+    prepared = tables
+    if frames && on != null then warm(tables)
+    // no model yet: the frame reader loaded in the background when its files are on this device already (a visit
+    // before downloaded them) — never a download nobody asked for
+    else if on == null && loading.isEmpty && background.isEmpty && tables.nonEmpty then
+      onDevice("model-full/").foreach { there =>
+        if there && on == null && loading.isEmpty && background.isEmpty then
+          val f = loadAs(Model.frames)
+          background = Some(Model.frames -> f)
+          f.foreach { r => background = None; if r.isRight && frames && prepared.nonEmpty then warm(prepared) } }
+  /** whether a file of `dir` is in the disk's cache */
+  private def onDevice(dir: String): Future[Boolean] =
+    cache("okay-desk-model").flatMap(_.fold(Future.successful(false))(c =>
+      c.keys().asInstanceOf[js.Promise[js.Array[js.Dynamic]]].toFuture
+        .map(_.exists(_.url.asInstanceOf[String].contains(dir))))).recover { case _ => false }
+  private def warm(tables: Map[String, Table]): Unit =
+    val (system, user) = Frame.prompt(tables, "")
+    val text = OnQwen.template(system, user)
+    // the prompt up to "Question:" — the space and the words after it are the question's own tokens
+    val upTo = text.lastIndexOf("Question:") + "Question:".length
+    val readers = if framesAdapted.nonEmpty then Vector(0, 1) else Vector(0)
+    warming = warming.recover { case _ => () }.flatMap { _ =>
+      val o = on
+      if o == null then Future.unit
+      else
+        val t0 = js.Date.now()
+        o.answer(Read.Encode(text.substring(0, upTo))).flatMap(ids =>
+          readers.foldLeft(Future.unit)((acc, reader) => acc.flatMap { _ =>
+            framesAdapted.foreach { a => if a.current != reader then { a.current = reader; o.use(reader) } }
+            o.warm(ids) }).map(_ => println(s"frame reader: the prompt warmed, ${ids.length} tokens, " +
+              s"${readers.size} reader(s), ${(js.Date.now() - t0).toInt} ms")))
+    }.recover { case e => println(s"frame reader: warming failed: $e") }
   private def progress(): Future[Either[String, Either[String, String]]] =
     val p = scala.concurrent.Promise[Either[String, Either[String, String]]]()
     js.timers.setTimeout(250) {
@@ -852,6 +901,7 @@ object Engine:
         case Model.Begin(name) => begin(name); Future.unit
         case Model.Unload() => unload().map(_ => idle())
         case Model.Progress() => progress()
+        case Model.Prepare(tables) => prepare(tables); Future.unit
         case Model.Program(tables, question, retry) =>
           stage("reading a question…")
           program(tables, question, retry).map { r => idle(); r }.recover { case t => idle(); Left(s"the model failed: $t") }
@@ -973,7 +1023,7 @@ object Engine:
       case (Some((q, resume)), Some(_)) if q == question => Some(resume)
       case _ => None
     paused = None; pause = None
-    val outcome: Future[Out] = resumed match
+    val outcome: Future[Out] = warming.recover { case _ => () }.flatMap(_ => resumed match
       case Some(resume) => by(0)(resume(choice))
       // TWO READERS (P4): each reads alone; the same frame is the answer; where they part, the person chooses the line
       // and the first reads on from it (its own doubt then asks as one reader does)
@@ -990,7 +1040,7 @@ object Engine:
               Future.successful(Left((prefix, Vector(x.lines(i)) ++ y.lines.lift(i).filter(_ != x.lines(i)))))
             case _ => Future.successful(a)
         yield out
-      case None => by(0)(reading(Vector.empty, Some(FrameReading.Doubt(frameBar))))
+      case None => by(0)(reading(Vector.empty, Some(FrameReading.Doubt(frameBar)))))
     val f = outcome.map {
       case Left((_, options)) =>
         pause.foreach(k => paused = Some((question, k)))

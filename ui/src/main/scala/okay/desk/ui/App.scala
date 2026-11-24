@@ -109,8 +109,14 @@ object App:
       _ <- loop[R](begun)
     yield ()
 
-  def loop[R[_]](s: State)(using In[Ui, R], In[Model, R], In[Fetch, R], In[Disk, R], In[Clipboard, R]): Unit ! R =
-    show[Msg, R](render(s)).flatMap(m => step[R](s, m).flatMap(next => loop[R](settled(m, next))))
+  /** each screen shown, the person's next message stepped; the tables, when they changed, told to the model first
+   * (`Model.prepare`: the page makes ready for questions about them while one is typed, SPRINT P6) */
+  def loop[R[_]](s: State, prepared: Map[String, Data] = Map.empty)(
+      using In[Ui, R], In[Model, R], In[Fetch, R], In[Disk, R], In[Clipboard, R]): Unit ! R =
+    val told = if s.chooser || s.tables.isEmpty || s.tables == prepared then pure[Unit, R](())
+      else Model.prepare[R](s.tables)
+    told.flatMap(_ => show[Msg, R](render(s)).flatMap(m => step[R](s, m).flatMap(next =>
+      loop[R](settled(m, next), s.tables))))
 
   /** A TASK OF THE COLLECTION SOLVED IN THE CHAT: once nothing waits for the person, what the desk said last is
    * checked against the task's exact answer and the check is said in the chat. Another example or a cleared chat

@@ -27,6 +27,10 @@ enum Model[X]:
     */
   case Progress() extends Model[Either[String, Either[String, String]]]
 
+  /** THE TABLES OPEN NOW (SPRINT P6): the page may make ready for questions about them before one is asked — the
+    * prompt with the tables run while the question is typed; nothing to answer */
+  case Prepare(tables: Map[String, Data]) extends Model[Unit]
+
   /** the program for a question: `Right(json)`, or `Left(words)` — what the model said instead, or why not */
   case Program(tables: Map[String, Data], question: String, retry: Option[(String, String)])
       extends Model[Either[String, String]]
@@ -116,6 +120,7 @@ object Model:
   def begin[R[_]](name: String)(using In[Model, R]): Unit ! R = perform[Model](Begin(name))
   def unload[R[_]](using In[Model, R]): Unit ! R = perform[Model](Unload())
   def progress[R[_]](using In[Model, R]): Either[String, Either[String, String]] ! R = perform[Model](Progress())
+  def prepare[R[_]](tables: Map[String, Data])(using In[Model, R]): Unit ! R = perform[Model](Prepare(tables))
   def program[R[_]](tables: Map[String, Data], question: String, retry: Option[(String, String)] = None)(using
       In[Model, R]
   ): Either[String, String] ! R = perform[Model](Program(tables, question, retry))
@@ -216,6 +221,7 @@ object Model:
               case Begin(name)                  => loadingName = name
               case Unload()                     => unload()
               case Progress()                   => Right(load(loadingName))
+              case Prepare(_)                   => ()
               case Program(tables, question, _) => program(tables, question)
               case Ask(tables, question, _, _)  => asked0 = Some((tables, question))
               case Thought() => Right(asked0.fold(Left("no question asked"))((t, q) => program(t, q)))

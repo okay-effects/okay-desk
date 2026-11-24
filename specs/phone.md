@@ -195,3 +195,24 @@ weights where there were 96; each sum in the old order, the numbers identical (t
 The ten questions with loading: ~1.8 min (was ~25 this morning). A big weighing 5.0 → 3.1 s on a cool phone; it
 heats over the run and slows to ~5.5 s by question 6 — the phone's own limit, a reason to do less, not to do it
 faster.
+
+### 4.6 The prompt warmed while the question is typed (2026-11-24, SPRINT P6)
+
+The tables open (`Model.Prepare`, told by `App.loop` when they change): the page runs the frame reader's prompt up to
+"Question:" — the rule and the tables, nothing of the question — for each reader and keeps it (`OnQwen.warm`); the
+question waits for that and runs only its own tokens. No model yet: the frame reader is loaded in the background
+when its files are on the device already (a visit before downloaded them) — never a download nobody asked for; the
+loading the question then asks for is that one (`Engine.begin` reuses it).
+
+Measured in Chromium, a returning visitor (one profile kept: the files and the tables open from before), the sample's
+two tables (379 tokens of prompt), 15 s / 60 s to type, the same frames:
+
+| | the warming | the first question | the second |
+|---|---|---|---|
+| desktop, WebGPU, two readers | 0.2–0.3 s | 10.5 / 9.7 → 9.6 / 9.3 s (two runs) | ~5 s, unchanged |
+| the phone's profile (WebGL2, the head on the CPU, one reader) | 0.84 s | 9.3 → 6.6 s | 4.0 → 4.6 s |
+
+On the desktop the prompt is cheap (~0.1 s a reader), so the first question's extra seconds are something else (the
+GPU programs built at first use, the first weighing's own); on the phone's profile the warming also builds the
+programs the first forward needs, and the first question gains 2.7 s. On the operator's iPhone the prompt took tens of
+seconds (§4.2): to be measured there.

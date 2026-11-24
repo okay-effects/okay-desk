@@ -89,29 +89,7 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     // the whole vocabulary, 0.91 s a question on the JVM)
     case Read.Score(context, options) =>
       val head = context.init
-      // (a def: run only after the blocks are loaded)
-      def ready: Future[model.Cache] = cached match
-        case Some((prefix, cache)) if prefix.sameElements(head) => Future.successful(cache)
-        // THE LINE CHOSEN, ALREADY RUN: its tokens were rows of the trie just weighed — the cache grows by them with no
-        // forward (Qwen3Compute.extend; a phone: one forward a line instead of two)
-        case Some((prefix, cache)) if head.startsWith(prefix) && head.length > prefix.length &&
-            model.extend(cache, head.drop(prefix.length)).exists { next =>
-              cache.free(); cached = Some(head -> next); true } =>
-          Future.successful(cached.get._2)
-        case Some((prefix, cache)) if head.startsWith(prefix) =>
-          model.run(head, layer, Nil, withLogits = false, Some(cache), keep = true).map { (_, _, next) =>
-            cache.free(); cached = next.map(head -> _); next.get }
-        // A NEXT QUESTION OVER THE SAME TABLES: the prompt's beginning (the rule, the tables) is the last one's — its
-        // rows kept (`take`), only the rest run; a phone ran the whole prompt again each question (37 s on the iPhone)
-        case Some((prefix, cache)) if common(prefix, head) >= shared =>
-          val shorter = cache.take(common(prefix, head))
-          cache.free()
-          model.run(head, layer, Nil, withLogits = false, Some(shorter), keep = true).map { (_, _, next) =>
-            shorter.free(); cached = next.map(head -> _); next.get }
-        case _ =>
-          dropCurrent()
-          model.run(head, layer, Nil, withLogits = false, None, keep = true).map { (_, _, next) =>
-            cached = next.map(head -> _); next.get }
+      def ready: Future[model.Cache] = prefixed(head)
       // (the options' tokens' embedding blocks loaded first: the head knows only the loaded rows)
       // IN PARTS (`parts` > 0, a phone): a line of many options (171 for a `where`) packed into one forward was one GPU
       // task of minutes on an iPhone, the tab died in it; each part is normed over the tokens of all the options
@@ -130,6 +108,35 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
             a })
         else options.grouped(parts).foldLeft(Future.successful(Vector.empty[Double])) { (acc, part) =>
           acc.flatMap(got => model.score(cache, context.last, part, within = true, over = Some(all)).map(got ++ _)) } }
+  /** the cache of `head` (run after the blocks are loaded): the kept one, grown, shortened to what they share, or
+   * run whole */
+  private def prefixed(head: Array[Int]): Future[model.Cache] = cached match
+    case Some((prefix, cache)) if prefix.sameElements(head) => Future.successful(cache)
+    // THE LINE CHOSEN, ALREADY RUN: its tokens were rows of the trie just weighed — the cache grows by them with no
+    // forward (Qwen3Compute.extend; a phone: one forward a line instead of two)
+    case Some((prefix, cache)) if head.startsWith(prefix) && head.length > prefix.length &&
+        model.extend(cache, head.drop(prefix.length)).exists { next =>
+          cache.free(); cached = Some(head -> next); true } =>
+      Future.successful(cached.get._2)
+    case Some((prefix, cache)) if head.startsWith(prefix) =>
+      model.run(head, layer, Nil, withLogits = false, Some(cache), keep = true).map { (_, _, next) =>
+        cache.free(); cached = next.map(head -> _); next.get }
+    // A NEXT QUESTION OVER THE SAME TABLES: the prompt's beginning (the rule, the tables) is the last one's — its
+    // rows kept (`take`), only the rest run; a phone ran the whole prompt again each question (37 s on the iPhone)
+    case Some((prefix, cache)) if common(prefix, head) >= shared =>
+      val shorter = cache.take(common(prefix, head))
+      cache.free()
+      model.run(head, layer, Nil, withLogits = false, Some(shorter), keep = true).map { (_, _, next) =>
+        shorter.free(); cached = next.map(head -> _); next.get }
+    case _ =>
+      dropCurrent()
+      model.run(head, layer, Nil, withLogits = false, None, keep = true).map { (_, _, next) =>
+        cached = next.map(head -> _); next.get }
+  /**
+   * THE PROMPT WARMED (SPRINT P6): the prompt's beginning that does not depend on the question (the rule, the
+   * tables) run and kept before the question comes — while it is typed; the question's own tokens then run after it
+   */
+  def warm(ids: Array[Int]): Future[Unit] = ensure(ids).flatMap(_ => prefixed(ids)).map(_ => ())
   def handler: [X] => Read[X] => Future[X] = [X] => (op: Read[X]) => answer[X](op)
 
   /**

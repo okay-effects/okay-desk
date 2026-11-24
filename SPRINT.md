@@ -19,11 +19,8 @@ does is the point) — `specs/phone.md`; these go before item 7's later parts an
 - P4 **two readers agreeing on the phone** — the second adapter, agreement as the doubt; phone profile, then iPhone.
 - P5 **the size**, only if P3/P4 say 28 layers do not fit (a reload or > ~15 s a question): distilled on the choices
   or looped shared layers (guarantees.md §6.4).
-- P6 **the prompt warmed while the question is typed** (2026-11-24, the operator: "запиши всё в спринт и начинай") —
-  the prompt's beginning (the rule, the tables) does not depend on the question: run it when the tables are opened
-  (and changed), for each reader (`OnQwen.use`), so the first question costs what a next one does (now ~5 s on the
-  Mac, tens of seconds on the iPhone, nearly all of it this prompt). Check: the first of four questions in Chromium
-  before / after, the same frames; the phone profile's first question.
+- P6 **the prompt warmed while the question is typed** — built (phone.md §4.6: the phone's profile 9.3 → 6.6 s the
+  first question, the desktop unchanged); left: the operator's iPhone.
 
 **T. The theory's experiments** (specs/theory.md §10–§11; BACKLOG R) — after P, in this order, each against `Everyday`
 over three seeds with right / asked / wrong, the phone profile's seconds where speed is the point:
