@@ -62,6 +62,8 @@ object FrameTrain:
     val lora = Lora(loaded.asInstanceOf[Adaptable], rank = sys.env.get("FRAME_RANK").map(_.toInt).getOrElse(16),
       projs = Seq("q", "k", "v", "o", "gate", "up", "down"),
       lr = sys.env.get("FRAME_LR").map(_.toFloat).getOrElse(2e-4f))
+    // FRAME_INIT: the adapter's first values from a file (a looped student's: LoopInit), not random
+    sys.env.get("FRAME_INIT").foreach { p => lora.restoreParameters(p); println(s"the adapter started from $p") }
     // FRAME_SEED: the order the texts are seen in — the protocol's seeds
     val rnd = new scala.util.Random(sys.env.get("FRAME_SEED").map(_.toLong).getOrElse(5L))
     val t0 = System.nanoTime()

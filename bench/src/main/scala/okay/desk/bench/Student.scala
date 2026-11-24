@@ -197,8 +197,13 @@ object Loop:
     val src = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
     val layers = "\"num_hidden_layers\":\\s*(\\d+)".r.findFirstMatchIn(Files.readString(src.resolve("config.json")))
       .map(_.group(1).toInt).get
-    val map = if args(1) == "pairs" then Vector.tabulate(layers)(i => 2 * (i / 2))
-      else args(1).split(',').map(_.trim.toInt).toVector
+    // `middle:a:b`: the layers from a until b looped in pairs, the edges their own (Inkling loops the middle only)
+    val middle = "middle:(\\d+):(\\d+)".r
+    val map = args(1) match
+      case "pairs" => Vector.tabulate(layers)(i => 2 * (i / 2))
+      case middle(a, b) => Vector.tabulate(layers)(i =>
+        if i >= a.toInt && i < b.toInt then a.toInt + 2 * ((i - a.toInt) / 2) else i)
+      case list => list.split(',').map(_.trim.toInt).toVector
     val unique = map.distinct.sorted
     val name = s"$repo-loop${unique.size}x${map.size}"
     val dst = Models.hubCache.resolve("models--" + name.replace("/", "--")).resolve("snapshots").resolve("main")
@@ -225,4 +230,81 @@ object Loop:
       Files.writeString(dst.resolve("layers.txt"), s"$repo: applications ${map.mkString(",")}\n")
       println(f"$name: ${map.size} applications over ${unique.size} layers' weights (${unique.mkString(",")}), " +
         f"${Files.size(dst.resolve("model.safetensors")) / 1048576.0}%.0f MB")
+    finally s.close()
+
+/**
+ * A LOOPED STUDENT'S ADAPTER STARTED WHERE THE MODEL WAS (Relaxed Recursive Transformers, Bae et al. 2024): an
+ * application that uses another layer's weights gets, as its LoRA's first values, the best rank-r approximation of
+ * the difference between its own layer's weights and those it now uses — so the looped model starts near the model
+ * it was cut from, not broken (loop14x28 began at loss 5.18 against 0.57). The approximation: a random range of the
+ * difference, two power iterations, made orthonormal (A = Q), B = Qᵀ·ΔWᵀ over the LoRA's scale. The adapter is
+ * written as `Lora.save` writes one; `FRAME_INIT` starts `FrameTrain` from it.
+ * `sbt "bench/runMain okay.desk.bench.LoopInit mlx-community/Qwen3-0.6B-4bit <looped repo> 32 <out.safetensors>"`
+ */
+object LoopInit:
+  private val projs = Vector("q" -> "self_attn.q_proj", "k" -> "self_attn.k_proj", "v" -> "self_attn.v_proj",
+    "o" -> "self_attn.o_proj", "gate" -> "mlp.gate_proj", "up" -> "mlp.up_proj", "down" -> "mlp.down_proj")
+
+  /** the columns of `y` ([n, k], row-major) made orthonormal, in place (modified Gram–Schmidt) */
+  private def orthonormal(y: Array[Float], n: Int, k: Int): Unit =
+    for j <- 0 until k do
+      for p <- 0 until j do
+        var dot = 0.0
+        var i = 0
+        while i < n do { dot += y(i * k + j).toDouble * y(i * k + p); i += 1 }
+        i = 0
+        while i < n do { y(i * k + j) = (y(i * k + j) - dot * y(i * k + p)).toFloat; i += 1 }
+      var norm = 0.0
+      var i = 0
+      while i < n do { norm += y(i * k + j).toDouble * y(i * k + j); i += 1 }
+      val inv = if norm > 0 then 1.0 / math.sqrt(norm) else 0.0
+      i = 0
+      while i < n do { y(i * k + j) = (y(i * k + j) * inv).toFloat; i += 1 }
+
+  def main(args: Array[String]): Unit =
+    val (srcRepo, loopRepo, rank, out) = (args(0), args(1), args(2).toInt, args(3))
+    val alpha = 16f // Lora's default, FrameTrain's
+    val scale = alpha / rank
+    val src = Models.snapshot(srcRepo).getOrElse(sys.error(s"$srcRepo not in the cache"))
+    val loop = Models.snapshot(loopRepo).getOrElse(sys.error(s"$loopRepo not in the cache"))
+    // the source layer each application uses (Loop's layers.txt: "<repo>: applications 0,0,2,…")
+    val map = Files.readString(loop.resolve("layers.txt")).split("applications ")(1).trim.split(',').map(_.toInt)
+    val quant = Json.fromText(Files.readString(src.resolve("config.json")))("quantization")
+    val (groupSize, bits) = (quant("group_size").int, quant("bits").int)
+    Mlx.init()
+    val s = new Scope
+    given Scope = s
+    val rnd = new scala.util.Random(7)
+    try
+      val w = loadSafetensors(src.resolve("model.safetensors").toString)
+      def dense(layer: Int, proj: String): Arr =
+        val p = s"model.layers.$layer.$proj"
+        astype(dequantize(w(s"$p.weight"), w(s"$p.scales"), w(s"$p.biases"), groupSize, bits), Dtype.Float32)
+      val tensors = scala.collection.mutable.ArrayBuffer.empty[(String, Arr)]
+      var approximated = 0
+      for i <- map.indices; (short, proj) <- projs do
+        val own = dense(i, proj)
+        val (outDim, inDim) = (own.dim(0), own.dim(1))
+        if map(i) == i then
+          // its own weights: the usual start (A random, B zero)
+          val std = 1f / math.sqrt(inDim).toFloat
+          tensors += s"$i.$short.a" -> floats(Array.fill(inDim * rank)(rnd.nextGaussian().toFloat * std), inDim, rank)
+          tensors += s"$i.$short.b" -> zeros(Seq(rank, outDim), Dtype.Float32)
+        else
+          val dwT = transpose(subtract(own, dense(map(i), proj)), 1, 0) // [in, out]: x·dwT is the missing part
+          val omega = floats(Array.fill(outDim * rank)(rnd.nextGaussian().toFloat), outDim, rank)
+          var y = matmul(dwT, omega).toFloats // [in, rank]
+          for _ <- 0 until 2 do
+            orthonormal(y, inDim, rank)
+            val z = matmul(transpose(dwT, 1, 0), floats(y, inDim, rank)) // [out, rank]
+            y = matmul(dwT, z).toFloats
+          orthonormal(y, inDim, rank)
+          val a = floats(y, inDim, rank)
+          val b = divide(matmul(transpose(a, 1, 0), dwT), scalar(scale)) // [rank, out]
+          tensors += s"$i.$short.a" -> a.eval()
+          tensors += s"$i.$short.b" -> b.eval()
+          approximated += 1
+      tensors += "lora.scale" -> scalar(scale)
+      saveSafetensors(out, tensors.toSeq, Map("kind" -> "lora", "rank" -> rank.toString, "alpha" -> alpha.toString))
+      println(s"$out: $approximated projections started at the rank-$rank approximation of their layer's difference")
     finally s.close()
