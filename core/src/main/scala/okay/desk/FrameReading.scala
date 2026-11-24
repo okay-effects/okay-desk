@@ -44,6 +44,11 @@ object FrameReading:
    * LINKS AS FACTS (§6.3): a line naming a value the question names (`Links`), not yet said, weighs `link` more; a
    * line naming a text value the question does not name — a guess («customer = dee» for «из Львова») — `guess` less
    */
+  /** THE PERSON'S LESSONS (SPRINT K5, `FrameLessons`): the lines a person chose before for this question over these
+   * tables — each, not yet said, weighs `lesson` more. None by default (a measure); a page sets its own */
+  var remembered: (Map[String, Table], String) => Set[String] = (_, _) => Set.empty
+  var lesson: Double = 4.0
+
   private def weighed(scores: Vector[Double], options: Vector[String], so: Reading, tables: Map[String, Table],
       question: String, link: Double, guess: Double): Vector[Double] =
     val table = so.lines.headOption.map(_.stripPrefix("table: ").trim).flatMap(tables.get)
@@ -51,10 +56,11 @@ object FrameReading:
       else table.fold(Set.empty)(t => Links.of(t, question).toSet)
     val said = so.lines.flatMap(Links.named).toSet
     def text(v: String) = !v.matches("-?[\\d.]+") && !v.matches("\\d{4}-\\d{2}.*") && !v.startsWith("column ")
-    options.zip(scores).map((o, s) => Links.named(o) match
+    val taught = remembered(tables, question)
+    options.zip(scores).map((o, s) => (Links.named(o) match
       case Some(n) if linked(n) && !said(n) => s + link
       case Some(n @ (_, v)) if !linked(n) && text(v) => s - guess
-      case _ => s)
+      case _ => s) + (if taught(o) && !so.lines.contains(o) then lesson else 0.0))
 
   /** the options but the conditions on a value the question does not name: a text value not linked (`weighed`'s
    * guesses), a number it does not write (`pruneNumbers`); a line left with none keeps all */

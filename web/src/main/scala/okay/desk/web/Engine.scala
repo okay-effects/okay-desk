@@ -998,6 +998,11 @@ object Engine:
     case "order" => if ru then "В каком порядке?" else "In what order?"
     case "limit" => if ru then "Сколько строк?" else "How many rows?"
     case _ => if ru then "Что дальше?" else "What next?"
+  // THE PERSON'S LESSONS (SPRINT K5): kept in the browser's storage, the frame reader weighs them (FrameReading.remembered)
+  private val frameLessonsKey = "okay-desk:frame-lessons"
+  private var frameLessons: FrameLessons =
+    Option(dom.window.localStorage.getItem(frameLessonsKey)).fold(FrameLessons())(FrameLessons.parse)
+  FrameReading.remembered = (t, q) => frameLessons.lines(t, q)
   private def askFrames(tables: Map[String, Table], question: String, choice: Option[String]): Unit =
     since = js.Date.now()
     said = Vector("the frame reader builds the formal model of the question…")
@@ -1032,6 +1037,10 @@ object Engine:
     val resumed = (paused, choice) match
       case (Some((q, resume)), Some(_)) if q == question => Some(resume)
       case _ => None
+    // THE PERSON'S CHOICE KEPT AS A LESSON (SPRINT K5): the line chosen where the reading asked weighs it next time
+    for line <- choice if resumed.nonEmpty && (line.contains(": ") || line == Frame.end) do
+      frameLessons = frameLessons.add(tables, question, line)
+      try dom.window.localStorage.setItem(frameLessonsKey, frameLessons.json) catch case _: Throwable => ()
     paused = None; pause = None
     val outcome: Future[Out] = warming.recover { case _ => () }.flatMap(_ => resumed match
       case Some(resume) => by(0)(resume(choice))

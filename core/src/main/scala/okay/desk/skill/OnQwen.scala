@@ -126,8 +126,12 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     case Some((prefix, cache)) if common(prefix, head) >= shared =>
       val shorter = cache.take(common(prefix, head))
       cache.free()
-      model.run(head, layer, Nil, withLogits = false, Some(shorter), keep = true).map { (_, _, next) =>
-        shorter.free(); cached = next.map(head -> _); next.get }
+      // (the same question again: its whole prompt is the kept one's beginning — the rows taken ARE its cache, nothing
+      // to run; `run` would hand the same cache back, and freeing it then freed the cache in use)
+      if shorter.n == head.length then { cached = Some(head -> shorter); Future.successful(shorter) }
+      else model.run(head, layer, Nil, withLogits = false, Some(shorter), keep = true).map { (_, _, next) =>
+        if !next.exists(_ eq shorter) then shorter.free()
+        cached = next.map(head -> _); next.get }
     case _ =>
       dropCurrent()
       model.run(head, layer, Nil, withLogits = false, None, keep = true).map { (_, _, next) =>
