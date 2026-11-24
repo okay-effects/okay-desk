@@ -26,14 +26,38 @@ object FrameSay:
     "изменение:", "не вычисляется по данным", "таблица", "часть, где", "от", "к", "где", "по каждому",
     Map("month" -> "месяцу", "week" -> "неделе", "year" -> "году"), "оставив ответы", "упорядочив по", "ответу",
     "по убыванию", "по возрастанию", "первые", "и")
-  private def words(lang: String) = if lang == "ru" then ru else en
+  private val uk = Words("у місяці", "стовпець", "рядки", "кількість рядків",
+    Map("sum" -> "сума", "avg" -> "середнє", "min" -> "найменше", "max" -> "найбільше"), "частка:",
+    "зміна:", "не обчислюється з даних", "таблиця", "частина, де", "від", "до", "де", "для кожного",
+    Map("month" -> "місяця", "week" -> "тижня", "year" -> "року"), "залишивши відповіді", "упорядкувавши за",
+    "відповіддю", "за спаданням", "за зростанням", "перші", "і")
+  private val pl = Words("w miesiącu", "kolumna", "wiersze", "liczba wierszy",
+    Map("sum" -> "suma", "avg" -> "średnia", "min" -> "najmniejsza", "max" -> "największa"), "udział:",
+    "zmiana:", "nie da się obliczyć z danych", "tabela", "część, gdzie", "od", "do", "gdzie", "dla każdego",
+    Map("month" -> "miesiąca", "week" -> "tygodnia", "year" -> "roku"), "zachowując odpowiedzi",
+    "posortowane według", "odpowiedzi", "malejąco", "rosnąco", "pierwsze", "i")
+  private def words(lang: String) = lang match
+    case "ru" => ru
+    case "uk" => uk
+    case "pl" => pl
+    case _ => en
 
-  /** THE CANONICAL READER'S LANGUAGE (the improvements, step 1): the question's — Russian words for a Cyrillic question,
-   * English else (Ukrainian and Polish have no words of their own here yet) */
-  def langOf(question: String): String = if question.exists(c => c >= '\u0400' && c <= '\u04ff') then "ru" else "en"
+  /** THE CANONICAL READER'S LANGUAGE: the question's — Ukrainian by its own letters (і ї є ґ), Russian for other
+   * Cyrillic, Polish by its letters or its common words, English else */
+  def langOf(question: String): String =
+    val q = question.toLowerCase
+    if q.exists("іїєґ".contains(_)) ||
+      "(?U)\\b(яка|який|яке|кожн\\w*|показати|виведи|загальн\\w*|оренд\\w*)\\b".r.findFirstIn(q).nonEmpty then "uk"
+    else if q.exists(c => c >= '\u0400' && c <= '\u04ff') then "ru"
+    else if q.exists("ąćęłńśźż".contains(_)) ||
+      "(?U)\\b(ile|jaki|jaka|jakie|który|która|które|pokaż|pokaz|policz|wyświetl|wszystkie|według|gdzie|czy|dla)\\b"
+        .r.findFirstIn(q).nonEmpty then "pl"
+    else "en"
   /** A LINE AS THE CANONICAL READER WRITES IT: its clause, the end as "that is all" */
   def line(l: String, lang: String): String =
-    if l == Frame.end then (if lang == "ru" then "это всё" else "that is all") else say(Vector(l), lang)
+    if l == Frame.end then
+      lang match { case "ru" => "это всё"; case "uk" => "це все"; case "pl" => "to wszystko"; case _ => "that is all" }
+    else say(Vector(l), lang)
 
   private def condSaid(w: Words, c: String): String =
     val p = c.split(" ", 3).toVector

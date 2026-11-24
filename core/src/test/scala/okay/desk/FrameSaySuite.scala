@@ -18,7 +18,7 @@ class FrameSaySuite extends munit.FunSuite:
     val tableSets = Everyday.tables.values.toVector.map(t => Map(t.name -> t)) ++
       (1 to 40).map(s => { val t = Domains.any(scala.util.Random(s)); Map(t.name -> t) })
     val problems = for
-      tables <- tableSets; _ <- 1 to 60; lang <- Vector("en", "ru")
+      tables <- tableSets; _ <- 1 to 60; lang <- Vector("en", "ru", "uk", "pl")
       frame = walk(tables, rnd)
       said = FrameSay.say(frame, lang)
       back = FrameSay.parse(said, lang)
