@@ -9,8 +9,8 @@ the design before it: `specs/loop.md`, `specs/core-joint.md`, `specs/everyday.md
 theory.md E1, never done; nothing else in okay-desk before it). One small model judging whether a plain restatement
 means what the person asked; the program walks the formal space, engines compute, the restatement is shown:
 
-- K1 **the canonical reader** — options weighed as their plain clauses (`FRAME_CANONICAL`, 14fe3c3); trained as l2,
-  measured against l2 on `Everyday` and the 1004. Running 2026-11-24 11:48; result the same day.
+- K1 **the canonical reader** — measured 2026-11-24 (frames.md §5.15): NOT better on the table domain (the 1004:
+  wrong 91 against l2's 49); the clauses stay for showing and for the cross-domain test, not as the tables' options.
 - K2 **the domains' restatements and data** (by 2026-11-26) — tables (done), logic grids (`Said`), units and the
   calendar (okay-inlay `Units`); the clauses' words in Ukrainian and Polish too.
 - K3 **the core model v1** (by 2026-11-27) — one adapter over the 0.6B (or the looped one, if not worse) trained on all

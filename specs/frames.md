@@ -329,3 +329,25 @@ Measured on `Everyday` (round 3, one reader, 54 questions each language): links 
 no outcome there and removes the guessed values from the wrong frames. The lexicon was written seeing `Everyday`, so
 the check that counts is the teacher's 1004 natural questions (never trained, other tables): link 2 en 243 → 246,
 ru 214 → 216, uk 176 → 177, pl 176 → 176, nothing lost. On the page «из Львова» now offers `city = Lviv` first.
+
+### 5.15 The canonical reader and the looped student, measured (2026-11-24; SPRINT K1, the improvements)
+
+Round l2's recipe and texts (tries, batch 8, lr 2e-4), seed 1, measured as l2 (link 2, guess 2, the dialogue bar 0.3,
+pruned): `Everyday` (108) and the teacher's 1004 never trained on. Right / asked / wrong:
+
+| reader | Everyday | the 1004 |
+|---|---|---|
+| l2: the 0.6B, options as the frame's lines (`where: city = Lviv`) | 91 / 4 / 13 | 927 / 28 / 49 |
+| K1 canonical: the same, options as plain clauses («где «city» = «Lviv»») | 89 / 6 / 13 | 869 / 44 / 91 |
+| loopB: 18 layers' weights over 28 applications, the adapter started at the SVD of each borrowed layer's difference, rank 32, two epochs | 59 / 7 / 42 | 851 / 40 / 113 |
+| (loopA: 14 over 28, no SVD start — stopped at a third of its first epoch for K1's run) | — | — |
+
+What it says. On the table domain alone the plain clauses are NOT better: the same on `Everyday`, twice the wrong on
+the 1004 (Russian 27 against 11, Ukrainian 34 against 16 — the run rendered Ukrainian with Russian words and Polish
+with English ones, langOf before 05594fc; Russian has its own words and is worse too). The formal lines are short and
+distinct; the clauses are longer and alike («where … =» in every condition), and the model separates them less well.
+The value expected of the clauses was the generality across domains — not measured here; on one domain they cost.
+The looped student starts nearer the model with the SVD start (loss 4.25 against 5.18 at step 200, 1.73 against 2.38
+at 1000; the full model 0.57 / 0.16) but ends far worse (Everyday 59 against 91): two epochs of frame training do not
+give back what the borrowed layers lost — it needs distillation toward the full model's states first, or a gentler
+loop.
