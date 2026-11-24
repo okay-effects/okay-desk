@@ -627,9 +627,19 @@ object Engine:
         o.answer(Read.Encode(text.substring(0, upTo))).flatMap(ids =>
           readers.foldLeft(Future.unit)((acc, reader) => acc.flatMap { _ =>
             framesAdapted.foreach { a => if a.current != reader then { a.current = reader; o.use(reader) } }
-            o.warm(ids) }).map(_ => println(s"frame reader: the prompt warmed, ${ids.length} tokens, " +
+            o.warm(ids).flatMap(_ => trial(o, ids, tables)) }).map(_ =>
+              println(s"frame reader: the prompt warmed, ${ids.length} tokens, " +
               s"${readers.size} reader(s), ${(js.Date.now() - t0).toInt} ms")))
     }.recover { case e => println(s"frame reader: warming failed: $e") }
+  /** A TRIAL WEIGHING (the improvements of 2026-11-24): the tables' own first lines weighed once after the warmed
+   * prompt and forgotten — the GPU's programs of a weighing are built now, not at the first question (on the desktop
+   * the first question took ~9.5 s against ~5 s for the next); the prompt's cache stays as it was */
+  private def trial(o: OnQwen, ids: Array[Int], tables: Map[String, Table]): Future[Unit] =
+    for
+      nl <- o.answer(Read.Encode("\n"))
+      options <- Future.sequence(tables.keys.toVector.sorted.map(n => o.answer(Read.Encode(s"table: $n"))))
+      _ <- o.answer(Read.Score(ids :+ nl.head, options.map(_ :+ nl.head)))
+    yield ()
   private def progress(): Future[Either[String, Either[String, String]]] =
     val p = scala.concurrent.Promise[Either[String, Either[String, String]]]()
     js.timers.setTimeout(250) {
