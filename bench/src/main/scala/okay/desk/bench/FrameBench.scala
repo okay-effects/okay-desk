@@ -57,6 +57,7 @@ object FrameBench:
     val t0 = System.nanoTime()
     var asks = 0
     var reverseLog = Vector.empty[(String, Boolean, String)]
+    var checksLog = Vector.empty[String]
     val records = asked.map { a =>
       // FRAME_DIALOGUE=<bar>: where in doubt the person is asked; here the person is played by the gold frame — the
       // option offered that is one of its lines, else none of them
@@ -76,9 +77,14 @@ object FrameBench:
       val got = if read.unresolved then None
         else Frame.query(read.lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption
       val forward = outcome(a.gold, got)
+      // FRAME_CHECKS=1: the result checked against the question (FrameChecks) — a misfit is a question to the person
+      val checked = sys.env.contains("FRAME_CHECKS") && !read.unresolved &&
+        FrameChecks.suspicious(a.text, read.lines, got).nonEmpty
+      if checked then checksLog :+= forward
       // FRAME_REVERSE=1 (T7): the reverse reading's second opinion — where it prefers another candidate, a person is
       // asked (the outcome "asked"); FRAME_REVERSE=switch: the reverse's frame taken instead
-      val o = sys.env.get("FRAME_REVERSE").filter(_ => !read.unresolved).fold(forward) { mode =>
+      val o = if checked then "asked"
+        else sys.env.get("FRAME_REVERSE").filter(_ => !read.unresolved).fold(forward) { mode =>
         def readOn(start: Vector[String]) = handle(FrameReading.read[RP](a.tables, a.text, None, start = start,
           link = sys.env.get("FRAME_LINK").fold(0.0)(_.toDouble),
           guess = sys.env.get("FRAME_GUESS").fold(0.0)(_.toDouble), prune = sys.env.contains("FRAME_PRUNE")),
@@ -97,6 +103,9 @@ object FrameBench:
     for b <- sys.env.get("FRAME_DIALOGUE") do
       val each = asks.toDouble / asked.size
       println(f"the dialogue at the bar $b: $asks questions asked of the person, $each%.2f a question")
+    if checksLog.nonEmpty then
+      println(s"the checks: ${checksLog.size} asked; there the reading was right ${checksLog.count(_ == "right")}, " +
+        s"wrong ${checksLog.count(_ == "wrong")}")
     if reverseLog.nonEmpty then
       val dis = reverseLog.filterNot(_._2)
       println(s"the reverse reading: disagreed on ${dis.size} of ${reverseLog.size}; there the forward was right " +
@@ -113,3 +122,35 @@ object FrameBench:
           "frame" -> Json.Str(lines.mkString(" | ")))).render }.asJava)
       println(s"records: $out")
     model.close()
+
+/**
+ * THE CHECKS ON A MEASURE ALREADY RUN (no model): a `FrameBench` log's frames read back, run, and checked against
+ * their questions (`FrameChecks`) — what the checks would have turned into questions to the person, right and wrong.
+ * `sbt "bench/runMain okay.desk.bench.ChecksOffline <bench log> [<teacher pairs>]"` (none: `Everyday`)
+ */
+object ChecksOffline:
+  def main(args: Array[String]): Unit =
+    val set = args.lift(1).fold(FrameBench.everyday)(f => FrameBench.taught(Path.of(f)))
+    val byKey = set.map(a => (a.key, a.lang) -> a).toMap
+    val line = """\[(\S+)\s+(\w\w)\] (right|wrong|asked)\s+\S+ (.*?) → (.*)$""".r
+    val logged = Files.readAllLines(Path.of(args(0))).asScala.toVector.flatMap(l => line.findFirstMatchIn(l))
+    val rows = logged.flatMap { m =>
+      byKey.get((m.group(1), m.group(2))).map { a =>
+        val said = m.group(5).split(" \\| ").toVector.filter(_.nonEmpty)
+        val runs = a.tables.keys.toVector.flatMap { t =>
+          val lines = (s"table: $t" +: said) :+ Frame.end
+          Frame.query(lines, a.tables).flatMap(Exact.run(a.tables, _)).toOption.map(lines -> _) }
+        val (lines, result) = runs.headOption.fold(((s"table: ?" +: said) :+ Frame.end, Option.empty[Table]))(
+          (l, r) => (l, Some(r)))
+        (m.group(3), FrameChecks.suspicious(a.text, lines, result), a.lang) } }
+    val flagged = rows.filter(_._2.nonEmpty)
+    println(s"${rows.size} read; the checks flag ${flagged.size}: right ${flagged.count(_._1 == "right")}, " +
+      s"wrong ${flagged.count(_._1 == "wrong")}, asked ${flagged.count(_._1 == "asked")}")
+    for (reason, rs) <- flagged.groupBy(_._2.get).toVector.sortBy(-_._2.size) do
+      println(s"  $reason: ${rs.size} (right ${rs.count(_._1 == "right")}, wrong ${rs.count(_._1 == "wrong")})")
+    val before = rows.groupBy(_._1).view.mapValues(_.size).toMap
+    val after = rows.map(r => if r._2.nonEmpty && r._1 != "asked" then "asked" else r._1).groupBy(identity)
+      .view.mapValues(_.size).toMap
+    println(s"before: right ${before.getOrElse("right", 0)}, asked ${before.getOrElse("asked", 0)}, " +
+      s"wrong ${before.getOrElse("wrong", 0)}; with the checks: right ${after.getOrElse("right", 0)}, " +
+      s"asked ${after.getOrElse("asked", 0)}, wrong ${after.getOrElse("wrong", 0)}")
