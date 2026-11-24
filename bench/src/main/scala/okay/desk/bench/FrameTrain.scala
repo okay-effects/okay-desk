@@ -110,9 +110,20 @@ object FrameTrain:
         ctx = (ctx :+ newline) ++ tok.encode(gold)
         c
       }
+    // CORE_TEXTS: OTHER DOMAINS' TEXTS (SPRINT K2/K3) — jsonl lines {"system", "user", "lines"}, the same prompt shape
+    // (`LineSpace.prompt`), in the mix with the frames' (one adapter, several domains: the core model)
+    val extra: Vector[(Array[Int], Int)] = sys.env.get("CORE_TEXTS").toVector.flatMap(_.split(",")).flatMap { f =>
+      Files.readAllLines(Path.of(f)).asScala.toVector.filter(_.trim.nonEmpty).map { l =>
+        val j = Json.fromText(l)
+        val prompt = chat.prompt(Vector(msg("system", j("system").string), msg("user", j("user").string)), Nil,
+          Map("enable_thinking" -> false))
+        (prompt ++ (tok.encode(answer(j("lines").list.map(_.string))) :+ end), prompt.length) } }
+    if extra.nonEmpty then println(s"${extra.size} texts of other domains in the mix")
+    val total = items.size + extra.size
     for e <- 1 to epochs do
       var sum = 0f; var k = 0; var shown = 0
-      val order = rnd.shuffle(items).map(i => (tokens(i), i))
+      val order = rnd.shuffle(items.map(i => (tokens(i), Option(i))) ++
+        extra.map(t => (t, Option.empty[FrameData.Item])))
       val batches = if batch <= 1 then order.map(Vector(_))
         else order.grouped(batch * 16).toVector.flatMap(w =>
           (if tree || listwise.nonEmpty then w.sortBy(_._1._1) else w.sortBy(_._1._1.length)).grouped(batch).toVector)
@@ -121,7 +132,7 @@ object FrameTrain:
         val b = b0.map(_._1)
         val loss = listwise match
           case Some(wide) =>
-            val cs = b0.flatMap((t, i) => choicesOf(i, t._1.take(t._2), wide))
+            val cs = b0.flatMap((t, i) => i.toVector.flatMap(choicesOf(_, t._1.take(t._2), wide)))
             if cs.isEmpty then 0f else lora.stepChoices(cs)
           case None =>
             if b.size == 1 then lora.step(b.head._1, b.head._2)
@@ -129,7 +140,7 @@ object FrameTrain:
         sum += loss * b.size; k += b.size
         if k / 200 > shown then
           shown = k / 200
-          println(f"epoch $e, $k/${items.size}: mean loss ${sum / k}%.4f (${(System.nanoTime() - t0) / 1e9}%.0f s)")
+          println(f"epoch $e, $k/$total: mean loss ${sum / k}%.4f (${(System.nanoTime() - t0) / 1e9}%.0f s)")
       println(f"epoch $e: mean loss ${sum / k}%.4f")
     val out = sys.env.getOrElse("FRAME_OUT", sys.props("user.home") + "/.cache/okay-desk/frame-lora.safetensors")
     lora.save(out)

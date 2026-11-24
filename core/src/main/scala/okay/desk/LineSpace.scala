@@ -82,14 +82,11 @@ object LineSpace:
       val parts = lines.filter(_ != Frame.end).map(l => l.takeWhile(_ != ':') -> l.dropWhile(_ != ':').drop(2)).toMap
       val kind = parts.get("kind")
       // the lines' names to the domain's slots
-      val slotted = kind match
-        case Some("convert") => parts.collect { case ("quantity", v) => "quantity" -> v; case ("from", v) =>
-          "from" -> v; case ("to", v) => "to" -> v; case ("kind", v) => "kind" -> v }
-        case Some("shift") => parts.collect { case ("unit", v) => "shift_unit" -> v; case ("direction", v) =>
-          "direction" -> v; case ("n", v) => "n" -> v; case ("date", v) => "date1" -> v; case ("kind", v) => "kind" -> v }
-        case Some("between") => parts.collect { case ("unit", v) => "between_unit" -> v; case ("from", v) =>
-          "date1" -> v; case ("to", v) => "date2" -> v; case ("kind", v) => "kind" -> v }
-        case _ => Map.empty[String, String]
+      val renames = Map("convert" -> Map("quantity" -> "quantity", "from" -> "from", "to" -> "to"),
+        "shift" -> Map("unit" -> "shift_unit", "direction" -> "direction", "n" -> "n", "date" -> "date1"),
+        "between" -> Map("unit" -> "between_unit", "from" -> "date1", "to" -> "date2"))
+      val slotted = kind.flatMap(renames.get).fold(Map.empty[String, String])(r =>
+        parts.collect { case (k, v) if r.contains(k) => r(k) -> v } ++ kind.map("kind" -> _))
       Units.assemble(Units, slotted).toRight("not a meaning of the units").flatMap(Units.run(_, Units))
     /** a point of the domain as its lines (the gold of a drawn question) */
     def lines(p: Units.Point): Vector[String] = (p match
