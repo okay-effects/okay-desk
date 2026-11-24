@@ -17,6 +17,13 @@ means what the person asked; the program walks the formal space, engines compute
   the domains at once; measured on a domain it never saw and on each seen one, one table; on the page if it holds.
   MEASURED 2026-11-24 (frames.md §5.16): units 300/300, the tables unchanged (the 1004 928/27/49 against l2's 927/28/49),
   clues never trained 61/300. Next: the clues' texts in the mix; values linked by multilingual embeddings.
+- K4 **self-play, every night** (the operator 2026-11-24: "как сделать модель самообучаемой?") — each domain's meanings
+  drawn from its grammar and said (templates; the teacher's rewrites where it is free), read by the current adapter,
+  the misreadings (the truth known: the meaning was drawn) added to the mix, the adapter trained again, accepted only
+  through the gate (not more silent wrong, more right on Everyday, the 1004, each domain's held-out set), the doubt bar
+  recalibrated, published. Never trained on the model's own unchecked answers.
+- K5 **the person's choices as lessons** — on the page a choice where the reading asked is kept on the device and
+  weighs the same line next time (as a link does); with consent, the kept choices join K4's mix.
 
 **P. The phone first** (the operator, 2026-11-15: the result SEEN on his iPhone; a small model doing what a large one
 does is the point) — `specs/phone.md`; these go before item 7's later parts and land the page the others use:
