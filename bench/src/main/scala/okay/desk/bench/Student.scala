@@ -181,3 +181,48 @@ object Merge:
     val dst = Models.hubCache.resolve("models--" + name.replace("/", "--")).resolve("snapshots").resolve("main")
     mlx.llm.LoraMerge.qwen3(src, adapter, dst, bits)
     println(f"$name: ${Files.size(dst.resolve("model.safetensors")) / 1048576.0}%.0f MB at $dst")
+
+/**
+ * A LOOPED STUDENT (SPRINT, the improvements of 2026-11-24; Inkling 2's middle layers run three times): the model's
+ * layers applied as `map` says — each application the weights of a layer of the source — so a layer's weights serve
+ * several applications (mlx-scala's `okay_layer_map`). Only the layers named are written, renumbered; the
+ * applications keep their own cache and their own LoRA, which training then fits (the relaxed recursive transformer's
+ * way: shared weights, a small adapter an application).
+ * `sbt "bench/runMain okay.desk.bench.Loop mlx-community/Qwen3-0.6B-4bit pairs"` — `pairs`: application i the
+ * weights of layer 2·(i/2) (half the layers' weights); or a list of 28 layer numbers.
+ */
+object Loop:
+  def main(args: Array[String]): Unit =
+    val repo = args(0)
+    val src = Models.snapshot(repo).getOrElse(sys.error(s"$repo not in the cache"))
+    val layers = "\"num_hidden_layers\":\\s*(\\d+)".r.findFirstMatchIn(Files.readString(src.resolve("config.json")))
+      .map(_.group(1).toInt).get
+    val map = if args(1) == "pairs" then Vector.tabulate(layers)(i => 2 * (i / 2))
+      else args(1).split(',').map(_.trim.toInt).toVector
+    val unique = map.distinct.sorted
+    val name = s"$repo-loop${unique.size}x${map.size}"
+    val dst = Models.hubCache.resolve("models--" + name.replace("/", "--")).resolve("snapshots").resolve("main")
+    Files.createDirectories(dst)
+    Mlx.init()
+    val s = new Scope
+    given Scope = s
+    try
+      val all = loadSafetensors(src.resolve("model.safetensors").toString)
+      val layerOf = "model\\.layers\\.(\\d+)\\.(.*)".r
+      val kept = all.toSeq.flatMap { (n, a) => n match
+        case layerOf(i, rest) => unique.indexOf(i.toInt) match
+          case -1 => None
+          case j => Some(s"model.layers.$j.$rest" -> a)
+        case _ => Some(n -> a)
+      }
+      saveSafetensors(dst.resolve("model.safetensors").toString, kept.sortBy(_._1))
+      for f <- Files.list(src).iterator.asScala if !f.toString.endsWith(".safetensors") do
+        Files.copy(f, dst.resolve(f.getFileName.toString), StandardCopyOption.REPLACE_EXISTING)
+      // the applications as many as before; each names its weights by the renumbered layer
+      val renumbered = map.map(unique.indexOf)
+      Files.writeString(dst.resolve("config.json"), Files.readString(src.resolve("config.json"))
+        .replaceFirst("\\{", s"{\n  \"okay_layer_map\": [${renumbered.mkString(", ")}],"))
+      Files.writeString(dst.resolve("layers.txt"), s"$repo: applications ${map.mkString(",")}\n")
+      println(f"$name: ${map.size} applications over ${unique.size} layers' weights (${unique.mkString(",")}), " +
+        f"${Files.size(dst.resolve("model.safetensors")) / 1048576.0}%.0f MB")
+    finally s.close()
