@@ -25,6 +25,10 @@ means what the person asked; the program walks the formal space, engines compute
   FIRST NIGHT 2026-11-25 (frames.md §5.17): round 3 accepted — the 1004 935/30/39 (l2 927/28/49), units 300, clues 298.
 - K5 **the person's choices as lessons** — on the page a choice where the reading asked is kept on the device and
   weighs the same line next time (as a link does); with consent, the kept choices join K4's mix.
+- K6 **books compiled into extensions** (specs/books.md; the operator 2026-11-25) — the pilot "pay": UoP against B2B,
+  take-home pay in Poland 2026, from the PIT and ryczałt acts and ZUS's 2026 tables (public domain); the theory with
+  its quotes, the book's worked examples as the law, then the teacher's extraction measured against it, the domain
+  into the core by self-play.
 
 **P. The phone first** (the operator, 2026-11-15: the result SEEN on his iPhone; a small model doing what a large one
 does is the point) — `specs/phone.md`; these go before item 7's later parts and land the page the others use:
