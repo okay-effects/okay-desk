@@ -6,9 +6,11 @@ import scala.math.BigDecimal.RoundingMode
 final case class Stated(value: BigDecimal, source: String, quote: String)
 
 /**
- * TAKE-HOME PAY IN POLAND, 2026 — THE FIRST BOOK COMPILED (specs/books.md §2; SPRINT K6): the theory is data, each value
+ * TAKE-HOME PAY IN POLAND, 2026 — THE FIRST BOOK COMPILED (specs/books.md §2; SPRINT K6): the theory is data, each
+ * value
  * with its quote from the statute or ZUS's table it comes from (the sources: `pit` the PIT act Dz.U. 2026 poz. 592,
- * `lump` the ryczałt act Dz.U. 2025 poz. 843, `sus` the social insurance act Dz.U. 2026 poz. 1474, `health` the health
+ * `lump` the ryczałt act Dz.U. 2025 poz. 843, `mp` the Minister's notice M.P. 2025 poz. 1274 (the 2026 limit),
+ * `sus` the social insurance act Dz.U. 2026 poz. 1474, `health` the health
  * care act Dz.U. 2025 poz. 1461, `zus` ZUS's "Wysokość składek … w 2026 r."). The engine below is exact arithmetic in
  * grosze over it; the book's worked examples (ZUS's tables, the PIT scale) are its laws (`PaySuite`).
  */
@@ -32,7 +34,8 @@ object PayTheory:
     "zus.labour.fund" -> s("0.0245", "zus", "2,45% [ 3 ]"),
     "zus.full.base" -> s("5652", "zus", "5 652 zł [ 1 ]"),
     "zus.preferential.base" -> s("1441.80", "zus", "1441,80 zł [ 4 ]"),
-    "zus.cap.year" -> s("282600", "zus", "Roczna podstawa wymiaru na ubezpieczenia emerytalne i rentowe w 2026 roku może " +
+    "zus.cap.year" -> s("282600", "zus",
+      "Roczna podstawa wymiaru na ubezpieczenia emerytalne i rentowe w 2026 roku może " +
       "wynosić maksymalnie 282 600 zł"),
     "health.rate" -> s("0.09", "health", "Składka na ubezpieczenie zdrowotne wynosi 9 % podstawy wymiaru składki"),
     "health.lump.1" -> s("498.35", "zus", "Składka na ubezpieczenie zdrowotne wynosi 498,35 zł"),
@@ -41,7 +44,14 @@ object PayTheory:
     "health.lump.limit1" -> s("60000", "zus", "nie przekroczyły kwoty 60 000 zł"),
     "health.lump.limit2" -> s("300000", "zus", "przekroczyły kwotę 60 000 zł i nie przekroczyły kwoty 300 000 zł"),
     "lump.it" -> s("0.12", "lump", "2b) 12 % przychodów ze świadczenia usług"),
-    "lump.health.deducted" -> s("0.5", "lump", "mogą być pomniejszone o 50 % składek na ubezpieczenie zdrowotne"))
+    "lump.health.deducted" -> s("0.5", "lump", "mogą być pomniejszone o 50 % składek na ubezpieczenie zdrowotne"),
+    "pit.linear" -> s("0.19", "pit", "wynosi 19 % podstawy obliczenia podatku"),
+    "health.linear.rate" -> s("0.049", "health", "4,9 % podstawy wymiaru składki"),
+    "health.min" -> s("432.54", "zus", "432,54 zł (za miesiące od lutego 2026 r. do stycznia 2027 r."),
+    "health.linear.limit" -> s("14100", "mp", "w roku 2026 nie może przekroczyć 14 100 zł"),
+    "health.base.income" -> s("1", "health",
+      "pomniejszony o kwotę opłaconych w tym roku składek na ubezpieczenia emerytalne, " +
+      "rentowe"))
 
 /** the engine: a year of an employment contract (UoP) or of a JDG on ryczałt, month by month, in grosze */
 object Pay:
@@ -97,3 +107,64 @@ object Pay:
     Year((1 to 12).toVector.map { _ =>
       val taxed = zloty(revenue - social - grosz(health * v("lump.health.deducted"))).max(0)
       Month(revenue, social, health, zloty(taxed * rate), fund) })
+
+/** a JDG's choices: the form of the tax and the ZUS it pays */
+enum Form:
+  case Scale, Linear
+  case Lump(rate: BigDecimal)
+enum Zus:
+  /** the first six months: no social contributions (the health one paid) */
+  case Start
+  case Preferential, Full
+
+/**
+ * A YEAR OF A JDG (SPRINT K6, the tax helper's first step): a steady month — `revenue`, `costs` — twelve times; the
+ * social contributions by `zus`; on the scale and the linear tax the labour fund a cost, the income less the social
+ * contributions taxed for the year (the scale's 12% / 32% less the reducing amount; 19% less the health contribution
+ * up to the year's limit), the health contribution a share of that income (9%, 4.9%) and no less than the minimum;
+ * on ryczałt, `Pay.lump`. Each part said, the year's take-home and its monthly average
+ */
+object Jdg:
+  import Pay.{Month, Year, Theory}
+  private def grosz(x: BigDecimal) = x.setScale(2, scala.math.BigDecimal.RoundingMode.HALF_UP)
+  private def zloty(x: BigDecimal) = x.setScale(0, scala.math.BigDecimal.RoundingMode.HALF_UP)
+
+  def year(t: Theory, revenue: BigDecimal, costs: BigDecimal, form: Form, zus: Zus, sickness: Boolean): Year =
+    def v(k: String) = t(k).value
+    val (social, fund) = zus match
+      case Zus.Start => (BigDecimal(0), BigDecimal(0))
+      case Zus.Preferential => Pay.jdgSocial(t, v("zus.preferential.base"), sickness, labourFund = false)
+      case Zus.Full => Pay.jdgSocial(t, v("zus.full.base"), sickness, labourFund = true)
+    form match
+      case Form.Lump(rate) =>
+        // (the costs not deducted on ryczałt, but spent all the same: out of the take-home)
+        val y = Pay.lump(t, revenue, rate, zus == Zus.Preferential, sickness)
+        Year((if zus == Zus.Start then y.months.map(m =>
+          m.copy(social = 0, other = 0, tax = zloty((zloty(revenue - grosz(m.health * v("lump.health.deducted")))
+            .max(0)) * rate))) else y.months).map(m => m.copy(other = m.other + costs)))
+      case _ =>
+        // the income: the revenue less the costs and the labour fund (a cost on these forms)
+        val income = revenue - costs - fund
+        val healthRate = if form == Form.Scale then v("health.rate") else v("health.linear.rate")
+        val health = grosz((income - social).max(0) * healthRate).max(v("health.min"))
+        val taxable = ((income - social) * 12).max(0)
+        val yearTax = form match
+          case Form.Scale =>
+            val low = taxable.min(v("pit.threshold"))
+            zloty(low * v("pit.rate1") + (taxable - low) * v("pit.rate2") - v("pit.reducing")).max(0)
+          case _ =>
+            val deducted = (health * 12).min(v("health.linear.limit"))
+            zloty((taxable - deducted).max(0) * v("pit.linear"))
+        // the year's tax spread over its months (the advances add up to it)
+        val monthly = Vector.fill(12)(grosz(yearTax / 12))
+        Year(monthly.zipWithIndex.map((tax, i) =>
+          Month(revenue, social, health, if i == 11 then yearTax - monthly.take(11).sum else tax, fund + costs)))
+
+  /** every form and ZUS a JDG may take, against one another and against UoP at `gross`: the yearly take-home */
+  def compare(t: Theory, revenue: BigDecimal, costs: BigDecimal, lumpRate: BigDecimal, sickness: Boolean,
+      gross: Option[BigDecimal]): Vector[(String, BigDecimal)] =
+    val forms = Vector("skala" -> Form.Scale, "liniowy" -> Form.Linear, s"ryczałt ${lumpRate * 100}%" ->
+      Form.Lump(lumpRate))
+    val zuses = Vector("pełny ZUS" -> Zus.Full, "preferencyjny" -> Zus.Preferential)
+    (for (fn, f) <- forms; (zn, z) <- zuses yield s"B2B, $fn, $zn" -> year(t, revenue, costs, f, z, sickness).net) ++
+      gross.map(g => s"UoP ${g} brutto" -> Pay.employment(t, g).net)
