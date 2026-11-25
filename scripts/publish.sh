@@ -46,7 +46,10 @@ if [ -f "$STATEMENT_ADAPTER" ]; then v=$(echo "$v$(md5 -q "$STATEMENT_ADAPTER")"
 # with it, the reader over the plain base and the learnt gate (specs/core-joint.md §9)
 STATEMENT_PLAIN=${STATEMENT_PLAIN:-$HOME/.cache/okay-desk/statement-plain.reader}
 STATEMENT_GATE=${STATEMENT_GATE:-$HOME/.cache/okay-desk/statement.gate}
-for f in "$STATEMENT_PLAIN" "$STATEMENT_GATE"; do
+# the frame readers (below): a new adapter is a new version, so a device that kept the old one fetches it
+FRAMES_ADAPTER=${FRAMES_ADAPTER:-$HOME/.cache/okay-desk/frame-lora-sp3.adapter.safetensors}
+FRAMES_ADAPTER2=${FRAMES_ADAPTER2:-$HOME/.cache/okay-desk/frame-lora-t8-s1.adapter.safetensors}
+for f in "$STATEMENT_PLAIN" "$STATEMENT_GATE" "$FRAMES_ADAPTER" "$FRAMES_ADAPTER2"; do
   if [ -f "$f" ]; then v=$(echo "$v$(md5 -q "$f")" | md5 -q | cut -c1-12); fi
 done
 sed -i "" "s#src=\"main.js\"#src=\"main.js?v=$v\"#" "$out/index.html"
@@ -72,12 +75,12 @@ if [ -f "$STATEMENT_ADAPTER" ]; then cp "$STATEMENT_ADAPTER" "$out/model-small/s
 if [ -f "$STATEMENT_PLAIN" ]; then cp "$STATEMENT_PLAIN" "$out/model-small/statement-plain.reader"; fi
 if [ -f "$STATEMENT_GATE" ]; then cp "$STATEMENT_GATE" "$out/model-small/statement.gate"; fi
 # The frame reader (specs/frames.md): its adapter beside the released 0.6B's weights (model-full) — a small file
-FRAMES_ADAPTER=${FRAMES_ADAPTER:-$HOME/.cache/okay-desk/frame-lora-t8-s1.adapter.safetensors}
+# (2026-11-25: self-play round 3 first, the tries-trained seed 1 second — the pair with the fewest silent wrong on
+# the 1004, 27 against 36: frames.md §5.17)
 if [ -f "$FRAMES_ADAPTER" ]; then
   mkdir -p "$out/model-frames"
   cp "$FRAMES_ADAPTER" "$out/model-frames/frame.adapter.safetensors"
   # the second reader (agreement as the doubt, P4): another seed's adapter
-  FRAMES_ADAPTER2=${FRAMES_ADAPTER2:-$HOME/.cache/okay-desk/frame-lora-t8-s3.adapter.safetensors}
   if [ -f "$FRAMES_ADAPTER2" ]; then cp "$FRAMES_ADAPTER2" "$out/model-frames/frame2.adapter.safetensors"; fi
 fi
 # The frame reader for a phone: the same adapter merged into the weights (FrameMerge) — one reader, no adapter

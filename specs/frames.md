@@ -399,3 +399,14 @@ first (v2: wrong 58), and self-play gave it back and more — from the misreadin
 meanings were drawn. The gate did its work: rounds 1 and 2 were better somewhere and worse elsewhere (round 2 the
 fewest wrong on Everyday, 9, and the clues fell to 259) and were not taken. One seed a round: the rounds differ by
 more than the self-play's signal in places (round 2's clues) — the next nights run each candidate on two seeds.
+
+**The page's pair, chosen by agreement** (2026-11-25; `AgreeOffline` over each reader's records, no dialogue — a
+parting is a question): t8-s1 + t8-s3 (the page's until then) Everyday 80 / 20 / 8, the 1004 837 / 131 / 36;
+sp3 + t8-s3 80 / 16 / 12, 866 / 110 / 28; **sp3 + t8-s1 77 / 22 / 9, 841 / 136 / 27** — on the page since, the fewest
+silent wrong on the 1004 (a quarter fewer). The second seed of round 3's mix (sp3b) read the 1004 with 64 wrong:
+seeds of one mix differ much; not taken.
+
+**Values linked by meaning, measured — negative** (`FRAME_MEANING`, sp3): Everyday 90 / 3 / 15 → 76 / 2 / 30, the 1004
+935 / 30 / 39 → 853 / 28 / 123. The probe's 33 translations linked clean and none of its 12 ordinary words; real
+questions have many more words, and some meet a value of some column above the bar — false links weighed as facts.
+Off; the bar wants choosing on real questions' words, not on a probe of 45.
