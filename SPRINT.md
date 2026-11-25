@@ -22,6 +22,7 @@ means what the person asked; the program walks the formal space, engines compute
   the misreadings (the truth known: the meaning was drawn) added to the mix, the adapter trained again, accepted only
   through the gate (not more silent wrong, more right on Everyday, the 1004, each domain's held-out set), the doubt bar
   recalibrated, published. Never trained on the model's own unchecked answers.
+  FIRST NIGHT 2026-11-25 (frames.md §5.17): round 3 accepted — the 1004 935/30/39 (l2 927/28/49), units 300, clues 298.
 - K5 **the person's choices as lessons** — on the page a choice where the reading asked is kept on the device and
   weighs the same line next time (as a link does); with consent, the kept choices join K4's mix.
 

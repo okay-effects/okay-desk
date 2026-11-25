@@ -376,3 +376,26 @@ asks 324 times (right 927 → 665): its doubt is mostly false (where it disagree
 instead of a condition; ~12 order and limit (the longest as min, a limit not asked for or missed); ~8 a "growth" with
 no second period in the data; the rest invented conditions and Polish / Ukrainian forms. The largest class asks for
 the values linked across languages by meaning, not by a hand lexicon: next, multilingual embeddings (`Links`).
+
+### 5.17 The core model v2 and the first night of self-play (2026-11-24/25; SPRINT K3, K4)
+
+**Core v2**: v1 with 3000 drawn clues in the mix (tables + units + clues, one adapter). **Self-play** (`selfplay.sh`,
+three rounds from core v2): each round the teacher's new tables questions (200 seeds, four languages), 1000 drawn
+units, 1500 drawn clues, read by the current adapter; the misread joined the mix (every round's so far); a candidate
+trained (seed = the round); the `Gate`: no set more wrong, more right in all. Right / asked / wrong:
+
+| adapter | Everyday | the 1004 | units (300) | clues (300) |
+|---|---|---|---|---|
+| l2 (tables only) | 91 / 4 / 13 | 927 / 28 / 49 | 225 | 29 |
+| core v1 (tables + units) | 91 / 3 / 14 | 928 / 27 / 49 | 300 | 61 |
+| core v2 (+ clues) | 89 / 3 / 16 | 913 / 33 / 58 | 300 | 290 |
+| self-play round 1 (31 + 45 misread) | 84 / — / 20 | 922 / — / 52 | 300 | 297 — rejected |
+| self-play round 2 (+31 + 43) | 87 / — / 9 | 922 / — / 34 | 296 | 259 — rejected |
+| **self-play round 3 (+43 + 42), accepted** | **90 / 3 / 15** | **935 / 30 / 39** | **300** | **298** |
+
+One adapter now reads three domains: the units whole, the clues 298 of 300 (from 61 never trained), and the tables
+better than the tables-only reader on the 1004 (wrong 49 → 39, right 927 → 935). The third domain cost the tables
+first (v2: wrong 58), and self-play gave it back and more — from the misreadings alone, the truth known because the
+meanings were drawn. The gate did its work: rounds 1 and 2 were better somewhere and worse elsewhere (round 2 the
+fewest wrong on Everyday, 9, and the clues fell to 259) and were not taken. One seed a round: the rounds differ by
+more than the self-play's signal in places (round 2's clues) — the next nights run each candidate on two seeds.
