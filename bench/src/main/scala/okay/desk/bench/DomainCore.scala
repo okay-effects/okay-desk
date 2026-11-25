@@ -18,7 +18,10 @@ object DomainData:
   def main(args: Array[String]): Unit =
     val (domain, n, seed, out) = (args(0), args(1).toInt, args(2).toLong, Path.of(args(3)))
     val rnd = scala.util.Random(seed)
-    val rows = if domain == "clues" then clues(rnd, n) else units(rnd, n)
+    val rows = domain match
+      case "clues" => clues(rnd, n)
+      case "pay" => okay.desk.books.PayData.rows(rnd, n)
+      case _ => units(rnd, n)
     Files.write(out, rows.asJava)
     println(s"$out: ${rows.size} $domain texts")
 
@@ -111,6 +114,9 @@ object DomainBench:
             okay.desk.puzzle.Sort(s("name").string, s("values").list.map(_.string))))
           val r = Read.run(CoreReading.read[ClueWorld, Read](Clues, w, q), reading)
           (Clues.answer(w, r.lines), Clues.answer(w, gold))
+        case "pay" =>
+          val r = Read.run(CoreReading.read[Unit, Read](okay.desk.books.PayLines, (), q), reading)
+          (okay.desk.books.PayLines.answer((), r.lines), okay.desk.books.PayLines.answer((), gold))
         case other => sys.error(s"no space for $other")
       val o = if got.isRight && got == want then "right" else "wrong"
       // FRAME_FAILURES: the misread texts kept as they are (the truth known: the meaning was drawn) — self-play's mix

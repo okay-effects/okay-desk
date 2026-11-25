@@ -60,3 +60,19 @@ class PaySuite extends munit.FunSuite:
       Some(BigDecimal(20000)))
     rows.foreach((k, net) => println(f"  $k%-40s ${net / 12}%10.2f a month, $net%12.2f a year"))
     assert(rows.size == 7)
+
+  test("pay questions: a drawn meaning's lines reachable option by option, and run to an answer"):
+    val rnd = scala.util.Random(5)
+    for _ <- 1 to 400 do
+      val (lang, q, gold) = PayData.draw(rnd)
+      gold.indices.foreach { i =>
+        assert(PayLines.next((), q, gold.take(i)).contains(gold(i)),
+          s"[$lang] $q: ${gold(i)} not offered after ${gold.take(i)}; offered ${PayLines.next((), q, gold.take(i))}") }
+      assertEquals(PayLines.next((), q, gold), Vector.empty)
+      assert(PayLines.answer((), gold).isRight, s"$q: ${PayLines.answer((), gold)}")
+
+  test("a few drawn questions, shown"):
+    val rnd = scala.util.Random(11)
+    for _ <- 1 to 8 do
+      val (lang, q, gold) = PayData.draw(rnd)
+      println(s"  [$lang] $q\n      ${gold.mkString(" | ")}\n      ${PayLines.answer((), gold).merge}")
