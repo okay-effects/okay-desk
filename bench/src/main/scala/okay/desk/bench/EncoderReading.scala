@@ -121,6 +121,7 @@ final class EncoderReading(dir: Path, layer: Int) extends Reading:
     case Read.Logits(_) => sys.error("an encoder has no next token")
     case Read.Score(_, _) => sys.error("an encoder has no next token")
     case Read.Note(_) => ()
+    case Read.Meaning(_) => Array.empty[Float]
 
 /** A CHECK BY THE MODEL'S OWN PURPOSE: the pieces of a sentence, and the mean states of sentences that say the same
  * in two languages against one that says another thing — `bench/runMain okay.desk.bench.EncoderReading` */

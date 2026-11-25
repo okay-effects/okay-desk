@@ -50,10 +50,10 @@ object FrameReading:
   var lesson: Double = 4.0
 
   private def weighed(scores: Vector[Double], options: Vector[String], so: Reading, tables: Map[String, Table],
-      question: String, link: Double, guess: Double): Vector[Double] =
+      question: String, link: Double, guess: Double, meant: Set[(String, String)]): Vector[Double] =
     val table = so.lines.headOption.map(_.stripPrefix("table: ").trim).flatMap(tables.get)
     val linked = if link == 0.0 && guess == 0.0 then Set.empty[(String, String)]
-      else table.fold(Set.empty)(t => Links.of(t, question).toSet)
+      else table.fold(Set.empty)(t => Links.of(t, question).toSet) ++ meant
     val said = so.lines.flatMap(Links.named).toSet
     def text(v: String) = !v.matches("-?[\\d.]+") && !v.matches("\\d{4}-\\d{2}.*") && !v.startsWith("column ")
     val taught = remembered(tables, question)
@@ -107,6 +107,38 @@ object FrameReading:
   private def written(line: String, question: String): String =
     if canonical then FrameSay.line(line, FrameSay.langOf(question)) else line
 
+  /**
+   * VALUES LINKED BY MEANING (frames.md §6.3 grown, 2026-11-25): a word of the question (one or two) and a value of a
+   * table's text column put side by side by their meanings in the reader's own model (`Read.Meaning`); a column's
+   * best value is linked — a fact, as `Links` — when it is near (`meaningBar`) and clear of the column's second
+   * (`meaningGap`): «терраса» for terrace, «роман» for novel, with no lexicon. The values' meanings are kept (a data
+   * set's, once); a question's words each read. Off by default (`meaning`)
+   */
+  var meaning: Boolean = false
+  var meaningBar: Double = 1.10
+  var meaningGap: Double = 0.05
+  private val meanings = scala.collection.mutable.Map.empty[String, Array[Float]]
+  private def meaningOf[R[_]](text: String)(using In[Read, R]): Array[Float] ! R =
+    meanings.get(text).fold(Read.meaning[R](text).map { m => meanings(text) = m; m })(pure)
+  def meantLinks[R[_]](tables: Map[String, Table], question: String)(using In[Read, R]): Set[(String, String)] ! R =
+    val words = "(?U)[\\p{L}][\\p{L}\\-']*".r.findAllIn(question).toVector.filter(_.length >= 3)
+    val grams = (words ++ words.sliding(2).filter(_.size == 2).map(_.mkString(" "))).distinct
+    val columns = for
+      t <- tables.values.toVector
+      (c, i) <- t.columns.zipWithIndex
+      vs = t.rows.map(_(i)).filter(_.num.isEmpty).map(_.text)
+        .filter(v => v.nonEmpty && !v.matches("\\d{4}-.*")).distinct
+      if vs.size >= 2 && vs.size <= 40
+    yield (c, vs)
+    for
+      gs <- Read.each[String, Array[Float], R](grams)(g => meaningOf[R](g))
+      vms <- Read.each[String, Array[Float], R](columns.flatMap(_._2).distinct)(v => meaningOf[R](v))
+      byValue = columns.flatMap(_._2).distinct.zip(vms).toMap
+    yield columns.flatMap { (c, vs) =>
+      val ranked = vs.map(v => v -> gs.map(g => Read.dot(g, byValue(v))).maxOption.getOrElse(0.0)).sortBy(-_._2)
+      Option.when(ranked.head._2 >= meaningBar && ranked.head._2 - ranked(1)._2 >= meaningGap)(c -> ranked.head._1)
+    }.toSet
+
   /** `start`: lines decided already (a person's choice where two readers parted) — read on from them */
   def read[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt] = None, maxLines: Int = 16,
       start: Vector[String] = Vector.empty, link: Double = 0.0,
@@ -119,13 +151,16 @@ object FrameReading:
       end <- Read.encode[R]("<|im_end|>").map(_.last)
       decided <- Read.each[String, Array[Int], R](start)(l => Read.encode[R](written(l, question)))
       context = decided.foldLeft(prompt)((c, t) => (c :+ newline) ++ t)
-      read <- step(tables, question, doubt, maxLines, link, guess, prune, context, newline, end,
+      meant <- if meaning && link > 0 then meantLinks[R](tables, question)
+        else pure[Set[(String, String)], R](Set.empty)
+      read <- step(tables, question, doubt, maxLines, link, guess, prune, meant, context, newline, end,
         Reading(start, Vector.fill(start.size)(Double.PositiveInfinity),
           runnersUp = Vector.fill(start.size)(None)))
     yield read
 
   private def step[R[_]](tables: Map[String, Table], question: String, doubt: Option[Doubt], maxLines: Int,
-      link: Double, guess: Double, prune: Boolean, context: Array[Int], newline: Int, end: Int, so: Reading)(
+      link: Double, guess: Double, prune: Boolean, meant: Set[(String, String)], context: Array[Int], newline: Int,
+      end: Int, so: Reading)(
       using In[Read, R], In[Person, R]): Reading ! R =
     if so.lines.lastOption.contains(Frame.end) || so.unresolved || so.lines.size >= maxLines then pure(so)
     else
@@ -139,7 +174,7 @@ object FrameReading:
           // each option's tokens and the line's end after them (a newline; the turn's end after `end`)
           raw <- Read.score[R](context :+ newline,
             options.zip(tokens).map((o, t) => t :+ (if o == Frame.end then end else newline)))
-          scores = weighed(raw, options, so, tables, question, link, guess)
+          scores = weighed(raw, options, so, tables, question, link, guess, meant)
           ranked = options.zip(scores).sortBy(-_._2)
           margin = ranked.lift(1).fold(Double.PositiveInfinity)(second => ranked.head._2 - second._2)
           chosen <- doubt match
@@ -151,8 +186,8 @@ object FrameReading:
               unresolved = true))
             case (Some(line), asked) =>
               // the line said as soon as it is chosen (a page shows the reading going on)
-              Read.note[R](line).flatMap(_ => Read.encode[R](written(line, question))).flatMap(t => step(tables, question, doubt,
-                maxLines, link, guess, prune,
+              Read.note[R](line).flatMap(_ => Read.encode[R](written(line, question))).flatMap(t =>
+                step(tables, question, doubt, maxLines, link, guess, prune, meant,
                 (context :+ newline) ++ t, newline, end,
                 Reading(so.lines :+ line, so.margins :+ margin, asked, runnersUp = so.runnersUp :+
                   ranked.map(_._1).find(_ != line))))

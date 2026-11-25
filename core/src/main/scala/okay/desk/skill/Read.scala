@@ -24,8 +24,28 @@ enum Read[X]:
    * `context` — one operation for a choice's every option, so a handler may weigh them together (the weights read
    * once for all: decoding is bound by memory, not by arithmetic) */
   case Score(context: Array[Int], options: Vector[Array[Int]]) extends Read[Vector[Double]]
+  /** A WORD'S MEANING (frames.md §6.3 grown, 2026-11-25): "Word: <text>" read, its tokens' mean state at the layers
+   * `Read.meaningLayers`, each made unit and the two put end to end — the dot product of two meanings is the sum of
+   * their cosines; a word and its translation near (the reader's own model, no second one) */
+  case Meaning(text: String) extends Read[Array[Float]]
 
 object Read:
+  /** the layers a meaning is read at (LinkProbe: 4 and 20 of the 0.6B, 23 of 33 translations linked, all right) */
+  val meaningLayers: Vector[Int] = Vector(4, 20)
+  def meaning[R[_]](text: String)(using In[Read, R]): Array[Float] ! R = perform[Read](Meaning(text))
+  /** the words of a meaning: the prefix and the text's own tokens (their positions the ones averaged) */
+  def meaningWords(text: String): (String, String) = ("Word:", " " + text)
+  /** a meaning from each layer's rows (the text's tokens): each layer's mean made unit, end to end */
+  def meaningOf(layers: Vector[Vector[Array[Float]]]): Array[Float] =
+    layers.flatMap { rows =>
+      val d = rows.head.length; val m = new Array[Double](d)
+      rows.foreach(r => (0 until d).foreach(k => m(k) += r(k)))
+      val n = math.sqrt(m.map(x => x * x).sum) + 1e-12
+      m.map(x => (x / n).toFloat) }.toArray
+  def dot(a: Array[Float], b: Array[Float]): Double =
+    var s = 0.0; var k = 0
+    while k < math.min(a.length, b.length) do { s += a(k) * b(k); k += 1 }
+    s
   /** the residual after the skill's layer at positions `at` of `ids`: one vector each */
   def states[R[_]](ids: Array[Int], at: Vector[Int])(using In[Read, R]): Vector[Array[Float]] ! R =
     perform[Read](States(ids, at))

@@ -23,6 +23,7 @@ class NativeCompilerSuite extends munit.FunSuite:
         val next = if index < parts.size then index + 2 else 10000
         Array.tabulate(10002)(id => if id == next then 1f else Float.NegativeInfinity)
       case Read.Note(_) => ()
+      case Read.Meaning(_) => Array.empty[Float]
       case Read.Score(_, _) => sys.error("no weighing here")
       case Read.States(_, _) => fail("a native author must use the LM output, not a hand-built slot reader")
 

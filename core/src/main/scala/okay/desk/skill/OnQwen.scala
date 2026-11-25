@@ -84,6 +84,14 @@ final class OnQwen(model: Qwen3Compute, tok: Tokenizer, layer: Int, ensure: Arra
     case Read.Decode(ids) => Future.successful(tok.decode(ids))
     case Read.Prompt(system, user) => Future.successful(tok.encode(OnQwen.template(system, user)))
     case Read.Note(_) => Future.unit
+    case Read.Meaning(text) =>
+      val (p, w) = Read.meaningWords(text)
+      val prefix = tok.encode(p); val ids = prefix ++ tok.encode(w)
+      val at = prefix.length until ids.length
+      // (one forward a layer, nothing kept: a word is a few tokens)
+      ensure(ids).flatMap(_ => Read.meaningLayers.foldLeft(Future.successful(Vector.empty[Vector[Array[Float]]]))(
+        (acc, l) => acc.flatMap(got => model.run(ids, l, at, withLogits = false, None, keep = false)
+          .map((s, _, _) => got :+ s)))).map(Read.meaningOf)
     // a line's options weighed in one packed forward after the context's cache (okay-llm's `Qwen3Compute.score`);
     // the log-softmax within the options' tokens (the head a few hundred rows: a phone's; Everyday 62 of 108 right as over
     // the whole vocabulary, 0.91 s a question on the JVM)

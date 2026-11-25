@@ -68,6 +68,7 @@ object FrameBench:
         guess = sys.env.get("FRAME_GUESS").fold(0.0)(_.toDouble), prune = sys.env.contains("FRAME_PRUNE"))
       FrameReading.pruneNumbers = !sys.env.contains("FRAME_KEEP_NUMBERS")
       FrameReading.canonical = sys.env.contains("FRAME_CANONICAL")
+      FrameReading.meaning = sys.env.contains("FRAME_MEANING")
       FrameReading.pruneSingle = !sys.env.contains("FRAME_KEEP_SINGLE")
       FrameReading.pruneText = sys.env.contains("FRAME_PRUNE_TEXT")
       val person = if doubt.isEmpty then Person.silent[Read, FrameReading.Reading]

@@ -108,6 +108,12 @@ final class MlxReading(chat: Chat, model: Model, layer: Int) extends Reading:
     case Read.Decode(ids) => decode(ids)
     case Read.Prompt(system, user) => prompt(system, user)
     case Read.Note(_) => ()
+    case Read.Meaning(text) =>
+      val (p, w) = Read.meaningWords(text)
+      val prefix = encode(p); val ids = prefix ++ encode(w)
+      val at = (prefix.length until ids.length).toVector
+      val got = statesAt(ids, Read.meaningLayers, at)
+      Read.meaningOf(Read.meaningLayers.map(got))
     case Read.Score(context, options) => if treeRead then scoreTree(context, options) else score(context, options)
 
 object MlxReading:
