@@ -150,3 +150,22 @@ object Gate:
     val moreRight = rows.map(_._3._1).sum > rows.map(_._2._1).sum
     println(if noMoreWrong && moreRight then "ACCEPT" else
       s"REJECT (${if !noMoreWrong then "more wrong somewhere" else "no more right"})")
+
+/**
+ * TWO READERS AGREEING, FROM THEIR RECORDS (the page's way, frames.md §6.2): each question read by both (`FrameBench`
+ * with FRAME_RECORDS); the same frame is an answer (its outcome), frames that part are a question to the person.
+ * `sbt "bench/runMain okay.desk.bench.AgreeOffline <records a> <records b>"`
+ */
+object AgreeOffline:
+  private def load(p: String): Map[(String, String), (String, String)] =
+    Files.readAllLines(Path.of(p)).asScala.toVector.filter(_.trim.nonEmpty).map(Json.fromText).map { j =>
+      (j("key").string, j("lang").string) -> (j("outcome").string, j("frame").string) }.toMap
+  def main(args: Array[String]): Unit =
+    val (a, b) = (load(args(0)), load(args(1)))
+    val both = a.keySet intersect b.keySet
+    val outcomes = both.toVector.map { k =>
+      val ((oa, fa), (_, fb)) = (a(k), b(k))
+      if fa == fb then oa else "asked" }
+    def n(o: String) = outcomes.count(_ == o)
+    println(s"${both.size} read by both: right ${n("right")}, asked ${n("asked")}, wrong ${n("wrong")} " +
+      s"(agreed on ${both.count(k => a(k)._2 == b(k)._2)})")
