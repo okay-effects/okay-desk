@@ -97,7 +97,17 @@ object DomainBench:
     val chat = Chat.load(dir); val model = Model.load(dir, mapped = true)
     sys.env.get("FRAME_ADAPTER").foreach(f => Lora.attach(model.asInstanceOf[Adaptable], f))
     val reading = MlxReading(chat, model, 1)
-    val texts = Files.readAllLines(Path.of(args(0))).asScala.toVector.filter(_.trim.nonEmpty).map(Json.fromText)
+    // RULES_SAYS=1: the rules' prompt lists what each says, not its title alone
+    // RULES_AMONG=n: among the word search's first n only
+    val rules = okay.desk.books.RuleLines(sys.env.get("RULES_SAYS").contains("1"),
+      sys.env.get("RULES_AMONG").fold(0)(_.toInt))
+    // okay-tax's held-out questions (data/heldout.tsv: rule id, language, question) as texts of the domain "rules"
+    def quoted(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    val texts = if args(0).endsWith(".tsv") then
+      Files.readAllLines(Path.of(args(0))).asScala.toVector.filterNot(l => l.startsWith("#") || l.isBlank)
+        .map(_.split('\t')).map(a => Json.fromText(s"""{"domain": "rules", "lang": ${quoted(a(1))}, "question": """ +
+          s"""${quoted(a(2))}, "lines": [${rules.lines(a(0)).map(quoted).mkString(", ")}]}"""))
+    else Files.readAllLines(Path.of(args(0))).asScala.toVector.filter(_.trim.nonEmpty).map(Json.fromText)
     println(s"$repo${sys.env.get("FRAME_ADAPTER").fold("")(" with " + _)}: ${texts.size} texts")
     var failures = Vector.empty[String]
     val t0 = System.nanoTime()
@@ -117,6 +127,9 @@ object DomainBench:
         case "pay" =>
           val r = Read.run(CoreReading.read[Unit, Read](okay.desk.books.PayLines, (), q), reading)
           (okay.desk.books.PayLines.answer((), r.lines), okay.desk.books.PayLines.answer((), gold))
+        case "rules" =>
+          val r = Read.run(CoreReading.read[Unit, Read](rules, (), q), reading)
+          (rules.answer((), r.lines), rules.answer((), gold))
         case other => sys.error(s"no space for $other")
       val o = if got.isRight && got == want then "right" else "wrong"
       // FRAME_FAILURES: the misread texts kept as they are (the truth known: the meaning was drawn) — self-play's mix
