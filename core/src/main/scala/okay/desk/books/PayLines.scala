@@ -1,6 +1,7 @@
 package okay.desk.books
 
 import okay.desk.{Frame, LineSpace}
+import okay.tax.{Form, Jdg, Pay, PayTheory, Zus}
 
 /**
  * THE QUESTIONS ABOUT PAY AS LINES (SPRINT K6, the tax helper): a question read into what is earned and how — an

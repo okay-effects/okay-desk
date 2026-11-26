@@ -13,7 +13,8 @@ ThisBuild / resolvers ++= Seq(
   "okay-faces" at "https://okay-effects.github.io/okay-faces/maven",
   "okay-http" at "https://okay-effects.github.io/okay-http/maven",
   "okay-scala" at "https://okay-effects.github.io/okay-scala/maven",
-  "okay-frames" at "https://okay-effects.github.io/okay-frames/maven")
+  "okay-frames" at "https://okay-effects.github.io/okay-frames/maven",
+  "okay-tax" at "https://okay-effects.github.io/okay-tax/maven")
 
 /** the tables, the query programs (data), the exact handlers (relational and Datalog), the model's prompt and
  * its answer's parsing — plain Scala: the JVM for the laws, the browser for the page */
@@ -23,6 +24,8 @@ lazy val core = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
     libraryDependencies ++= Seq(
       "io.github.okay-effects" %%% "okay-datalog" % "0.1.0",
       "io.github.okay-effects" %%% "okay-frames" % "0.1.0",
+      // the pay engine: take-home and the year's return from the statutes (okay-tax, specs/books.md §2)
+      "io.github.okay-effects" %%% "okay-tax-core" % "0.1.0",
       "io.github.okay-effects" %%% "okay-inlay" % "0.1.0",
       "io.github.okay-effects" %%% "okay-llm-qwen" % "0.1.0",
       "io.github.okay-effects" %%% "okay-scala" % "0.1.1",

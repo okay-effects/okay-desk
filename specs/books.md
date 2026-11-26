@@ -31,7 +31,8 @@ working in Poland. The books (public domain: Polish statutes are not protected, 
   1 441.80 zł → 456.18 zł; health on ryczałt 498.35 / 830.58 / 1 495.04 zł by revenue; the yearly cap 282 600 zł) —
   its tables are the worked examples the theory must reproduce.
 
-Sources kept in `okay-desk-private/books/pay/src`.
+The theory and the engine moved to okay-tax (github.com/okay-effects/okay-tax, `okay-tax-core` on its Pages maven):
+the statutes in its `sources/2026`, each quote checked there; okay-desk keeps the questions (`PayLines`, `PayData`).
 
 The questions: "How much will I take home on UoP at 20 000 gross?", "B2B 1000 zł a day, 21 days, ryczałt 12%, full
 ZUS — and UoP 20 000?", in four languages. The lines: `contract: uop | b2b`, `gross: N` / `revenue: N` (or `rate: N`
