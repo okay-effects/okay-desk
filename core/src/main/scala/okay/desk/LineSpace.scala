@@ -1,6 +1,7 @@
 package okay.desk
 
 import okay.desk.skill.Read
+import okay.frames.{Choice, Hole, Space}
 import okay.inlay.domain.Units
 import okay.scala3.*
 
@@ -10,6 +11,9 @@ import okay.scala3.*
  * there, given the domain's rule and its world in words — the same prompt shape in every domain (the rule; the world;
  * "Question: …"), so a model trained on several reads them all, and a domain it never saw is a test of the core.
  */
+/** a domain's reading: its lines in order, `end` the last (the term of `LineSpace.asSpace`) */
+final case class LineTerm(lines: Vector[String])
+
 trait LineSpace[W]:
   def name: String
   /** the lines' language, the model's system prompt */
@@ -21,8 +25,27 @@ trait LineSpace[W]:
   /** the lines run exactly: the answer in words, or why not */
   def answer(w: W, lines: Vector[String]): Either[String, String]
   def prompt(w: W, question: String): (String, String) = (rule, s"${describe(w)}\n\nQuestion: $question")
+  /** THE DOMAIN AS AN OKAY-FRAMES SPACE (`LineSpace.asSpace`): the reader weighs its holes, the laws check it */
+  lazy val space: Space[W, LineTerm] = LineSpace.asSpace(this)
 
 object LineSpace:
+  /**
+   * A DOMAIN'S LINES AS A SPACE OF MEANINGS (okay-frames `Space`): each line a hole (`line 1`, `line 2`, …) of the
+   * options `next` offers after the lines before; the term the lines, `end` the last; the canonical words the lines
+   * themselves — already the domain's exact language — joined by "; ", and parsed back by splitting
+   */
+  def asSpace[W](s: LineSpace[W]): Space[W, LineTerm] = new Space[W, LineTerm]:
+    def name: String = s.name
+    def next(w: W, text: String, chosen: Vector[Choice]): Option[Hole] =
+      val lines = chosen.map(_.option)
+      Option.when(!lines.lastOption.contains(Frame.end))(Hole(s"line ${lines.size + 1}", s.next(w, text, lines)))
+    def assemble(w: W, chosen: Vector[Choice]): Option[LineTerm] =
+      Option.when(chosen.lastOption.exists(_.option == Frame.end))(LineTerm(chosen.map(_.option)))
+    def path(w: W, t: LineTerm): Vector[Choice] = t.lines.zipWithIndex.map((l, i) => Choice(s"line ${i + 1}", l))
+    def say(w: W, t: LineTerm, language: String): String = t.lines.mkString("; ")
+    def parse(w: W, words: String, language: String): Option[LineTerm] =
+      Option(words.split("; ").toVector).filter(_.lastOption.contains(Frame.end)).map(LineTerm(_))
+
   /** THE TABLES (the frame reader's language, unchanged: its prompt is `Frame.prompt`'s) */
   object Tables extends LineSpace[Map[String, Table]]:
     val name = "tables"
@@ -95,10 +118,15 @@ object LineSpace:
         s"direction: ${if fw then "after" else "before"}", s"n: $n", s"date: $d")
       case Units.Point.Between(a, b, u) => Vector("kind: between", s"unit: $u", s"from: $a", s"to: $b")) :+ Frame.end
 
-/** THE CORE READING (SPRINT K2): a question read into a domain's lines, each line the best of its options as the
- * model weighs them — `FrameReading`'s loop with no table in it; the least margin kept */
+/**
+ * THE CORE READING (SPRINT K2): a question read into a domain's lines, each line the best of its options as the
+ * model weighs them — okay-frames' `Reading` over the domain's `space`, driven here by the `Read` effect: a hole's
+ * options scored after the context, the best chosen (`weighed`), a hole of one option taken with no forward
+ * (`forced`); the least margin kept
+ */
 object CoreReading:
   final case class Reading(lines: Vector[String], margin: Double)
+  private type Frames[W] = okay.frames.Reading[W, LineTerm]
   def read[W, R[_]](space: LineSpace[W], w: W, question: String, maxLines: Int = 16)(
       using In[Read, R]): Reading ! R =
     val (system, user) = space.prompt(w, question)
@@ -106,24 +134,26 @@ object CoreReading:
       prompt <- Read.prompt[R](system, user)
       newline <- Read.encode[R]("\n").map(_.head)
       end <- Read.encode[R]("<|im_end|>").map(_.last)
-      read <- step(space, w, question, maxLines, prompt, newline, end, Reading(Vector.empty, Double.PositiveInfinity))
-    yield read
-  private def step[W, R[_]](space: LineSpace[W], w: W, question: String, maxLines: Int, context: Array[Int],
-      newline: Int, end: Int, so: Reading)(using In[Read, R]): Reading ! R =
-    val options = space.next(w, question, so.lines)
-    if options.isEmpty || so.lines.size >= maxLines then pure(so)
-    else
-      for
-        tokens <- Read.each[String, Array[Int], R](options)(o => Read.encode[R](o))
-        scores <- Read.score[R](context :+ newline,
-          options.zip(tokens).map((o, t) => t :+ (if o == Frame.end then end else newline)))
-        ranked = options.zip(scores).sortBy(-_._2)
-        margin = ranked.lift(1).fold(Double.PositiveInfinity)(s => ranked.head._2 - s._2)
-        line = ranked.head._1
-        t <- Read.encode[R](line)
-        next <- step(space, w, question, maxLines, (context :+ newline) ++ t, newline, end,
-          Reading(so.lines :+ line, math.min(so.margin, margin)))
-      yield next
+      read <- step(maxLines, prompt, newline, end, okay.frames.Reading(space.space, w, question))
+    yield Reading(read.chosen.map(_.option), read.margin)
+  private def step[W, R[_]](maxLines: Int, context: Array[Int], newline: Int, end: Int, r: Frames[W])(
+      using In[Read, R]): Frames[W] ! R =
+    r.hole match
+      case Some(h) if h.options.nonEmpty && r.chosen.size < maxLines =>
+        val chosen: Frames[W] ! R = r.forced match
+          case Some(only) => pure(r.chose(only))
+          case None =>
+            for
+              tokens <- Read.each[String, Array[Int], R](h.options)(o => Read.encode[R](o))
+              scores <- Read.score[R](context :+ newline,
+                h.options.zip(tokens).map((o, t) => t :+ (if o == Frame.end then end else newline)))
+            yield r.weighed(scores)
+        for
+          next <- chosen
+          t <- Read.encode[R](next.chosen.last.option)
+          rest <- step(maxLines, (context :+ newline) ++ t, newline, end, next)
+        yield rest
+      case _ => pure(r)
 
 /** A CLUE'S WORLD: the positions in a row and the lists placed on them (a logic puzzle's, okay-desk `puzzle`) */
 final case class ClueWorld(positions: Int, sorts: Vector[okay.desk.puzzle.Sort])

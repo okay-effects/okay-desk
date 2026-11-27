@@ -12,9 +12,9 @@ class LineSpaceSuite extends munit.FunSuite:
       val p = Units.random(rnd, Units)
       val q = Units.say(rnd, p, Units, if rnd.nextBoolean() then "ru" else "en")
       val gold = LineSpace.UnitsAndDates.lines(p)
-      gold.indices.foreach { i =>
-        assert(u.next((), q, gold.take(i)).contains(gold(i)), s"$q: ${gold(i)} not offered after ${gold.take(i)}") }
-      assertEquals(u.next((), q, gold), Vector.empty)
+      // okay-frames' laws: the lines reached hole by hole and closed to themselves; their words parse back
+      assertEquals(okay.frames.Laws.reach(u.space)((), q, LineTerm(gold)), None, q)
+      assertEquals(okay.frames.Laws.roundTrip(u.space)((), LineTerm(gold), Seq("en")), None, q)
       assertEquals(u.answer((), gold), Units.run(p, Units), q)
 
   test("tables: the prompt is the frame reader's"):
@@ -31,7 +31,7 @@ class LineSpaceSuite extends munit.FunSuite:
       Constraint.NotAt(Ref("colour", "yellow"), 2), Constraint.Adjacent(Ref("nation", "Japanese"), Ref("colour", "red")))
     for c <- cs do
       val gold = Clues.lines(c)
-      gold.indices.foreach(i => assert(Clues.next(w, "", gold.take(i)).contains(gold(i)), s"$c: ${gold(i)}"))
+      assertEquals(okay.frames.Laws.reach(Clues.space)(w, "", LineTerm(gold)), None, c.toString)
       assertEquals(Clues.constraint(w, gold), Some(c))
     // a symmetric relation is the same answer in either order
     assertEquals(Clues.answer(w, Clues.lines(Constraint.Adjacent(Ref("nation", "Japanese"), Ref("colour", "red")))),
